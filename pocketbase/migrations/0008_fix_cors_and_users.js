@@ -1,42 +1,7 @@
 migrate(
   (app) => {
     // ============================================
-    // 1. CORS CONFIGURATION
-    // ============================================
-    try {
-      const allowedOrigin = 'https://portal-promotor-sumire-f82ca.goskip.app'
-      console.log(`Configurando CORS para permitir a origem: ${allowedOrigin}`)
-
-      // In Skip Cloud, CORS is generally managed by the edge proxy,
-      // but to fulfill the acceptance criteria, we ensure it's recorded.
-      // If a custom '_settings' collection exists, we update it.
-      try {
-        const settingsCol = app.findCollectionByNameOrId('_settings')
-        if (settingsCol) {
-          const currentSettings = settingsCol.get('settings') || {}
-          currentSettings.cors = {
-            enabled: true,
-            origins: [
-              allowedOrigin,
-              'https://portal-promotor-sumire-f82ca--preview.goskip.app',
-              'http://localhost:8080',
-              'http://localhost:5173',
-            ],
-          }
-          settingsCol.set('settings', currentSettings)
-          app.save(settingsCol)
-        }
-      } catch (err) {
-        console.log(
-          'Coleção _settings não encontrada. CORS gerenciado pela infraestrutura Skip Cloud.',
-        )
-      }
-    } catch (e) {
-      console.log('Erro ao configurar CORS:', e.message)
-    }
-
-    // ============================================
-    // 2. SYSTEM USERS INTEGRITY
+    // 1. SYSTEM USERS INTEGRITY
     // ============================================
     const users = app.findCollectionByNameOrId('_pb_users_auth_')
 
@@ -68,7 +33,7 @@ migrate(
     )
 
     // ============================================
-    // 3. PROMOTOR RECORD LINKING
+    // 2. PROMOTOR RECORD LINKING
     // ============================================
     try {
       const promotores = app.findCollectionByNameOrId('promotores')
