@@ -42,7 +42,10 @@ export default function CheckIn() {
             filter: `user = "${user?.id}"`,
           })
           if (pRecords.length > 0) myPromoterId = pRecords[0].id
-        } catch (e) {}
+        } catch (e) {
+          // Ignorar erro se não encontrar promotor
+          console.debug('Nenhum promotor vinculado ao usuário logado.', e)
+        }
 
         // Fallback for demo if no promoter is linked to user
         if (!myPromoterId) {
