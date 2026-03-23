@@ -1,5 +1,33 @@
 migrate(
   (app) => {
+    // ============================================
+    // 1. CONFIGURAÇÃO DE CORS
+    // ============================================
+    try {
+      const settings = app.findCollectionByNameOrId('_settings')
+      if (settings) {
+        // Atualiza as configurações de CORS
+        const currentSettings = settings.get('settings') || {}
+        currentSettings.cors = {
+          enabled: true,
+          origins: [
+            'https://portal-promotor-sumire-f82ca.goskip.app',
+            'https://portal-promotor-sumire-f82ca--preview.goskip.app',
+            'http://localhost:8080',
+            'http://localhost:5173',
+          ],
+        }
+        settings.set('settings', currentSettings)
+        app.save(settings)
+        console.log('✅ CORS configurado com sucesso!')
+      }
+    } catch (e) {
+      console.log('⚠️ Não foi possível configurar CORS:', e.message)
+    }
+
+    // ============================================
+    // 2. USUÁRIOS E DADOS EXISTENTES
+    // ============================================
     const users = app.findCollectionByNameOrId('_pb_users_auth_')
 
     const seedUser = (email, password, role, name) => {
