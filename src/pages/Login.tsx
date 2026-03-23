@@ -22,12 +22,24 @@ export default function Login() {
     setIsLoading(true)
 
     try {
-      await pb.collection('users').authWithPassword(email, password)
+      const authData = await pb.collection('users').authWithPassword(email, password)
       toast({
         title: 'Login realizado com sucesso',
         description: 'Bem-vindo ao Portal Sumirê.',
       })
-      navigate(from, { replace: true })
+
+      let redirectPath = from
+      if (from === '/') {
+        if (authData.record.role === 'promotor') {
+          redirectPath = '/check-in'
+        } else if (authData.record.role === 'gerente') {
+          redirectPath = '/lojas'
+        } else {
+          redirectPath = '/' // admin
+        }
+      }
+
+      navigate(redirectPath, { replace: true })
     } catch (error) {
       toast({
         variant: 'destructive',
@@ -78,7 +90,8 @@ export default function Login() {
 
           <div className="mt-6 text-xs text-center text-muted-foreground bg-muted p-3 rounded-md">
             <p className="font-semibold mb-1">Contas de Teste:</p>
-            <p>Admin: amorimmichele@gmail.com / securepassword123</p>
+            <p>Admin: admin@sumire.com / admin123</p>
+            <p>Gerente: gerente@sumire.com / gerente123</p>
             <p>Promotor: promotor@sumire.com / securepassword123</p>
           </div>
         </CardContent>

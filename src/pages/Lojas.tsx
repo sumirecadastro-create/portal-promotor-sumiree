@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Table,
@@ -76,8 +77,8 @@ export default function Lojas() {
                     <TableCell className="font-mono text-xs">{store.cod_loja}</TableCell>
                     <TableCell className="font-medium">{store.loja_nome}</TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" disabled>
-                        Ver Detalhes
+                      <Button variant="ghost" size="sm" asChild>
+                        <Link to={`/lojas/${store.id}`}>Ver Detalhes</Link>
                       </Button>
                     </TableCell>
                   </TableRow>
