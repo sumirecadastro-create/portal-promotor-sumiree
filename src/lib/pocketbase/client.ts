@@ -1,6 +1,9 @@
 import PocketBase from 'pocketbase'
 
-const pb = new PocketBase(import.meta.env.VITE_POCKETBASE_URL)
+// URL do backend no Railway
+const BACKEND_URL = 'https://pocketbase-railway-production-631f.up.railway.app'
+
+const pb = new PocketBase(BACKEND_URL)
 pb.autoCancellation(false)
 
 export default pb
