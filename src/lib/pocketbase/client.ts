@@ -1,8 +1,7 @@
 import PocketBase from 'pocketbase'
 
-const backendUrl =
-  import.meta.env.VITE_POCKETBASE_URL || 'https://portal-promotor-sumire-f82ca.skip.cloud'
-const pb = new PocketBase(backendUrl)
+// ALTERADO: URL correta usando o mesmo domínio do frontend
+const pb = new PocketBase('https://portal-promotor-sumire-f82ca.goskip.app')
 pb.autoCancellation(false)
 
 export default pb
