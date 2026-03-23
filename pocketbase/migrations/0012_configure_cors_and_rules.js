@@ -1,16 +1,5 @@
 migrate(
   (app) => {
-    // 1. CORS Configuration
-    const settings = app.settings()
-    if (!settings.api) {
-      settings.api = {}
-    }
-    const origins = new Set(settings.api.corsAllowedOrigins || [])
-    origins.add('https://portal-promotor-sumire-f82ca.goskip.app')
-    origins.add('https://portal-promotor-sumire-f82ca--preview.goskip.app')
-    settings.api.corsAllowedOrigins = Array.from(origins)
-    app.save(settings)
-
     // 2. Base API Access Rules
     const baseCollections = ['lojas', 'gerentes', 'produtos', 'promotores']
     for (const name of baseCollections) {
