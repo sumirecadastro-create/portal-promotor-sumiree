@@ -1,5 +1,27 @@
 migrate(
   (app) => {
+    // 0. Ensure Autodate fields exist for all base collections
+    const cols = ['lojas', 'gerentes', 'produtos', 'promotores', 'visitas']
+    for (const colName of cols) {
+      try {
+        const col = app.findCollectionByNameOrId(colName)
+        let changed = false
+        if (!col.fields.getByName('created')) {
+          col.fields.add(new AutodateField({ name: 'created', onCreate: true, onUpdate: false }))
+          changed = true
+        }
+        if (!col.fields.getByName('updated')) {
+          col.fields.add(new AutodateField({ name: 'updated', onCreate: true, onUpdate: true }))
+          changed = true
+        }
+        if (changed) {
+          app.save(col)
+        }
+      } catch (err) {
+        console.error(`Error adding autodate fields to ${colName}:`, err.message)
+      }
+    }
+
     // 1. Configure CORS policies
     try {
       const settings = app.settings()
@@ -16,10 +38,10 @@ migrate(
     // 2. Update Users Access Rules
     try {
       const users = app.findCollectionByNameOrId('users')
-      users.listRule = 'id = @request.auth.id'
-      users.viewRule = 'id = @request.auth.id'
-      users.updateRule = 'id = @request.auth.id'
-      users.deleteRule = 'id = @request.auth.id'
+      users.listRule = "id = @request.auth.id || role = 'admin'"
+      users.viewRule = "id = @request.auth.id || role = 'admin'"
+      users.updateRule = "id = @request.auth.id || role = 'admin'"
+      users.deleteRule = "id = @request.auth.id || role = 'admin'"
       app.save(users)
     } catch (err) {
       console.error('Error updating users rules:', err.message)
@@ -75,7 +97,7 @@ migrate(
     ]
     const lojaIds = []
     for (const l of lojasData) {
-      let records = app.findRecordsByFilter('lojas', `cod_loja = '${l.cod}'`, '', 1, 0)
+      let records = app.findRecordsByFilter('lojas', `cod_loja = '${l.cod}'`, '-id', 1, 0)
       let r
       if (records.length > 0) {
         r = records[0]
@@ -96,7 +118,7 @@ migrate(
     ]
     const gerenteIds = []
     for (const g of gerentesData) {
-      let records = app.findRecordsByFilter('gerentes', `nome_gerente = '${g.nome}'`, '', 1, 0)
+      let records = app.findRecordsByFilter('gerentes', `nome_gerente = '${g.nome}'`, '-id', 1, 0)
       let r
       if (records.length > 0) {
         r = records[0]
@@ -117,7 +139,7 @@ migrate(
     ]
     const produtoIds = []
     for (const p of produtosData) {
-      let records = app.findRecordsByFilter('produtos', `cod_produto = '${p.cod}'`, '', 1, 0)
+      let records = app.findRecordsByFilter('produtos', `cod_produto = '${p.cod}'`, '-id', 1, 0)
       let r
       if (records.length > 0) {
         r = records[0]
@@ -151,7 +173,7 @@ migrate(
       },
     ]
     for (const p of promotoresData) {
-      let records = app.findRecordsByFilter('promotores', `user = '${p.user}'`, '', 1, 0)
+      let records = app.findRecordsByFilter('promotores', `user = '${p.user}'`, '-id', 1, 0)
       if (records.length === 0) {
         let r = new Record(promotoresCol)
         r.set('promotor_nome', p.nome)
