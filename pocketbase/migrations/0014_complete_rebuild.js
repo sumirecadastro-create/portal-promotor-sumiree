@@ -77,53 +77,64 @@ migrate(
     ]
 
     for (const def of collectionsData) {
-      let col
-      let isNew = false
       try {
-        col = app.findCollectionByNameOrId(def.name)
-      } catch {
-        col = new Collection({ name: def.name, type: def.type })
-        isNew = true
-      }
+        const col = app.findCollectionByNameOrId(def.name)
 
-      col.listRule = def.listRule
-      col.viewRule = def.viewRule
-      col.createRule = def.createRule
-      col.updateRule = def.updateRule
-      col.deleteRule = def.deleteRule
+        col.listRule = def.listRule
+        col.viewRule = def.viewRule
+        col.createRule = def.createRule
+        col.updateRule = def.updateRule
+        col.deleteRule = def.deleteRule
 
-      if (isNew) {
         for (const field of def.fields) {
-          if (field.type === 'text') col.fields.add(new TextField(field))
-          else if (field.type === 'number') col.fields.add(new NumberField(field))
-          else if (field.type === 'date') col.fields.add(new DateField(field))
-          else if (field.type === 'autodate') col.fields.add(new AutodateField(field))
-          else if (field.type === 'select') col.fields.add(new SelectField(field))
-          else if (field.type === 'relation') {
-            let targetId = field.collectionId
-            try {
-              const targetCol = app.findCollectionByNameOrId(field.collectionId)
-              targetId = targetCol.id
-            } catch (e) {}
-            col.fields.add(
-              new RelationField({
-                name: field.name,
-                collectionId: targetId,
-                maxSelect: field.maxSelect,
-              }),
-            )
+          if (!col.fields.getByName(field.name)) {
+            if (field.type === 'text') col.fields.add(new TextField(field))
+            else if (field.type === 'number') col.fields.add(new NumberField(field))
+            else if (field.type === 'date') col.fields.add(new DateField(field))
+            else if (field.type === 'autodate') col.fields.add(new AutodateField(field))
+            else if (field.type === 'select') col.fields.add(new SelectField(field))
+            else if (field.type === 'relation') {
+              let targetId = field.collectionId
+              try {
+                const targetCol = app.findCollectionByNameOrId(field.collectionId)
+                targetId = targetCol.id
+              } catch (e) {}
+              col.fields.add(
+                new RelationField({
+                  name: field.name,
+                  collectionId: targetId,
+                  maxSelect: field.maxSelect,
+                }),
+              )
+            }
           }
         }
-      } else {
-        if (!col.fields.getByName('created')) {
-          col.fields.add(new AutodateField({ name: 'created', onCreate: true, onUpdate: false }))
-        }
-        if (!col.fields.getByName('updated')) {
-          col.fields.add(new AutodateField({ name: 'updated', onCreate: true, onUpdate: true }))
-        }
-      }
+        app.save(col)
+      } catch {
+        const mappedFields = def.fields.map((f) => {
+          if (f.type === 'relation') {
+            let targetId = f.collectionId
+            try {
+              const targetCol = app.findCollectionByNameOrId(f.collectionId)
+              targetId = targetCol.id
+            } catch (e) {}
+            return { ...f, collectionId: targetId }
+          }
+          return f
+        })
 
-      app.save(col)
+        const col = new Collection({
+          name: def.name,
+          type: def.type,
+          listRule: def.listRule,
+          viewRule: def.viewRule,
+          createRule: def.createRule,
+          updateRule: def.updateRule,
+          deleteRule: def.deleteRule,
+          fields: mappedFields,
+        })
+        app.save(col)
+      }
     }
 
     const allCols = app.findAllCollections()
