@@ -19,9 +19,6 @@ export function getErrorMessage(error: unknown): string {
   if (!(error instanceof ClientResponseError)) {
     return error instanceof Error ? error.message : 'An unexpected error occurred.'
   }
-  if (error.status === 0) {
-    return 'Não foi possível conectar ao servidor. Verifique sua conexão com a internet ou tente novamente mais tarde.'
-  }
   const msgs = Object.values(extractFieldErrors(error))
   return msgs.length > 0 ? msgs.join(' ') : error.message || 'An unexpected error occurred.'
 }
