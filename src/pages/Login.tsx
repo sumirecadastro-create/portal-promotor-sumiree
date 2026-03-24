@@ -61,7 +61,7 @@ export default function Login() {
           {/* Logo da Sumirê */}
           <div className="flex justify-center mb-2">
             <img 
-              src="/logo-sumire.png" 
+              src="/logo_sumire.png" 
               alt="Sumirê" 
               className="h-16 w-auto"
               onError={(e) => {
