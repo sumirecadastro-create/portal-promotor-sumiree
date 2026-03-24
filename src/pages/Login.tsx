@@ -88,11 +88,11 @@ export default function Login() {
             </Button>
           </form>
 
-          <div className="mt-6 text-xs text-center text-muted-foreground bg-muted p-3 rounded-md">
+          {/*<div className="mt-6 text-xs text-center text-muted-foreground bg-muted p-3 rounded-md">
             <p className="font-semibold mb-1">Contas de Teste:</p>
             <p>Admin: admin@sumire.com / admin123</p>
             <p>Gerente: gerente@sumire.com / gerente123</p>
-            <p>Promotor: promotor@sumire.com / securepassword123</p>
+            <p>Promotor: promotor@sumire.com / securepassword123</p>*/}
           </div>
         </CardContent>
       </Card>
