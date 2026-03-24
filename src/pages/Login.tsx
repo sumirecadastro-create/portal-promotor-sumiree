@@ -92,8 +92,8 @@ export default function Login() {
             <p className="font-semibold mb-1">Contas de Teste:</p>
             <p>Admin: admin@sumire.com / admin123</p>
             <p>Gerente: gerente@sumire.com / gerente123</p>
-            <p>Promotor: promotor@sumire.com / securepassword123</p>*/}
-          </div>
+            <p>Promotor: promotor@sumire.com / securepassword123</p>
+          </div>*/}
         </CardContent>
       </Card>
     </div>
