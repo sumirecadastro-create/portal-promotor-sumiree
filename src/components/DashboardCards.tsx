@@ -2,54 +2,79 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Store, MapPin, Percent, Users } from 'lucide-react'
 import { DashboardStats } from '@/services/dashboard'
 
-export function DashboardCards({ stats }: { stats?: DashboardStats }) {
+interface DashboardCardsProps {
+  stats?: DashboardStats
+  onLojasClick?: () => void
+  onCheckInClick?: () => void
+  onPromotoresClick?: () => void
+}
+
+export function DashboardCards({ stats, onLojasClick, onCheckInClick, onPromotoresClick }: DashboardCardsProps) {
   const data = stats || { totalLojas: 0, promotoresAtivos: 0, cobertura: 0, visitasHoje: 0 }
+
+  const cards = [
+    {
+      title: 'Total Lojas',
+      value: data.totalLojas,
+      icon: Store,
+      description: 'Unidades cadastradas',
+      onClick: onLojasClick,
+      color: 'text-primary',
+      bgColor: 'bg-primary/10',
+      delay: 'delay-0',
+    },
+    {
+      title: 'Check-ins Hoje',
+      value: data.visitasHoje,
+      icon: MapPin,
+      description: 'Visitas registradas hoje',
+      onClick: onCheckInClick,
+      color: 'text-emerald-500',
+      bgColor: 'bg-emerald-500/10',
+      delay: 'delay-100',
+    },
+    {
+      title: 'Cobertura (Lojas c/ Promotor)',
+      value: `${data.cobertura}%`,
+      icon: Percent,
+      description: 'Da rede coberta',
+      onClick: onPromotoresClick,
+      color: 'text-amber-500',
+      bgColor: 'bg-amber-500/10',
+      delay: 'delay-200',
+    },
+    {
+      title: 'Promotores Ativos',
+      value: data.promotoresAtivos,
+      icon: Users,
+      description: 'Em operação',
+      onClick: onPromotoresClick,
+      color: 'text-indigo-500',
+      bgColor: 'bg-indigo-500/10',
+      delay: 'delay-300',
+    },
+  ]
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-      <Card className="animate-slide-up">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Total Lojas</CardTitle>
-          <Store className="h-4 w-4 text-primary" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{data.totalLojas}</div>
-          <p className="text-xs text-muted-foreground">Unidades cadastradas</p>
-        </CardContent>
-      </Card>
-
-      <Card className="animate-slide-up delay-100">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Check-ins Hoje</CardTitle>
-          <MapPin className="h-4 w-4 text-emerald-500" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{data.visitasHoje}</div>
-          <p className="text-xs text-muted-foreground">Visitas registradas hoje</p>
-        </CardContent>
-      </Card>
-
-      <Card className="animate-slide-up delay-200">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Cobertura (Lojas c/ Promotor)</CardTitle>
-          <Percent className="h-4 w-4 text-amber-500" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{data.cobertura}%</div>
-          <p className="text-xs text-muted-foreground">Da rede coberta</p>
-        </CardContent>
-      </Card>
-
-      <Card className="animate-slide-up delay-300">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-sm font-medium">Promotores Ativos</CardTitle>
-          <Users className="h-4 w-4 text-indigo-500" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-2xl font-bold">{data.promotoresAtivos}</div>
-          <p className="text-xs text-muted-foreground">Em operação</p>
-        </CardContent>
-      </Card>
+      {cards.map((card) => (
+        <Card 
+          key={card.title}
+          className={`animate-slide-up ${card.delay} cursor-pointer hover:shadow-lg transition-all hover:scale-105`}
+          onClick={card.onClick}
+        >
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">{card.title}</CardTitle>
+            <div className={`p-1 rounded-full ${card.bgColor}`}>
+              <card.icon className={`h-4 w-4 ${card.color}`} />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{card.value}</div>
+            <p className="text-xs text-muted-foreground">{card.description}</p>
+          </CardContent>
+        </Card>
+      ))}
     </div>
   )
 }
