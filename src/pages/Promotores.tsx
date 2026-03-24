@@ -27,10 +27,37 @@ export default function Promotores() {
   useRealtime('promotores', () => loadData())
 
   const filteredPromotores = promotores.filter((p) =>
-    p.promotor_nome.toLowerCase().includes(search.toLowerCase()),
+    p.promotor_nome?.toLowerCase().includes(search.toLowerCase())
   )
 
   const getInitials = (name: string) => (name ? name.substring(0, 2).toUpperCase() : 'PR')
+
+  // Função para obter o nome da loja
+  const getLojaNome = (promoter: RecordModel) => {
+    // loja_id é um array, pegamos o primeiro item
+    const loja = promoter.expand?.loja_id?.[0]
+    return loja?.loja_nome || 'Nenhuma loja vinculada'
+  }
+
+  // Função para obter o nome do gerente
+  const getGerenteNome = (promoter: RecordModel) => {
+    // gerente_id é uma string (relação única)
+    const gerente = promoter.expand?.gerente_id
+    return gerente?.nome_gerente || '-'
+  }
+
+  // Função para obter a marca
+  const getMarca = (promoter: RecordModel) => {
+    // marca_produto pode ser array ou string
+    const marca = promoter.expand?.marca_produto
+    if (Array.isArray(marca) && marca.length > 0) {
+      return marca[0]?.marca_produto || 'Sem Marca'
+    }
+    if (marca && !Array.isArray(marca)) {
+      return marca.marca_produto || 'Sem Marca'
+    }
+    return 'Sem Marca'
+  }
 
   return (
     <div className="space-y-6">
@@ -65,23 +92,17 @@ export default function Promotores() {
 
                   <div>
                     <h3 className="font-semibold text-lg">{promoter.promotor_nome}</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {promoter.expand?.marca_produto?.marca_produto || 'Sem Marca'}
-                    </p>
+                    <p className="text-sm text-muted-foreground">{getMarca(promoter)}</p>
                   </div>
 
                   <div className="flex flex-col gap-2 w-full text-sm text-muted-foreground mt-4 text-left border-t pt-4">
                     <div className="flex items-center gap-2">
                       <Store className="h-4 w-4 shrink-0" />
-                      <span className="truncate">
-                        {promoter.expand?.cod_loja?.loja_nome || 'Nenhuma loja vinculada'}
-                      </span>
+                      <span className="truncate">{getLojaNome(promoter)}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <MapPin className="h-4 w-4 shrink-0" />
-                      <span className="truncate">
-                        Gerente: {promoter.expand?.nome_gerente?.nome_gerente || '-'}
-                      </span>
+                      <span className="truncate">Gerente: {getGerenteNome(promoter)}</span>
                     </div>
                   </div>
 
