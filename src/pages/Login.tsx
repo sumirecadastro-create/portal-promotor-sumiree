@@ -7,6 +7,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
+// Cor principal da Sumirê
+const PRIMARY_COLOR = '#FF1686'
+
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -52,14 +55,37 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-muted/20 p-4">
-      <Card className="w-full max-w-md animate-fade-in-up">
-        <CardHeader className="space-y-2 text-center">
-          <div className="mx-auto h-12 w-12 rounded-lg bg-primary flex items-center justify-center mb-4">
-            <span className="text-primary-foreground font-bold text-2xl">S</span>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-pink-50 to-white p-4">
+      <Card className="w-full max-w-md shadow-lg border-0">
+        <CardHeader className="space-y-4 text-center">
+          {/* Logo da Sumirê */}
+          <div className="flex justify-center mb-2">
+            <img 
+              src="/logo-sumire.png" 
+              alt="Sumirê" 
+              className="h-16 w-auto"
+              onError={(e) => {
+                // Fallback se a imagem não existir
+                e.currentTarget.style.display = 'none'
+                // Mostra o texto "S" como fallback
+                const fallback = document.getElementById('logo-fallback')
+                if (fallback) fallback.style.display = 'flex'
+              }}
+            />
+            <div 
+              id="logo-fallback"
+              className="hidden h-16 w-16 rounded-full items-center justify-center"
+              style={{ backgroundColor: PRIMARY_COLOR }}
+            >
+              <span className="text-white font-bold text-2xl">S</span>
+            </div>
           </div>
-          <CardTitle className="text-2xl">Portal Promotor Sumirê</CardTitle>
-          <CardDescription>Acesse sua conta para continuar</CardDescription>
+          <CardTitle className="text-2xl" style={{ color: PRIMARY_COLOR }}>
+            Portal Promotor Sumirê
+          </CardTitle>
+          <CardDescription className="text-muted-foreground">
+            Acesse sua conta para continuar
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
@@ -71,6 +97,7 @@ export default function Login() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 disabled={isLoading}
+                className="focus:ring-2 focus:ring-pink-500 focus:border-transparent"
               />
             </div>
             <div className="space-y-2">
@@ -81,19 +108,18 @@ export default function Login() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 disabled={isLoading}
+                className="focus:ring-2 focus:ring-pink-500 focus:border-transparent"
               />
             </div>
-            <Button className="w-full" type="submit" disabled={isLoading}>
+            <Button 
+              className="w-full font-medium transition-all hover:opacity-90" 
+              type="submit" 
+              disabled={isLoading}
+              style={{ backgroundColor: PRIMARY_COLOR }}
+            >
               {isLoading ? 'Entrando...' : 'Entrar'}
             </Button>
           </form>
-
-          {/*<div className="mt-6 text-xs text-center text-muted-foreground bg-muted p-3 rounded-md">
-            <p className="font-semibold mb-1">Contas de Teste:</p>
-            <p>Admin: admin@sumire.com / admin123</p>
-            <p>Gerente: gerente@sumire.com / gerente123</p>
-            <p>Promotor: promotor@sumire.com / securepassword123</p>
-          </div>*/}
         </CardContent>
       </Card>
     </div>
