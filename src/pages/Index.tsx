@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -16,6 +17,7 @@ import { RecordModel } from 'pocketbase'
 import { useRealtime } from '@/hooks/use-realtime'
 
 export default function Index() {
+  const navigate = useNavigate()
   const [stats, setStats] = useState<DashboardStats | undefined>()
   const [recentVisits, setRecentVisits] = useState<RecordModel[]>([])
   const [loading, setLoading] = useState(true)
@@ -38,6 +40,11 @@ export default function Index() {
     return new Date(dateString).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
   }
 
+  // Funções de navegação
+  const goToLojas = () => navigate('/lojas')
+  const goToCheckIn = () => navigate('/check-in')
+  const goToPromotores = () => navigate('/promotores')
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-2 md:flex-row md:items-center justify-between">
@@ -46,7 +53,12 @@ export default function Index() {
         </p>
       </div>
 
-      <DashboardCards stats={stats} />
+      <DashboardCards 
+        stats={stats} 
+        onLojasClick={goToLojas}
+        onCheckInClick={goToCheckIn}
+        onPromotoresClick={goToPromotores}
+      />
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
         <div className="lg:col-span-4">
