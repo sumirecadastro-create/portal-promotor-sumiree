@@ -5,8 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Search, Upload, FileSpreadsheet } from 'lucide-react'
-import pb from '@/lib/pocketbase/client'
-import { useRealtime } from '@/hooks/use-realtime'
+import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
 import {
   Dialog,
@@ -20,7 +19,7 @@ import {
 interface Loja {
   id: string
   cod_loja: string
-  loja_nome: string
+  nome_loja: string
 }
 
 export default function Lojas() {
@@ -33,12 +32,20 @@ export default function Lojas() {
 
   const loadData = async () => {
     try {
-      const result = await pb.collection('lojas').getList(1, 1000, {
-        sort: 'cod_loja'
-      })
-      setLojas(result.items as Loja[])
+      const { data, error } = await supabase
+        .from('lojas')
+        .select('*')
+        .order('nome_loja')
+      
+      if (error) throw error
+      setLojas(data || [])
     } catch (error) {
       console.error('Erro ao carregar lojas:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Não foi possível carregar as lojas',
+      })
     } finally {
       setLoading(false)
     }
@@ -48,11 +55,9 @@ export default function Lojas() {
     loadData()
   }, [])
 
-  useRealtime('lojas', () => loadData())
-
   const filteredLojas = lojas.filter(loja =>
     loja.cod_loja?.toLowerCase().includes(search.toLowerCase()) ||
-    loja.loja_nome?.toLowerCase().includes(search.toLowerCase())
+    loja.nome_loja?.toLowerCase().includes(search.toLowerCase())
   )
 
   const handleViewDetails = (id: string) => {
@@ -66,45 +71,49 @@ export default function Lojas() {
     setImporting(true)
     
     try {
-      // Ler o arquivo CSV
       const text = await file.text()
       const lines = text.split('\n')
       const headers = lines[0].split(',').map(h => h.trim())
       
-      // Verificar cabeçalhos esperados
       const codIndex = headers.findIndex(h => h.toLowerCase() === 'cod_loja')
-      const nomeIndex = headers.findIndex(h => h.toLowerCase() === 'loja_nome')
+      const nomeIndex = headers.findIndex(h => h.toLowerCase() === 'nome_loja')
       
       if (codIndex === -1 || nomeIndex === -1) {
-        throw new Error('Arquivo deve conter as colunas: cod_loja, loja_nome')
+        throw new Error('Arquivo deve conter as colunas: cod_loja, nome_loja')
       }
       
       let imported = 0
       let errors = 0
       
-      // Processar cada linha (pular cabeçalho)
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim()
         if (!line) continue
         
         const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''))
         const cod_loja = values[codIndex]
-        const loja_nome = values[nomeIndex]
+        const nome_loja = values[nomeIndex]
         
-        if (cod_loja && loja_nome) {
-          try {
-            // Verificar se já existe
-            const existing = await pb.collection('lojas').getFirstListItem(`cod_loja="${cod_loja}"`)
-            if (existing) {
-              // Atualizar se já existe
-              await pb.collection('lojas').update(existing.id, { cod_loja, loja_nome })
-              imported++
-            }
-          } catch {
-            // Criar novo se não existe
-            await pb.collection('lojas').create({ cod_loja, loja_nome })
-            imported++
+        if (cod_loja && nome_loja) {
+          // Verificar se já existe
+          const { data: existing } = await supabase
+            .from('lojas')
+            .select('id')
+            .eq('cod_loja', cod_loja)
+            .single()
+          
+          if (existing) {
+            // Atualizar
+            await supabase
+              .from('lojas')
+              .update({ cod_loja, nome_loja })
+              .eq('id', existing.id)
+          } else {
+            // Criar novo
+            await supabase
+              .from('lojas')
+              .insert({ cod_loja, nome_loja })
           }
+          imported++
         } else {
           errors++
         }
@@ -115,7 +124,6 @@ export default function Lojas() {
         description: `${imported} lojas importadas/atualizadas. ${errors} linhas ignoradas.`,
       })
       
-      // Recarregar dados
       await loadData()
       
     } catch (error: any) {
@@ -126,7 +134,6 @@ export default function Lojas() {
       })
     } finally {
       setImporting(false)
-      // Limpar o input para permitir novo upload
       event.target.value = ''
     }
   }
@@ -155,7 +162,7 @@ export default function Lojas() {
             <DialogHeader>
               <DialogTitle>Importar Lojas</DialogTitle>
               <DialogDescription>
-                Faça upload de um arquivo CSV com as colunas: <strong>cod_loja</strong> e <strong>loja_nome</strong>
+                Faça upload de um arquivo CSV com as colunas: <strong>cod_loja</strong> e <strong>nome_loja</strong>
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
@@ -182,7 +189,7 @@ export default function Lojas() {
               <div className="text-xs text-muted-foreground">
                 <p>Formato esperado (CSV):</p>
                 <code className="block bg-muted p-2 rounded mt-1">
-                  cod_loja,loja_nome<br />
+                  cod_loja,nome_loja<br />
                   LJ001,Loja Centro<br />
                   LJ002,Loja Norte<br />
                   LJ003,Loja Sul
@@ -215,7 +222,7 @@ export default function Lojas() {
                 {filteredLojas.map((loja) => (
                   <TableRow key={loja.id}>
                     <TableCell className="font-medium">{loja.cod_loja}</TableCell>
-                    <TableCell>{loja.loja_nome}</TableCell>
+                    <TableCell>{loja.nome_loja}</TableCell>
                     <TableCell className="text-right">
                       <Button
                         variant="ghost"
