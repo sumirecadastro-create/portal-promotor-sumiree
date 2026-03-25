@@ -1,10 +1,28 @@
-import pb from '@/lib/pocketbase/client'
-import { RecordModel } from 'pocketbase'
+import { supabase } from '@/lib/supabase'
 
-export async function getLojas(): Promise<RecordModel[]> {
-  return pb.collection('lojas').getFullList({ sort: 'loja_nome' })
+export async function getLojas() {
+  const { data, error } = await supabase
+    .from('lojas')
+    .select('*')
+    .order('nome_loja')
+  
+  if (error) {
+    console.error('Erro ao buscar lojas:', error)
+    return []
+  }
+  return data
 }
 
-export async function getLoja(id: string): Promise<RecordModel> {
-  return pb.collection('lojas').getOne(id)
+export async function getLojaById(id: string) {
+  const { data, error } = await supabase
+    .from('lojas')
+    .select('*')
+    .eq('id', id)
+    .single()
+  
+  if (error) {
+    console.error('Erro ao buscar loja:', error)
+    return null
+  }
+  return data
 }
