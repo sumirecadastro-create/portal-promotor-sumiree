@@ -33,3 +33,4 @@ export async function getLojas() {
   if (error) throw error
   return data
 }
+export default Login
