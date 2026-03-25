@@ -1,8 +1,7 @@
-import PocketBase from 'pocketbase'
+import { supabase } from '@/lib/supabase'
 
-const BACKEND_URL = import.meta.env.VITE_POCKETBASE_URL || 'https://pocketbase-railway-production-631f.up.railway.app'
+// Este arquivo mantido para compatibilidade, mas agora usa Supabase
+export default supabase
 
-const pb = new PocketBase(BACKEND_URL)
-pb.autoCancellation(false)
-
-export default pb
+// Exportar funções de autenticação para compatibilidade
+export const pb = supabase
