@@ -5,12 +5,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Search, MapPin, Store } from 'lucide-react'
-import { getPromotores } from '@/services/promotores'
-import { RecordModel } from 'pocketbase'
-import { useRealtime } from '@/hooks/use-realtime'
+import { getPromotores, Promotor } from '@/services/promotores'
 
 export default function Promotores() {
-  const [promotores, setPromotores] = useState<RecordModel[]>([])
+  const [promotores, setPromotores] = useState<Promotor[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
 
@@ -24,8 +22,6 @@ export default function Promotores() {
     loadData()
   }, [])
 
-  useRealtime('promotores', () => loadData())
-
   const filteredPromotores = promotores.filter((p) =>
     p.promotor_nome?.toLowerCase().includes(search.toLowerCase())
   )
@@ -33,30 +29,13 @@ export default function Promotores() {
   const getInitials = (name: string) => (name ? name.substring(0, 2).toUpperCase() : 'PR')
 
   // Função para obter o nome da loja
-  const getLojaNome = (promoter: RecordModel) => {
-    // loja_id é um array, pegamos o primeiro item
-    const loja = promoter.expand?.loja_id?.[0]
-    return loja?.loja_nome || 'Nenhuma loja vinculada'
-  }
-
-  // Função para obter o nome do gerente
-  const getGerenteNome = (promoter: RecordModel) => {
-    // gerente_id é uma string (relação única)
-    const gerente = promoter.expand?.gerente_id
-    return gerente?.nome_gerente || '-'
+  const getLojaNome = (promoter: Promotor) => {
+    return promoter.lojas?.nome_loja || 'Nenhuma loja vinculada'
   }
 
   // Função para obter a marca
-  const getMarca = (promoter: RecordModel) => {
-    // marca_produto pode ser array ou string
-    const marca = promoter.expand?.marca_produto
-    if (Array.isArray(marca) && marca.length > 0) {
-      return marca[0]?.marca_produto || 'Sem Marca'
-    }
-    if (marca && !Array.isArray(marca)) {
-      return marca.marca_produto || 'Sem Marca'
-    }
-    return 'Sem Marca'
+  const getMarca = (promoter: Promotor) => {
+    return promoter.marca_produto || 'Sem Marca'
   }
 
   return (
@@ -102,7 +81,7 @@ export default function Promotores() {
                     </div>
                     <div className="flex items-center gap-2">
                       <MapPin className="h-4 w-4 shrink-0" />
-                      <span className="truncate">Gerente: {getGerenteNome(promoter)}</span>
+                      <span className="truncate">Gerente: {promoter.gerente_id || '-'}</span>
                     </div>
                   </div>
 
