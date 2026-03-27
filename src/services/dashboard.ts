@@ -56,7 +56,7 @@ export async function getDashboardData(): Promise<{
     
     if (recentVisitsError) throw recentVisitsError
 
-    // Calcular cobertura (lojas com promotores)
+    // Calcular cobertura
     const lojasComPromotores = new Set(promotores?.map(p => p.loja_id).filter(Boolean))
     const cobertura = lojas?.length > 0 
       ? Math.round((lojasComPromotores.size / lojas.length) * 100) 
