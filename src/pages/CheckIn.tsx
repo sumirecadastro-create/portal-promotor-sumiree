@@ -11,20 +11,25 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
 import { getLojas } from '@/services/lojas'
-import { getActiveVisit, createVisit, updateVisit } from '@/services/visitas'
-import pb from '@/lib/pocketbase/client'
-import { RecordModel } from 'pocketbase'
+import { getActiveVisit, createVisit, updateVisit, Visita } from '@/services/visitas'
+import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/use-auth'
 import { MapPin, CheckCircle2 } from 'lucide-react'
+
+interface Loja {
+  id: string
+  cod_loja: string
+  nome_loja: string
+}
 
 export default function CheckIn() {
   const { user } = useAuth()
   const { toast } = useToast()
 
-  const [lojas, setLojas] = useState<RecordModel[]>([])
+  const [lojas, setLojas] = useState<Loja[]>([])
   const [activeStoreId, setActiveStoreId] = useState<string>('')
   const [observacoes, setObservacoes] = useState('')
-  const [activeVisit, setActiveVisit] = useState<RecordModel | null>(null)
+  const [activeVisit, setActiveVisit] = useState<Visita | null>(null)
   const [promoterId, setPromoterId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
@@ -35,22 +40,30 @@ export default function CheckIn() {
         const lojasData = await getLojas()
         setLojas(lojasData)
 
-        // Find promoter record for current user
+        // Buscar o promotor vinculado ao usuário atual
         let myPromoterId = null
-        try {
-          const pRecords = await pb.collection('promotores').getFullList({
-            filter: `user = "${user?.id}"`,
-          })
-          if (pRecords.length > 0) myPromoterId = pRecords[0].id
-        } catch (e) {
-          // Ignorar erro se não encontrar promotor
-          console.debug('Nenhum promotor vinculado ao usuário logado.', e)
+        if (user?.id) {
+          const { data, error } = await supabase
+            .from('promotores')
+            .select('id')
+            .eq('user_id', user.id)
+            .single()
+          
+          if (!error && data) {
+            myPromoterId = data.id
+          }
         }
 
-        // Fallback for demo if no promoter is linked to user
+        // Fallback: pegar o primeiro promotor se não encontrar
         if (!myPromoterId) {
-          const pRecords = await pb.collection('promotores').getFullList({ limit: 1 })
-          if (pRecords.length > 0) myPromoterId = pRecords[0].id
+          const { data, error } = await supabase
+            .from('promotores')
+            .select('id')
+            .limit(1)
+          
+          if (!error && data && data.length > 0) {
+            myPromoterId = data[0].id
+          }
         }
 
         setPromoterId(myPromoterId)
@@ -59,7 +72,7 @@ export default function CheckIn() {
           const visit = await getActiveVisit(myPromoterId)
           if (visit) {
             setActiveVisit(visit)
-            setActiveStoreId(visit.loja)
+            setActiveStoreId(visit.loja_id)
             setObservacoes(visit.observacoes || '')
           }
         }
@@ -82,8 +95,8 @@ export default function CheckIn() {
     try {
       const now = new Date().toISOString()
       const visit = await createVisit({
-        promotor: promoterId,
-        loja: activeStoreId,
+        promotor_id: promoterId,
+        loja_id: activeStoreId,
         check_in: now,
       })
       setActiveVisit(visit)
@@ -172,7 +185,7 @@ export default function CheckIn() {
             <SelectContent>
               {lojas.map((s) => (
                 <SelectItem key={s.id} value={s.id}>
-                  {s.loja_nome} - {s.cod_loja}
+                  {s.nome_loja} - {s.cod_loja}
                 </SelectItem>
               ))}
             </SelectContent>
