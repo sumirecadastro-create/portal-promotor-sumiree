@@ -12,14 +12,12 @@ import {
 } from '@/components/ui/table'
 import { DashboardCards } from '@/components/DashboardCards'
 import { DashboardChart } from '@/components/DashboardChart'
-import { getDashboardData, DashboardStats } from '@/services/dashboard'
-import { RecordModel } from 'pocketbase'
-import { useRealtime } from '@/hooks/use-realtime'
+import { getDashboardData, DashboardStats, RecentVisit } from '@/services/dashboard'
 
 export default function Index() {
   const navigate = useNavigate()
   const [stats, setStats] = useState<DashboardStats | undefined>()
-  const [recentVisits, setRecentVisits] = useState<RecordModel[]>([])
+  const [recentVisits, setRecentVisits] = useState<RecentVisit[]>([])
   const [loading, setLoading] = useState(true)
 
   const loadData = async () => {
@@ -32,8 +30,6 @@ export default function Index() {
   useEffect(() => {
     loadData()
   }, [])
-
-  useRealtime('visitas', () => loadData())
 
   const formatTime = (dateString: string) => {
     if (!dateString) return '--:--'
@@ -90,10 +86,10 @@ export default function Index() {
                     return (
                       <TableRow key={visit.id}>
                         <TableCell className="font-medium text-xs truncate max-w-[120px]">
-                          {visit.expand?.promotor?.promotor_nome || 'Desconhecido'}
+                          {visit.promotor_nome || 'Desconhecido'}
                         </TableCell>
                         <TableCell className="text-xs truncate max-w-[120px]">
-                          {visit.expand?.loja?.loja_nome || 'Desconhecida'}
+                          {visit.loja_nome || 'Desconhecida'}
                         </TableCell>
                         <TableCell>
                           <Badge
