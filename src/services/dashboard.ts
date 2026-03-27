@@ -1,5 +1,4 @@
-import pb from '@/lib/pocketbase/client'
-import { RecordModel } from 'pocketbase'
+import { supabase } from '@/lib/supabase'
 
 export interface DashboardStats {
   totalLojas: number
@@ -8,45 +7,76 @@ export interface DashboardStats {
   visitasHoje: number
 }
 
+export interface RecentVisit {
+  id: string
+  promotor_nome?: string
+  loja_nome?: string
+  check_in: string
+  check_out?: string
+  status: string
+}
+
 export async function getDashboardData(): Promise<{
   stats: DashboardStats
-  recentVisits: RecordModel[]
+  recentVisits: RecentVisit[]
 }> {
   try {
-    const lojasList = await pb.collection('lojas').getList(1, 1, { requestKey: null })
-    const promotoresList = await pb.collection('promotores').getList(1, 1, { requestKey: null })
+    // Buscar lojas
+    const { data: lojas, error: lojasError } = await supabase
+      .from('lojas')
+      .select('*')
+    
+    if (lojasError) throw lojasError
 
-    // Cobertura calculation
-    const allPromotores = await pb.collection('promotores').getFullList({ requestKey: null })
-    const uniqueLojas = new Set(allPromotores.map((p) => p.cod_loja).filter(Boolean))
-    const cobertura =
-      lojasList.totalItems > 0 ? Math.round((uniqueLojas.size / lojasList.totalItems) * 100) : 0
+    // Buscar promotores
+    const { data: promotores, error: promotoresError } = await supabase
+      .from('promotores')
+      .select('*')
+    
+    if (promotoresError) throw promotoresError
 
-    // Visitas Hoje
+    // Buscar visitas de hoje
     const today = new Date()
     today.setHours(0, 0, 0, 0)
-    const todayStr = today.toISOString().replace('T', ' ')
+    const todayStr = today.toISOString()
 
-    const visitasHojeList = await pb.collection('visitas').getList(1, 1, {
-      filter: `created >= "${todayStr}"`,
-      requestKey: null,
-    })
+    const { data: visitasHoje, error: visitasHojeError } = await supabase
+      .from('visitas')
+      .select('*')
+      .gte('check_in', todayStr)
+    
+    if (visitasHojeError) throw visitasHojeError
 
-    // Recent visits
-    const recentVisits = await pb.collection('visitas').getList(1, 5, {
-      sort: '-created',
-      expand: 'promotor,loja',
-      requestKey: null,
-    })
+    // Buscar visitas recentes
+    const { data: recentVisits, error: recentVisitsError } = await supabase
+      .from('visitas')
+      .select('*, promotores(promotor_nome), lojas(nome_loja)')
+      .order('check_in', { ascending: false })
+      .limit(5)
+    
+    if (recentVisitsError) throw recentVisitsError
+
+    // Calcular cobertura (lojas com promotores)
+    const lojasComPromotores = new Set(promotores?.map(p => p.loja_id).filter(Boolean))
+    const cobertura = lojas?.length > 0 
+      ? Math.round((lojasComPromotores.size / lojas.length) * 100) 
+      : 0
 
     return {
       stats: {
-        totalLojas: lojasList.totalItems,
-        promotoresAtivos: promotoresList.totalItems,
+        totalLojas: lojas?.length || 0,
+        promotoresAtivos: promotores?.length || 0,
         cobertura,
-        visitasHoje: visitasHojeList.totalItems,
+        visitasHoje: visitasHoje?.length || 0,
       },
-      recentVisits: recentVisits.items,
+      recentVisits: recentVisits?.map(v => ({
+        id: v.id,
+        promotor_nome: v.promotores?.promotor_nome || 'Desconhecido',
+        loja_nome: v.lojas?.nome_loja || 'Desconhecida',
+        check_in: v.check_in,
+        check_out: v.check_out,
+        status: v.status || 'pendente'
+      })) || [],
     }
   } catch (error) {
     console.error('Failed to load dashboard data', error)
