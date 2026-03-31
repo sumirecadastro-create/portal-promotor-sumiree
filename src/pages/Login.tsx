@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useLocation } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,7 +9,6 @@ export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const navigate = useNavigate()
   const location = useLocation()
   const from = location.state?.from?.pathname || '/'
 
@@ -23,7 +22,8 @@ export default function Login() {
         password
       })
       if (error) throw error
-      navigate(from, { replace: true })
+      // Força recarregamento completo do navegador
+      window.location.href = from
     } catch (error: any) {
       alert(error.message || 'Erro ao fazer login')
     } finally {
