@@ -57,16 +57,9 @@ export default function Index() {
       />
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
-<div className="lg:col-span-4">
-  <Card>
-    <CardHeader>
-      <CardTitle>Gráfico (temporariamente removido)</CardTitle>
-    </CardHeader>
-    <CardContent>
-      <p>Gráfico será restaurado depois</p>
-    </CardContent>
-  </Card>
-</div>
+      <div className="lg:col-span-4">
+      <DashboardChart />
+      </div>
 
         <Card className="lg:col-span-3">
           <CardHeader>
