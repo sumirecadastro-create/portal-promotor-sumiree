@@ -4,6 +4,8 @@ import { useAuth } from '@/hooks/use-auth'
 export function ProtectedRoute() {
   const { user, loading } = useAuth()
 
+  console.log('ProtectedRoute - loading:', loading, 'user:', user)
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-screen">
@@ -13,8 +15,10 @@ export function ProtectedRoute() {
   }
 
   if (!user) {
+    console.log('Redirecionando para /login')
     return <Navigate to="/login" replace />
   }
 
+  console.log('Renderizando outlet')
   return <Outlet />
 }
