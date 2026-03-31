@@ -11,7 +11,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { DashboardCards } from '@/components/DashboardCards'
-// import { DashboardChart } from '@/components/DashboardChart' // COMENTADO POR ENQUANTO
+ import { DashboardChart } from '@/components/DashboardChart' 
 import { getDashboardData, DashboardStats } from '@/services/dashboard'
 import { RecentVisit } from '@/services/dashboard'
 
@@ -57,16 +57,16 @@ export default function Index() {
       />
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
-        <div className="lg:col-span-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Gráfico (temporariamente removido)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p>Gráfico será restaurado depois</p>
-            </CardContent>
-          </Card>
-        </div>
+<div className="lg:col-span-4">
+  <Card>
+    <CardHeader>
+      <CardTitle>Gráfico (temporariamente removido)</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <p>Gráfico será restaurado depois</p>
+    </CardContent>
+  </Card>
+</div>
 
         <Card className="lg:col-span-3">
           <CardHeader>
