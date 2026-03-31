@@ -11,8 +11,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Plus, Search, Edit, Package } from 'lucide-react'
-import pb from '@/lib/pocketbase/client'
-import { useRealtime } from '@/hooks/use-realtime'
+import { supabase } from '@/lib/supabase'
 
 interface Categoria {
   id: string
@@ -29,14 +28,16 @@ export default function Categorias() {
   const loadData = async () => {
     try {
       // Buscar todos os produtos para agrupar por categoria
-      const produtos = await pb.collection('produtos').getList(1, 1000, {
-        sort: 'categoria_produto'
-      })
+      const { data: produtos, error: produtosError } = await supabase
+        .from('produtos')
+        .select('categoria_produto')
+
+      if (produtosError) throw produtosError
 
       // Agrupar por categoria
       const categoriasMap = new Map<string, Categoria>()
-      
-      produtos.items.forEach(prod => {
+
+      produtos?.forEach(prod => {
         const catNome = prod.categoria_produto
         if (catNome) {
           if (!categoriasMap.has(catNome)) {
@@ -53,16 +54,36 @@ export default function Categorias() {
       })
 
       // Buscar promotores para contar especializações
-      const promotores = await pb.collection('promotores').getList(1, 1000, {
-        expand: 'marca_produto'
+      const { data: promotores, error: promotoresError } = await supabase
+        .from('promotores')
+        .select('marca_produto')
+
+      if (promotoresError) throw promotoresError
+
+      // Contar promotores por categoria (via marca)
+      // Como não temos categoria diretamente no promotor, agrupamos por marca
+      // e depois relacionamos com categoria via produtos
+      const { data: produtosComCategoria, error: produtosCatError } = await supabase
+        .from('produtos')
+        .select('marca_produto, categoria_produto')
+
+      if (produtosCatError) throw produtosCatError
+
+      // Criar mapa marca -> categoria
+      const marcaCategoriaMap = new Map<string, string>()
+      produtosComCategoria?.forEach(prod => {
+        if (prod.marca_produto && prod.categoria_produto) {
+          marcaCategoriaMap.set(prod.marca_produto, prod.categoria_produto)
+        }
       })
 
-      // Contar promotores por categoria (via marcas)
-      promotores.items.forEach(prom => {
-        const marca = prom.expand?.marca_produto
-        if (marca && marca.categoria_produto) {
-          const cat = categoriasMap.get(marca.categoria_produto)
-          if (cat) {
+      // Contar promotores por categoria
+      promotores?.forEach(prom => {
+        const marca = prom.marca_produto
+        if (marca) {
+          const categoria = marcaCategoriaMap.get(marca)
+          if (categoria && categoriasMap.has(categoria)) {
+            const cat = categoriasMap.get(categoria)!
             cat.promotoresEspecializados += 1
           }
         }
@@ -80,20 +101,15 @@ export default function Categorias() {
     loadData()
   }, [])
 
-  useRealtime('produtos', () => loadData())
-  useRealtime('promotores', () => loadData())
-
   const filteredCategorias = categorias.filter(cat =>
     cat.categoria_produto?.toLowerCase().includes(search.toLowerCase())
   )
 
   const handleEdit = (categoria: Categoria) => {
-    // Implementar edição depois
     console.log('Editar categoria:', categoria.categoria_produto)
   }
 
   const handleNewCategoria = () => {
-    // Implementar nova categoria depois
     console.log('Nova categoria')
   }
 
@@ -148,6 +164,7 @@ export default function Categorias() {
                     <TableCell className="text-right">{cat.promotoresEspecializados}</TableCell>
                     <TableCell className="text-right pr-6">
                       <Button variant="ghost" size="sm" onClick={() => handleEdit(cat)}>
+                        <Edit className="h-4 w-4 mr-1" />
                         Editar
                       </Button>
                     </TableCell>
