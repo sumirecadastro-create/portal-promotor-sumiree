@@ -52,15 +52,14 @@ export function AppSidebar() {
   const getInitials = (name?: string) => (name ? name.substring(0, 2).toUpperCase() : 'US')
 
   return (
-    <Sidebar>
-      <SidebarHeader className="p-4 border-b border-sidebar-border">
-        <div className="flex items-center gap-2 px-2">
-          <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-lg">S</span>
-          </div>
-          <span className="font-semibold text-lg tracking-tight text-primary">Portal Sumirê</span>
-        </div>
-      </SidebarHeader>
+<SidebarHeader className="p-4 border-b border-sidebar-border">
+  <div className="flex items-center gap-2 px-2">
+    <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
+      <span className="text-primary-foreground font-bold text-lg">S</span>
+    </div>
+    <span className="font-semibold text-lg tracking-tight text-primary">Portal Sumirê</span>
+  </div>
+</SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>Menu Principal</SidebarGroupLabel>
