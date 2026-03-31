@@ -12,8 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Plus, Search, Edit, Package } from 'lucide-react'
-import pb from '@/lib/pocketbase/client'
-import { useRealtime } from '@/hooks/use-realtime'
+import { supabase } from '@/lib/supabase'
 
 interface Marca {
   id: string
@@ -31,24 +30,27 @@ export default function Marcas() {
   const loadData = async () => {
     try {
       // Buscar todos os produtos (marcas estão na collection produtos)
-      const produtos = await pb.collection('produtos').getList(1, 1000, {
-        sort: 'marca_produto'
-      })
+      const { data: produtos, error: produtosError } = await supabase
+        .from('produtos')
+        .select('*')
+        .order('marca_produto')
+
+      if (produtosError) throw produtosError
 
       // Agrupar por marca
       const marcasMap = new Map<string, Marca>()
-      
-      produtos.items.forEach(prod => {
+
+      produtos?.forEach(prod => {
         const marcaNome = prod.marca_produto
         const categoriaNome = prod.categoria_produto
-        
+
         if (marcaNome) {
           if (!marcasMap.has(marcaNome)) {
             marcasMap.set(marcaNome, {
               id: marcaNome,
               marca_produto: marcaNome,
               categoria_produto: categoriaNome || 'Sem categoria',
-              status: 'ativo', // Padrão, pode ser ajustado depois
+              status: 'ativo',
               totalPromotores: 0
             })
           }
@@ -56,15 +58,16 @@ export default function Marcas() {
       })
 
       // Buscar promotores para contar quantos representam cada marca
-      const promotores = await pb.collection('promotores').getList(1, 1000, {
-        expand: 'marca_produto'
-      })
+      const { data: promotores, error: promotoresError } = await supabase
+        .from('promotores')
+        .select('marca_produto')
+
+      if (promotoresError) throw promotoresError
 
       // Contar promotores por marca
-      promotores.items.forEach(prom => {
-        const marca = prom.expand?.marca_produto
-        if (marca && marca.marca_produto) {
-          const marcaNome = marca.marca_produto
+      promotores?.forEach(prom => {
+        const marcaNome = prom.marca_produto
+        if (marcaNome) {
           const marcaItem = marcasMap.get(marcaNome)
           if (marcaItem) {
             marcaItem.totalPromotores = (marcaItem.totalPromotores || 0) + 1
@@ -84,20 +87,15 @@ export default function Marcas() {
     loadData()
   }, [])
 
-  useRealtime('produtos', () => loadData())
-  useRealtime('promotores', () => loadData())
-
   const filteredMarcas = marcas.filter(marca =>
     marca.marca_produto?.toLowerCase().includes(search.toLowerCase())
   )
 
   const handleEdit = (marca: Marca) => {
-    // Implementar edição depois
     console.log('Editar marca:', marca.marca_produto)
   }
 
   const handleNewMarca = () => {
-    // Implementar nova marca depois
     console.log('Nova marca')
   }
 
