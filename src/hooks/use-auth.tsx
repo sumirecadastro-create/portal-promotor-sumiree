@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase'
 import { User } from '@supabase/supabase-js'
 
 interface AuthContextType {
-  user: (User & { role?: string }) | null
+  user: User | null
   loading: boolean
   signOut: () => Promise<void>
 }
@@ -17,38 +17,17 @@ export const useAuth = () => {
 }
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<(User & { role?: string }) | null>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const getUserWithRole = async (userId: string) => {
-      const { data, error } = await supabase
-        .from('perfis')
-        .select('role')
-        .eq('id', userId)
-        .maybeSingle()
-      return data?.role || 'promotor'
-    }
-
-    // Verificar sessão atual
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        const role = await getUserWithRole(session.user.id)
-        setUser({ ...session.user, role })
-      } else {
-        setUser(null)
-      }
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
       setLoading(false)
     })
 
-    // Ouvir mudanças de autenticação
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        const role = await getUserWithRole(session.user.id)
-        setUser({ ...session.user, role })
-      } else {
-        setUser(null)
-      }
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
       setLoading(false)
     })
 
