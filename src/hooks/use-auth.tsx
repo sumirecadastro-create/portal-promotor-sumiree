@@ -22,16 +22,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const getUserWithRole = async (userId: string) => {
-      const { data } = await supabase
+      console.log('Buscando role para userId:', userId)
+      const { data, error } = await supabase
         .from('perfis')
         .select('role')
         .eq('id', userId)
         .single()
+      console.log('Role encontrada:', data, error)
       return data?.role || 'promotor'
     }
 
     // Verificar sessão atual
+    console.log('Verificando sessão...')
     supabase.auth.getSession().then(async ({ data: { session } }) => {
+      console.log('Sessão:', session)
       if (session?.user) {
         const role = await getUserWithRole(session.user.id)
         setUser({ ...session.user, role })
@@ -43,6 +47,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     // Ouvir mudanças de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      console.log('onAuthStateChange - sessão:', session)
       if (session?.user) {
         const role = await getUserWithRole(session.user.id)
         setUser({ ...session.user, role })
