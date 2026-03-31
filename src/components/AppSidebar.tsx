@@ -52,14 +52,16 @@ export function AppSidebar() {
   const getInitials = (name?: string) => (name ? name.substring(0, 2).toUpperCase() : 'US')
 
   return (
-<SidebarHeader className="p-4 border-b border-sidebar-border">
-  <div className="flex items-center gap-2 px-2">
-    <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-      <span className="text-primary-foreground font-bold text-lg">S</span>
-    </div>
-    <span className="font-semibold text-lg tracking-tight text-primary">Portal Sumirê</span>
-  </div>
-</SidebarHeader>
+    <Sidebar>
+      <SidebarHeader className="p-4 border-b border-sidebar-border">
+        <div className="flex items-center gap-2 px-2">
+          <img 
+            src="/logo_sumire.png" 
+            alt="Sumirê" 
+            className="h-8 w-auto"
+          />
+        </div>
+      </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>Menu Principal</SidebarGroupLabel>
