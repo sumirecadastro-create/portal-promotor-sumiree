@@ -10,8 +10,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-// import { DashboardCards } from '@/components/DashboardCards'  // COMENTADO
-// import { DashboardChart } from '@/components/DashboardChart'  // COMENTADO
+import { DashboardCards } from '@/components/DashboardCards'
+// import { DashboardChart } from '@/components/DashboardChart' // COMENTADO POR ENQUANTO
 import { getDashboardData, DashboardStats } from '@/services/dashboard'
 import { RecentVisit } from '@/services/dashboard'
 
@@ -49,32 +49,22 @@ export default function Index() {
         </p>
       </div>
 
-      {/* DashboardCards removido temporariamente */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader>Total Lojas</CardHeader>
-          <CardContent>{stats?.totalLojas || 0}</CardContent>
-        </Card>
-        <Card>
-          <CardHeader>Promotores Ativos</CardHeader>
-          <CardContent>{stats?.promotoresAtivos || 0}</CardContent>
-        </Card>
-        <Card>
-          <CardHeader>Cobertura</CardHeader>
-          <CardContent>{stats?.cobertura || 0}%</CardContent>
-        </Card>
-        <Card>
-          <CardHeader>Visitas Hoje</CardHeader>
-          <CardContent>{stats?.visitasHoje || 0}</CardContent>
-        </Card>
-      </div>
+      <DashboardCards 
+        stats={stats} 
+        onLojasClick={goToLojas}
+        onCheckInClick={goToCheckIn}
+        onPromotoresClick={goToPromotores}
+      />
 
-      {/* DashboardChart removido temporariamente */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
         <div className="lg:col-span-4">
           <Card>
-            <CardHeader>Gráfico (temporariamente removido)</CardHeader>
-            <CardContent>Gráfico será restaurado depois</CardContent>
+            <CardHeader>
+              <CardTitle>Gráfico (temporariamente removido)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p>Gráfico será restaurado depois</p>
+            </CardContent>
           </Card>
         </div>
 
