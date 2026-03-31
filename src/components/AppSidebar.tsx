@@ -39,7 +39,8 @@ export function AppSidebar() {
   const location = useLocation()
   const { user, signOut } = useAuth()
 
-  const role = user?.role || 'promotor'
+  // Forçando role como admin para teste
+  const role = 'admin'
 
   const items = allItems.filter((item) => {
     if (role === 'admin') return true
