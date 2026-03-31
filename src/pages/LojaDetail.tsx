@@ -1,44 +1,48 @@
-import { useParams, Link } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { useParams, useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { ArrowLeft, MapPin, UserCircle } from 'lucide-react'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import pb from '@/lib/pocketbase/client'
-import { RecordModel } from 'pocketbase'
-import { useRealtime } from '@/hooks/use-realtime'
+import { Button } from '@/components/ui/button'
+import { ArrowLeft, Store, MapPin, Phone, Building, User } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
+
+interface Loja {
+  id: string
+  cod_loja: string
+  nome_loja: string
+  cidade?: string
+  endereco?: string
+  telefone?: string
+  gerente_nome?: string
+  status?: string
+  created_at?: string
+}
 
 export default function LojaDetail() {
   const { id } = useParams()
-  const [store, setStore] = useState<RecordModel | null>(null)
-  const [promotores, setPromotores] = useState<RecordModel[]>([])
+  const navigate = useNavigate()
+  const [loja, setLoja] = useState<Loja | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const loadData = async () => {
-    if (!id) return
-    try {
-      const storeData = await pb.collection('lojas').getOne(id)
-      setStore(storeData)
-
-      const promotoresData = await pb.collection('promotores').getFullList({
-        filter: `cod_loja = "${id}"`,
-        expand: 'marca_produto',
-      })
-      setPromotores(promotoresData)
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   useEffect(() => {
-    loadData()
+    const loadLoja = async () => {
+      if (!id) return
+      try {
+        const { data, error } = await supabase
+          .from('lojas')
+          .select('*')
+          .eq('id', id)
+          .single()
+        
+        if (error) throw error
+        setLoja(data)
+      } catch (error) {
+        console.error('Erro ao carregar loja:', error)
+      } finally {
+        setLoading(false)
+      }
+    }
+    loadLoja()
   }, [id])
-
-  useRealtime('lojas', () => loadData())
-  useRealtime('promotores', () => loadData())
 
   if (loading) {
     return (
@@ -48,17 +52,13 @@ export default function LojaDetail() {
     )
   }
 
-  if (!store) {
+  if (!loja) {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" asChild>
-            <Link to="/lojas">
-              <ArrowLeft className="h-4 w-4" />
-            </Link>
-          </Button>
-          <h2 className="text-2xl font-bold tracking-tight">Loja não encontrada</h2>
-        </div>
+      <div className="text-center py-12">
+        <p className="text-muted-foreground">Loja não encontrada</p>
+        <Button onClick={() => navigate('/lojas')} className="mt-4">
+          Voltar para lojas
+        </Button>
       </div>
     )
   }
@@ -66,82 +66,84 @@ export default function LojaDetail() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Button variant="outline" size="icon" asChild>
-          <Link to="/lojas">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => navigate('/lojas')}
+          className="gap-2"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Voltar
         </Button>
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">{store.loja_nome}</h2>
-          <p className="text-muted-foreground font-mono text-sm">Código: {store.cod_loja}</p>
-        </div>
-        <Badge variant="default" className="ml-auto bg-emerald-500 hover:bg-emerald-600">
-          Ativa
-        </Badge>
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Informações da Unidade</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-start gap-3">
-              <MapPin className="h-5 w-5 text-muted-foreground mt-0.5" />
-              <div>
-                <p className="font-medium text-sm">Endereço</p>
-                <p className="text-muted-foreground text-sm">Não especificado no sistema</p>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Store className="h-5 w-5" />
+            {loja.nome_loja}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-sm">
+                <Building className="h-4 w-4 text-muted-foreground" />
+                <span className="font-medium">Código:</span>
+                <span>{loja.cod_loja}</span>
               </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <UserCircle className="h-5 w-5 text-muted-foreground mt-0.5" />
-              <div>
-                <p className="font-medium text-sm">Gerente</p>
-                <p className="text-muted-foreground text-sm">Responsável da loja</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Promotores Alocados</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {promotores.map((promoter) => (
-                <div
-                  key={promoter.id}
-                  className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <Avatar>
-                      <AvatarImage
-                        src={`https://img.usecurling.com/ppl/thumbnail?seed=${promoter.id}`}
-                      />
-                      <AvatarFallback>{promoter.promotor_nome?.charAt(0) || 'P'}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="font-medium text-sm">{promoter.promotor_nome}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {promoter.expand?.marca_produto?.categoria_produto || 'Sem categoria'}
-                      </p>
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="sm" asChild>
-                    <Link to={`/promotores/${promoter.id}`}>Ver</Link>
-                  </Button>
+              {loja.cidade && (
+                <div className="flex items-center gap-2 text-sm">
+                  <MapPin className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">Cidade:</span>
+                  <span>{loja.cidade}</span>
                 </div>
-              ))}
-              {promotores.length === 0 && (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  Nenhum promotor alocado.
-                </p>
+              )}
+              {loja.endereco && (
+                <div className="flex items-center gap-2 text-sm">
+                  <MapPin className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">Endereço:</span>
+                  <span>{loja.endereco}</span>
+                </div>
+              )}
+              {loja.telefone && (
+                <div className="flex items-center gap-2 text-sm">
+                  <Phone className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">Telefone:</span>
+                  <span>{loja.telefone}</span>
+                </div>
               )}
             </div>
-          </CardContent>
-        </Card>
-      </div>
+            <div className="space-y-2">
+              {loja.gerente_nome && (
+                <div className="flex items-center gap-2 text-sm">
+                  <User className="h-4 w-4 text-muted-foreground" />
+                  <span className="font-medium">Gerente:</span>
+                  <span>{loja.gerente_nome}</span>
+                </div>
+              )}
+              {loja.status && (
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="font-medium">Status:</span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs ${
+                    loja.status === 'ativo' 
+                      ? 'bg-emerald-100 text-emerald-700' 
+                      : 'bg-red-100 text-red-700'
+                  }`}>
+                    {loja.status === 'ativo' ? 'Ativo' : 'Inativo'}
+                  </span>
+                </div>
+              )}
+              {loja.created_at && (
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="font-medium">Cadastrado em:</span>
+                  <span>{new Date(loja.created_at).toLocaleDateString('pt-BR')}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
