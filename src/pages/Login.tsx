@@ -36,7 +36,7 @@ export default function Login() {
       <Card className="w-full max-w-md shadow-lg border-0">
         <CardHeader className="space-y-4 text-center">
           <div className="flex justify-center mb-2">
-            <img src="/logo-sumire.png" alt="Sumirê" className="h-16 w-auto" />
+            <img src="/logo_sumire.png" alt="Sumirê" className="h-16 w-auto" />
           </div>
           <CardTitle className="text-2xl" style={{ color: '#FF1686' }}>
             Portal Promotor Sumirê
