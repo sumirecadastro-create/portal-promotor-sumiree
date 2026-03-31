@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis, ResponsiveContainer } from 'recharts'
 import { getPromotores } from '@/services/promotores'
-import { useRealtime } from '@/hooks/use-realtime'
 
 export function DashboardChart() {
   const [chartData, setChartData] = useState<{ name: string; activePromoters: number }[]>([])
@@ -15,7 +14,8 @@ export function DashboardChart() {
       const categoryMap: Record<string, number> = {}
 
       promotores.forEach((p) => {
-        const cat = p.expand?.marca_produto?.categoria_produto || 'Sem Categoria'
+        // Usar marca_produto diretamente (texto) para agrupar
+        const cat = p.marca_produto || 'Sem Marca'
         categoryMap[cat] = (categoryMap[cat] || 0) + 1
       })
 
@@ -36,8 +36,6 @@ export function DashboardChart() {
     loadData()
   }, [])
 
-  useRealtime('promotores', () => loadData())
-
   const chartConfig = {
     activePromoters: {
       label: 'Promotores Ativos',
@@ -48,7 +46,7 @@ export function DashboardChart() {
   return (
     <Card className="animate-slide-up delay-100 flex flex-col h-full">
       <CardHeader>
-        <CardTitle className="text-base">Cobertura por Categoria</CardTitle>
+        <CardTitle className="text-base">Cobertura por Marca</CardTitle>
       </CardHeader>
       <CardContent className="flex-1 min-h-[300px]">
         {loading ? (
