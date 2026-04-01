@@ -1,10 +1,11 @@
+
 import { useEffect, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Search, MapPin, Store, Plus, X } from 'lucide-react'
+import { Search, MapPin, Store, Plus } from 'lucide-react'
 import { getPromotores, Promotor, createPromotor } from '@/services/promotores'
 import { getLojas } from '@/services/lojas'
 import { supabase } from '@/lib/supabase'
