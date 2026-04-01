@@ -1,10 +1,9 @@
-
 import { useEffect, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Search, MapPin, Store, Plus } from 'lucide-react'
 import { getPromotores, Promotor, createPromotor } from '@/services/promotores'
 import { getLojas } from '@/services/lojas'
@@ -319,10 +318,9 @@ export default function Promotores() {
               <CardContent className="p-6">
                 <div className="flex flex-col items-center text-center space-y-4">
                   <Avatar className="h-20 w-20 border-2 border-background shadow-sm">
-                    <AvatarImage
-                      src={`https://img.usecurling.com/ppl/thumbnail?seed=${promoter.id}`}
-                    />
-                    <AvatarFallback>{getInitials(promoter.promotor_nome)}</AvatarFallback>
+                    <AvatarFallback className="text-2xl font-medium bg-primary/10 text-primary">
+                      {getInitials(promoter.promotor_nome)}
+                    </AvatarFallback>
                   </Avatar>
 
                   <div>
