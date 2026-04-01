@@ -54,3 +54,4 @@ export async function createGerente(gerente: Omit<Gerente, 'id' | 'created_at'>)
     return null
   }
 }
+ 
