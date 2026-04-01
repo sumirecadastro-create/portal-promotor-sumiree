@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -7,6 +8,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Search, MapPin, Store, Plus } from 'lucide-react'
 import { getPromotores, Promotor, createPromotor } from '@/services/promotores'
 import { getLojas } from '@/services/lojas'
+import { getGerentes, Gerente } from '@/services/gerentes'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
 import {
@@ -41,6 +43,7 @@ interface Produto {
 export default function Promotores() {
   const [promotores, setPromotores] = useState<Promotor[]>([])
   const [lojas, setLojas] = useState<Loja[]>([])
+  const [gerentes, setGerentes] = useState<Gerente[]>([])
   const [produtos, setProdutos] = useState<Produto[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -52,6 +55,7 @@ export default function Promotores() {
   const [newPromotor, setNewPromotor] = useState({
     promotor_nome: '',
     loja_id: '',
+    gerente_id: '',
     marca_produto: '',
     fabricante_produto: '',
     dias_semana: '',
@@ -61,13 +65,15 @@ export default function Promotores() {
 
   const loadData = async () => {
     try {
-      const [promotoresData, lojasData, produtosData] = await Promise.all([
+      const [promotoresData, lojasData, gerentesData, produtosData] = await Promise.all([
         getPromotores(),
         getLojas(),
+        getGerentes(),
         supabase.from('produtos').select('id, marca_produto, fabricante_produto')
       ])
       setPromotores(promotoresData)
       setLojas(lojasData)
+      setGerentes(gerentesData)
       if (produtosData.data) setProdutos(produtosData.data)
     } catch (error) {
       console.error('Erro ao carregar dados:', error)
@@ -79,6 +85,11 @@ export default function Promotores() {
   useEffect(() => {
     loadData()
   }, [])
+
+  // Filtrar gerentes pela loja selecionada
+  const gerentesFiltrados = gerentes.filter(g => 
+    newPromotor.loja_id ? g.cod_loja === newPromotor.loja_id : true
+  )
 
   const handleCreatePromotor = async () => {
     if (!newPromotor.promotor_nome) {
@@ -102,6 +113,7 @@ export default function Promotores() {
         setNewPromotor({
           promotor_nome: '',
           loja_id: '',
+          gerente_id: '',
           marca_produto: '',
           fabricante_produto: '',
           dias_semana: '',
@@ -131,6 +143,10 @@ export default function Promotores() {
 
   const getLojaNome = (promoter: Promotor) => {
     return promoter.lojas?.nome_loja || 'Nenhuma loja vinculada'
+  }
+
+  const getGerenteNome = (promoter: Promotor) => {
+    return promoter.gerentes?.nome_gerente || 'Sem gerente'
   }
 
   const getMarca = (promoter: Promotor) => {
@@ -183,7 +199,9 @@ export default function Promotores() {
                 <Label htmlFor="loja_id">Loja Vinculada</Label>
                 <Select
                   value={newPromotor.loja_id}
-                  onValueChange={(value) => setNewPromotor({ ...newPromotor, loja_id: value })}
+                  onValueChange={(value) => {
+                    setNewPromotor({ ...newPromotor, loja_id: value, gerente_id: '' })
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione uma loja" />
@@ -192,6 +210,26 @@ export default function Promotores() {
                     {lojas.map((loja) => (
                       <SelectItem key={loja.id} value={loja.id}>
                         {loja.cod_loja} - {loja.nome_loja}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="gerente_id">Gerente Responsável</Label>
+                <Select
+                  value={newPromotor.gerente_id}
+                  onValueChange={(value) => setNewPromotor({ ...newPromotor, gerente_id: value })}
+                  disabled={!newPromotor.loja_id}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={newPromotor.loja_id ? "Selecione um gerente" : "Primeiro selecione uma loja"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {gerentesFiltrados.map((gerente) => (
+                      <SelectItem key={gerente.id} value={gerente.id}>
+                        {gerente.nome_gerente} {gerente.telefone ? `- ${gerente.telefone}` : ''}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -299,7 +337,7 @@ export default function Promotores() {
                     </div>
                     <div className="flex items-center gap-2">
                       <MapPin className="h-4 w-4 shrink-0" />
-                      <span className="truncate">Gerente: {promoter.gerente_id || '-'}</span>
+                      <span className="truncate">Gerente: {getGerenteNome(promoter)}</span>
                     </div>
                     {promoter.dias_semana && (
                       <div className="flex items-center gap-2 text-xs">
