@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Search, Upload, FileSpreadsheet } from 'lucide-react'
+import { Search, Plus, Eye } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
 import {
@@ -14,7 +14,9 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
 
 interface Loja {
   id: string
@@ -26,7 +28,10 @@ export default function Lojas() {
   const [lojas, setLojas] = useState<Loja[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
-  const [importing, setImporting] = useState(false)
+  const [open, setOpen] = useState(false)
+  const [newCodLoja, setNewCodLoja] = useState('')
+  const [newNomeLoja, setNewNomeLoja] = useState('')
+  const [saving, setSaving] = useState(false)
   const navigate = useNavigate()
   const { toast } = useToast()
 
@@ -55,6 +60,43 @@ export default function Lojas() {
     loadData()
   }, [])
 
+  const handleCreateLoja = async () => {
+    if (!newCodLoja || !newNomeLoja) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Preencha todos os campos',
+      })
+      return
+    }
+
+    setSaving(true)
+    try {
+      const { error } = await supabase
+        .from('lojas')
+        .insert({ cod_loja: newCodLoja, nome_loja: newNomeLoja })
+      
+      if (error) throw error
+      
+      toast({
+        title: 'Sucesso',
+        description: 'Loja criada com sucesso!',
+      })
+      setOpen(false)
+      setNewCodLoja('')
+      setNewNomeLoja('')
+      await loadData()
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: error.message || 'Erro ao criar loja',
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const filteredLojas = lojas.filter(loja =>
     loja.cod_loja?.toLowerCase().includes(search.toLowerCase()) ||
     loja.nome_loja?.toLowerCase().includes(search.toLowerCase())
@@ -62,80 +104,6 @@ export default function Lojas() {
 
   const handleViewDetails = (id: string) => {
     navigate(`/lojas/${id}`)
-  }
-
-  const handleImport = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    setImporting(true)
-    
-    try {
-      const text = await file.text()
-      const lines = text.split('\n')
-      const headers = lines[0].split(',').map(h => h.trim())
-      
-      const codIndex = headers.findIndex(h => h.toLowerCase() === 'cod_loja')
-      const nomeIndex = headers.findIndex(h => h.toLowerCase() === 'nome_loja')
-      
-      if (codIndex === -1 || nomeIndex === -1) {
-        throw new Error('Arquivo deve conter as colunas: cod_loja, nome_loja')
-      }
-      
-      let imported = 0
-      let errors = 0
-      
-      for (let i = 1; i < lines.length; i++) {
-        const line = lines[i].trim()
-        if (!line) continue
-        
-        const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, ''))
-        const cod_loja = values[codIndex]
-        const nome_loja = values[nomeIndex]
-        
-        if (cod_loja && nome_loja) {
-          // Verificar se já existe
-          const { data: existing } = await supabase
-            .from('lojas')
-            .select('id')
-            .eq('cod_loja', cod_loja)
-            .single()
-          
-          if (existing) {
-            // Atualizar
-            await supabase
-              .from('lojas')
-              .update({ cod_loja, nome_loja })
-              .eq('id', existing.id)
-          } else {
-            // Criar novo
-            await supabase
-              .from('lojas')
-              .insert({ cod_loja, nome_loja })
-          }
-          imported++
-        } else {
-          errors++
-        }
-      }
-      
-      toast({
-        title: 'Importação concluída',
-        description: `${imported} lojas importadas/atualizadas. ${errors} linhas ignoradas.`,
-      })
-      
-      await loadData()
-      
-    } catch (error: any) {
-      toast({
-        variant: 'destructive',
-        title: 'Erro na importação',
-        description: error.message || 'Verifique o formato do arquivo',
-      })
-    } finally {
-      setImporting(false)
-      event.target.value = ''
-    }
   }
 
   return (
@@ -151,51 +119,48 @@ export default function Lojas() {
           />
         </div>
         
-        <Dialog>
+        <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button variant="outline" className="gap-2">
-              <Upload className="h-4 w-4" />
-              Importar Lojas (CSV)
+            <Button className="gap-2">
+              <Plus className="h-4 w-4" />
+              Nova Loja
             </Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Importar Lojas</DialogTitle>
+              <DialogTitle>Nova Loja</DialogTitle>
               <DialogDescription>
-                Faça upload de um arquivo CSV com as colunas: <strong>cod_loja</strong> e <strong>nome_loja</strong>
+                Preencha os dados para cadastrar uma nova loja.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
-              <div className="border-2 border-dashed rounded-lg p-6 text-center">
-                <FileSpreadsheet className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
-                <p className="text-sm text-muted-foreground mb-2">
-                  Selecione um arquivo CSV para importar
-                </p>
-                <input
-                  type="file"
-                  accept=".csv"
-                  onChange={handleImport}
-                  disabled={importing}
-                  className="hidden"
-                  id="csv-upload"
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="cod_loja">Código da Loja</Label>
+                <Input
+                  id="cod_loja"
+                  placeholder="Ex: LJ001"
+                  value={newCodLoja}
+                  onChange={(e) => setNewCodLoja(e.target.value)}
                 />
-                <label
-                  htmlFor="csv-upload"
-                  className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2 cursor-pointer"
-                >
-                  {importing ? 'Importando...' : 'Selecionar arquivo CSV'}
-                </label>
               </div>
-              <div className="text-xs text-muted-foreground">
-                <p>Formato esperado (CSV):</p>
-                <code className="block bg-muted p-2 rounded mt-1">
-                  cod_loja,nome_loja<br />
-                  LJ001,Loja Centro<br />
-                  LJ002,Loja Norte<br />
-                  LJ003,Loja Sul
-                </code>
+              <div className="space-y-2">
+                <Label htmlFor="nome_loja">Nome da Loja</Label>
+                <Input
+                  id="nome_loja"
+                  placeholder="Ex: Loja Centro"
+                  value={newNomeLoja}
+                  onChange={(e) => setNewNomeLoja(e.target.value)}
+                />
               </div>
             </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleCreateLoja} disabled={saving}>
+                {saving ? 'Salvando...' : 'Salvar'}
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
@@ -229,6 +194,7 @@ export default function Lojas() {
                         size="sm"
                         onClick={() => handleViewDetails(loja.id)}
                       >
+                        <Eye className="h-4 w-4 mr-1" />
                         Ver Detalhes
                       </Button>
                     </TableCell>
