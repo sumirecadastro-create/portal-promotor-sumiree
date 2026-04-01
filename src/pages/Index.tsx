@@ -11,7 +11,8 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { DashboardCards } from '@/components/DashboardCards'
- import { DashboardChart } from '@/components/DashboardChart' 
+import { DashboardChart } from '@/components/DashboardChart'
+import { CalendarioCampanhas } from '@/components/CalendarioCampanhas'
 import { getDashboardData, DashboardStats } from '@/services/dashboard'
 import { RecentVisit } from '@/services/dashboard'
 
@@ -57,11 +58,11 @@ export default function Index() {
       />
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
-      <div className="lg:col-span-4">
-      <DashboardChart />
-      </div>
+        <div className="lg:col-span-4">
+          <DashboardChart />
+        </div>
 
-        <Card className="lg:col-span-3">
+        <Card className="lg:col-span-3 animate-slide-up delay-200">
           <CardHeader>
             <CardTitle className="text-base">Atividade Recente (Hoje)</CardTitle>
           </CardHeader>
@@ -118,6 +119,9 @@ export default function Index() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Calendário de Campanhas */}
+      <CalendarioCampanhas />
     </div>
   )
 }
