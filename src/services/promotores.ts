@@ -45,19 +45,19 @@ export async function getPromotorById(id: string) {
   }
 }
 
-export async function getPromotoresByLoja(lojaId: string) {
+export async function createPromotor(data: Omit<Promotor, 'id' | 'created_at'>) {
   try {
-    const { data, error } = await supabase
+    const { data: promotor, error } = await supabase
       .from('promotores')
-      .select('*')
-      .eq('loja_id', lojaId)
-      .order('promotor_nome')
+      .insert(data)
+      .select()
+      .single()
     
     if (error) throw error
-    return data || []
+    return promotor
   } catch (error) {
-    console.error('Erro ao buscar promotores por loja:', error)
-    return []
+    console.error('Erro ao criar promotor:', error)
+    return null
   }
 }
 
@@ -74,22 +74,6 @@ export async function updatePromotor(id: string, data: Partial<Promotor>) {
     return promotor
   } catch (error) {
     console.error('Erro ao atualizar promotor:', error)
-    return null
-  }
-}
-
-export async function createPromotor(data: Omit<Promotor, 'id' | 'created_at'>) {
-  try {
-    const { data: promotor, error } = await supabase
-      .from('promotores')
-      .insert(data)
-      .select()
-      .single()
-    
-    if (error) throw error
-    return promotor
-  } catch (error) {
-    console.error('Erro ao criar promotor:', error)
     return null
   }
 }
