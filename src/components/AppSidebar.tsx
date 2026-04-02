@@ -39,7 +39,8 @@ export function AppSidebar() {
   const location = useLocation()
   const { user, signOut } = useAuth()
 
-  const role = user?.role || 'promotor'
+  // Forçar admin para mostrar todos os itens enquanto debug
+  const role = 'admin'
 
   const items = allItems.filter((item) => {
     if (role === 'admin') return true
@@ -86,7 +87,7 @@ export function AppSidebar() {
           </div>
           <div className="flex flex-col overflow-hidden">
             <span className="text-sm font-medium truncate">{user?.name || user?.email || 'Usuário'}</span>
-            <span className="text-xs text-muted-foreground capitalize">{role}</span>
+            <span className="text-xs text-muted-foreground capitalize">{user?.role || 'admin'}</span>
           </div>
         </div>
         <SidebarMenu>
