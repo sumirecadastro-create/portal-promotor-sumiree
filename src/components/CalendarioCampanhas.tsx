@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { CalendarDays, Plus } from 'lucide-react'
-import { getCampanhasComLojas, CampanhaComLojas } from '@/services/campanhas'
-import { getLojas } from '@/services/lojas'
+import { ChevronLeft, ChevronRight, CalendarDays, Plus } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
 import {
   Dialog,
@@ -25,6 +24,16 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
+interface Campanha {
+  id: string
+  nome: string
+  descricao: string
+  data_inicio: string
+  data_fim: string
+  cor: string
+  lojas?: { id: string; nome_loja: string; cod_loja: string }[]
+}
+
 interface Loja {
   id: string
   cod_loja: string
@@ -32,14 +41,15 @@ interface Loja {
 }
 
 export function CalendarioCampanhas() {
-  const [campanhas, setCampanhas] = useState<CampanhaComLojas[]>([])
+  const [campanhas, setCampanhas] = useState<Campanha[]>([])
   const [lojas, setLojas] = useState<Loja[]>([])
+  const [currentDate, setCurrentDate] = useState(new Date())
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [selectedLojas, setSelectedLojas] = useState<string[]>([])
   const { toast } = useToast()
 
-  // Formulário de nova campanha
   const [newCampanha, setNewCampanha] = useState({
     nome: '',
     descricao: '',
@@ -47,16 +57,32 @@ export function CalendarioCampanhas() {
     data_fim: '',
     cor: '#FF1686'
   })
-  const [selectedLojas, setSelectedLojas] = useState<string[]>([])
 
   const loadData = async () => {
     try {
-      const [campanhasData, lojasData] = await Promise.all([
-        getCampanhasComLojas(),
-        getLojas()
+      const [campanhasRes, lojasRes] = await Promise.all([
+        supabase
+          .from('campanhas')
+          .select(`
+            *,
+            lojas_campanhas (
+              lojas (id, cod_loja, nome_loja)
+            )
+          `)
+          .order('data_inicio'),
+        supabase.from('lojas').select('id, cod_loja, nome_loja').order('nome_loja')
       ])
-      setCampanhas(campanhasData)
-      setLojas(lojasData)
+
+      if (campanhasRes.error) throw campanhasRes.error
+      if (lojasRes.error) throw lojasRes.error
+
+      const campanhasFormatadas = campanhasRes.data.map(camp => ({
+        ...camp,
+        lojas: camp.lojas_campanhas?.map(lc => lc.lojas).filter(Boolean) || []
+      }))
+
+      setCampanhas(campanhasFormatadas)
+      setLojas(lojasRes.data || [])
     } catch (error) {
       console.error('Erro ao carregar dados:', error)
     } finally {
@@ -80,25 +106,49 @@ export function CalendarioCampanhas() {
 
     setSaving(true)
     try {
-      const result = await createCampanha(newCampanha, selectedLojas)
-      if (result) {
-        toast({
-          title: 'Sucesso',
-          description: 'Campanha criada com sucesso!',
+      // Criar campanha
+      const { data: campanha, error: campanhaError } = await supabase
+        .from('campanhas')
+        .insert({
+          nome: newCampanha.nome,
+          descricao: newCampanha.descricao,
+          data_inicio: newCampanha.data_inicio,
+          data_fim: newCampanha.data_fim,
+          cor: newCampanha.cor
         })
-        setOpen(false)
-        setNewCampanha({
-          nome: '',
-          descricao: '',
-          data_inicio: '',
-          data_fim: '',
-          cor: '#FF1686'
-        })
-        setSelectedLojas([])
-        await loadData()
-      } else {
-        throw new Error('Erro ao criar campanha')
+        .select()
+        .single()
+
+      if (campanhaError) throw campanhaError
+
+      // Vincular lojas
+      if (selectedLojas.length > 0) {
+        const lojasCampanhas = selectedLojas.map(lojaId => ({
+          loja_id: lojaId,
+          campanha_id: campanha.id
+        }))
+        
+        const { error: relError } = await supabase
+          .from('lojas_campanhas')
+          .insert(lojasCampanhas)
+
+        if (relError) throw relError
       }
+
+      toast({
+        title: 'Sucesso',
+        description: 'Campanha criada com sucesso!',
+      })
+      setOpen(false)
+      setNewCampanha({
+        nome: '',
+        descricao: '',
+        data_inicio: '',
+        data_fim: '',
+        cor: '#FF1686'
+      })
+      setSelectedLojas([])
+      await loadData()
     } catch (error: any) {
       toast({
         variant: 'destructive',
@@ -110,50 +160,63 @@ export function CalendarioCampanhas() {
     }
   }
 
-  // Agrupar campanhas por loja e data
-  const campanhasPorLoja = () => {
-    const mapa = new Map<string, Map<string, CampanhaComLojas[]>>()
+  // Funções do calendário
+  const getDaysInMonth = (date: Date) => {
+    const year = date.getFullYear()
+    const month = date.getMonth()
+    const firstDay = new Date(year, month, 1)
+    const lastDay = new Date(year, month + 1, 0)
+    const daysInMonth = lastDay.getDate()
+    const startingDayOfWeek = firstDay.getDay()
     
-    campanhas.forEach(campanha => {
-      campanha.lojas?.forEach(loja => {
-        if (!mapa.has(loja.id)) {
-          mapa.set(loja.id, new Map())
-        }
-        const lojaMap = mapa.get(loja.id)!
-        
-        // Gerar todas as datas do período da campanha
-        const start = new Date(campanha.data_inicio)
-        const end = new Date(campanha.data_fim)
-        const current = new Date(start)
-        
-        while (current <= end) {
-          const dataStr = current.toISOString().split('T')[0]
-          if (!lojaMap.has(dataStr)) {
-            lojaMap.set(dataStr, [])
-          }
-          lojaMap.get(dataStr)!.push(campanha)
-          current.setDate(current.getDate() + 1)
-        }
+    const days = []
+    // Dias do mês anterior
+    const prevMonthLastDay = new Date(year, month, 0).getDate()
+    for (let i = startingDayOfWeek - 1; i >= 0; i--) {
+      days.push({
+        date: new Date(year, month - 1, prevMonthLastDay - i),
+        isCurrentMonth: false
       })
-    })
-    
-    return mapa
-  }
-
-  // Obter datas únicas para o cabeçalho (próximos 30 dias)
-  const getProximasDatas = () => {
-    const datas = []
-    const hoje = new Date()
-    for (let i = 0; i < 30; i++) {
-      const data = new Date(hoje)
-      data.setDate(hoje.getDate() + i)
-      datas.push(data.toISOString().split('T')[0])
     }
-    return datas
+    // Dias do mês atual
+    for (let i = 1; i <= daysInMonth; i++) {
+      days.push({
+        date: new Date(year, month, i),
+        isCurrentMonth: true
+      })
+    }
+    // Dias do próximo mês
+    const remainingDays = 42 - days.length
+    for (let i = 1; i <= remainingDays; i++) {
+      days.push({
+        date: new Date(year, month + 1, i),
+        isCurrentMonth: false
+      })
+    }
+    
+    return days
   }
 
-  const datas = getProximasDatas()
-  const campanhasMap = campanhasPorLoja()
+  const getCampanhasForDay = (date: Date) => {
+    const dateStr = date.toISOString().split('T')[0]
+    return campanhas.filter(camp => {
+      const inicio = camp.data_inicio
+      const fim = camp.data_fim
+      return dateStr >= inicio && dateStr <= fim
+    })
+  }
+
+  const changeMonth = (increment: number) => {
+    setCurrentDate(prev => {
+      const newDate = new Date(prev)
+      newDate.setMonth(prev.getMonth() + increment)
+      return newDate
+    })
+  }
+
+  const days = getDaysInMonth(currentDate)
+  const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+  const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 
   if (loading) {
     return (
@@ -166,175 +229,183 @@ export function CalendarioCampanhas() {
   }
 
   return (
-    <Card className="overflow-x-auto">
+    <Card>
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-lg flex items-center gap-2">
           <CalendarDays className="h-5 w-5" />
           Calendário de Campanhas
         </CardTitle>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm" className="gap-1">
-              <Plus className="h-4 w-4" />
-              Nova Campanha
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
+            <Button variant="outline" size="icon" onClick={() => changeMonth(-1)}>
+              <ChevronLeft className="h-4 w-4" />
             </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Nova Campanha</DialogTitle>
-              <DialogDescription>
-                Cadastre uma nova campanha e selecione as lojas participantes.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="nome">Nome da Campanha *</Label>
-                <Input
-                  id="nome"
-                  placeholder="Ex: Promoção de Verão"
-                  value={newCampanha.nome}
-                  onChange={(e) => setNewCampanha({ ...newCampanha, nome: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="descricao">Descrição</Label>
-                <Textarea
-                  id="descricao"
-                  placeholder="Detalhes da campanha..."
-                  value={newCampanha.descricao}
-                  onChange={(e) => setNewCampanha({ ...newCampanha, descricao: e.target.value })}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+            <span className="font-medium min-w-[140px] text-center">
+              {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
+            </span>
+            <Button variant="outline" size="icon" onClick={() => changeMonth(1)}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="gap-1">
+                <Plus className="h-4 w-4" />
+                Nova Campanha
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Nova Campanha</DialogTitle>
+                <DialogDescription>
+                  Cadastre uma nova campanha e selecione as lojas participantes.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label htmlFor="data_inicio">Data Início *</Label>
+                  <Label htmlFor="nome">Nome da Campanha *</Label>
                   <Input
-                    id="data_inicio"
-                    type="date"
-                    value={newCampanha.data_inicio}
-                    onChange={(e) => setNewCampanha({ ...newCampanha, data_inicio: e.target.value })}
+                    id="nome"
+                    placeholder="Ex: Promoção de Verão"
+                    value={newCampanha.nome}
+                    onChange={(e) => setNewCampanha({ ...newCampanha, nome: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="data_fim">Data Fim *</Label>
-                  <Input
-                    id="data_fim"
-                    type="date"
-                    value={newCampanha.data_fim}
-                    onChange={(e) => setNewCampanha({ ...newCampanha, data_fim: e.target.value })}
+                  <Label htmlFor="descricao">Descrição</Label>
+                  <Textarea
+                    id="descricao"
+                    placeholder="Detalhes da campanha..."
+                    value={newCampanha.descricao}
+                    onChange={(e) => setNewCampanha({ ...newCampanha, descricao: e.target.value })}
                   />
                 </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="cor">Cor da Campanha</Label>
-                <Input
-                  id="cor"
-                  type="color"
-                  value={newCampanha.cor}
-                  onChange={(e) => setNewCampanha({ ...newCampanha, cor: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Lojas Participantes</Label>
-                <Select
-                  value={selectedLojas[0] || ''}
-                  onValueChange={(value) => {
-                    if (!selectedLojas.includes(value)) {
-                      setSelectedLojas([...selectedLojas, value])
-                    }
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione uma loja" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {lojas.map((loja) => (
-                      <SelectItem key={loja.id} value={loja.id}>
-                        {loja.cod_loja} - {loja.nome_loja}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {selectedLojas.length > 0 && (
-                  <div className="flex flex-wrap gap-2 mt-2">
-                    {selectedLojas.map(lojaId => {
-                      const loja = lojas.find(l => l.id === lojaId)
-                      return (
-                        <span key={lojaId} className="bg-muted px-2 py-1 rounded-md text-sm flex items-center gap-1">
-                          {loja?.cod_loja}
-                          <button
-                            type="button"
-                            className="text-red-500 hover:text-red-700"
-                            onClick={() => setSelectedLojas(selectedLojas.filter(id => id !== lojaId))}
-                          >
-                            ×
-                          </button>
-                        </span>
-                      )
-                    })}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="data_inicio">Data Início *</Label>
+                    <Input
+                      id="data_inicio"
+                      type="date"
+                      value={newCampanha.data_inicio}
+                      onChange={(e) => setNewCampanha({ ...newCampanha, data_inicio: e.target.value })}
+                    />
                   </div>
-                )}
+                  <div className="space-y-2">
+                    <Label htmlFor="data_fim">Data Fim *</Label>
+                    <Input
+                      id="data_fim"
+                      type="date"
+                      value={newCampanha.data_fim}
+                      onChange={(e) => setNewCampanha({ ...newCampanha, data_fim: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="cor">Cor da Campanha</Label>
+                  <Input
+                    id="cor"
+                    type="color"
+                    value={newCampanha.cor}
+                    onChange={(e) => setNewCampanha({ ...newCampanha, cor: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Lojas Participantes</Label>
+                  <Select
+                    value={selectedLojas[0] || ''}
+                    onValueChange={(value) => {
+                      if (!selectedLojas.includes(value)) {
+                        setSelectedLojas([...selectedLojas, value])
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione uma loja" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {lojas.map((loja) => (
+                        <SelectItem key={loja.id} value={loja.id}>
+                          {loja.cod_loja} - {loja.nome_loja}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedLojas.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {selectedLojas.map(lojaId => {
+                        const loja = lojas.find(l => l.id === lojaId)
+                        return (
+                          <span key={lojaId} className="bg-muted px-2 py-1 rounded-md text-sm flex items-center gap-1">
+                            {loja?.cod_loja}
+                            <button
+                              type="button"
+                              className="text-red-500 hover:text-red-700"
+                              onClick={() => setSelectedLojas(selectedLojas.filter(id => id !== lojaId))}
+                            >
+                              ×
+                            </button>
+                          </span>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setOpen(false)}>
-                Cancelar
-              </Button>
-              <Button onClick={handleCreateCampanha} disabled={saving}>
-                {saving ? 'Salvando...' : 'Salvar'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleCreateCampanha} disabled={saving}>
+                  {saving ? 'Salvando...' : 'Salvar'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </CardHeader>
       <CardContent>
-        <div className="overflow-x-auto">
-          <table className="min-w-full border-collapse">
-            <thead>
-              <tr>
-                <th className="sticky left-0 bg-background border p-2 text-left min-w-[150px]">Loja</th>
-                {datas.map((data, idx) => (
-                  <th key={idx} className="border p-2 text-center min-w-[80px]">
-                    {new Date(data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {lojas.map(loja => {
-                const lojaCampanhas = campanhasMap.get(loja.id) || new Map()
-                return (
-                  <tr key={loja.id}>
-                    <td className="sticky left-0 bg-background border p-2 font-medium">
-                      {loja.cod_loja} - {loja.nome_loja}
-                    </td>
-                    {datas.map((data, idx) => {
-                      const campanhasData = lojaCampanhas.get(data) || []
-                      return (
-                        <td key={idx} className="border p-1 text-center">
-                          {campanhasData.map(camp => (
-                            <div
-                              key={camp.id}
-                              className="text-xs rounded px-1 py-0.5 mb-1 truncate"
-                              style={{ backgroundColor: camp.cor || '#FF1686', color: '#fff' }}
-                              title={camp.nome}
-                            >
-                              {camp.nome}
-                            </div>
-                          ))}
-                        </td>
-                      )
-                    })}
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+        <div className="grid grid-cols-7 gap-1">
+          {weekDays.map(day => (
+            <div key={day} className="text-center text-sm font-medium text-muted-foreground py-2">
+              {day}
+            </div>
+          ))}
+          {days.map((day, idx) => {
+            const campanhasDoDia = getCampanhasForDay(day.date)
+            const isToday = day.date.toDateString() === new Date().toDateString()
+            
+            return (
+              <div
+                key={idx}
+                className={`min-h-[100px] border rounded-lg p-1 transition-all ${
+                  day.isCurrentMonth ? 'bg-background' : 'bg-muted/30 text-muted-foreground'
+                } ${isToday ? 'border-primary shadow-sm' : 'border-border'}`}
+              >
+                <div className={`text-right text-sm p-1 ${isToday ? 'font-bold text-primary' : ''}`}>
+                  {day.date.getDate()}
+                </div>
+                <div className="space-y-1">
+                  {campanhasDoDia.slice(0, 3).map(camp => (
+                    <div
+                      key={camp.id}
+                      className="text-xs rounded px-1 py-0.5 truncate cursor-pointer hover:opacity-80"
+                      style={{ backgroundColor: camp.cor || '#FF1686', color: '#fff' }}
+                      title={camp.nome}
+                    >
+                      {camp.nome}
+                    </div>
+                  ))}
+                  {campanhasDoDia.length > 3 && (
+                    <div className="text-xs text-muted-foreground text-center">
+                      +{campanhasDoDia.length - 3}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
         </div>
       </CardContent>
     </Card>
   )
 }
-
-// Importar a função createCampanha
-import { createCampanha } from '@/services/campanhas'
