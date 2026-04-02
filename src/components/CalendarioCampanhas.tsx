@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ChevronLeft, ChevronRight, CalendarDays, Plus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarDays, Plus, Filter, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
 import {
@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Badge } from '@/components/ui/badge'
 
 interface Campanha {
   id: string
@@ -48,6 +49,8 @@ export function CalendarioCampanhas() {
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [selectedLojas, setSelectedLojas] = useState<string[]>([])
+  const [filterLojas, setFilterLojas] = useState<string[]>([])
+  const [showFilter, setShowFilter] = useState(false)
   const { toast } = useToast()
 
   const [newCampanha, setNewCampanha] = useState({
@@ -106,7 +109,6 @@ export function CalendarioCampanhas() {
 
     setSaving(true)
     try {
-      // Criar campanha
       const { data: campanha, error: campanhaError } = await supabase
         .from('campanhas')
         .insert({
@@ -121,7 +123,6 @@ export function CalendarioCampanhas() {
 
       if (campanhaError) throw campanhaError
 
-      // Vincular lojas
       if (selectedLojas.length > 0) {
         const lojasCampanhas = selectedLojas.map(lojaId => ({
           loja_id: lojaId,
@@ -160,17 +161,14 @@ export function CalendarioCampanhas() {
     }
   }
 
-  // Funções do calendário
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear()
     const month = date.getMonth()
     const firstDay = new Date(year, month, 1)
-    const lastDay = new Date(year, month + 1, 0)
-    const daysInMonth = lastDay.getDate()
+    const daysInMonth = new Date(year, month + 1, 0).getDate()
     const startingDayOfWeek = firstDay.getDay()
     
     const days = []
-    // Dias do mês anterior
     const prevMonthLastDay = new Date(year, month, 0).getDate()
     for (let i = startingDayOfWeek - 1; i >= 0; i--) {
       days.push({
@@ -178,14 +176,12 @@ export function CalendarioCampanhas() {
         isCurrentMonth: false
       })
     }
-    // Dias do mês atual
     for (let i = 1; i <= daysInMonth; i++) {
       days.push({
         date: new Date(year, month, i),
         isCurrentMonth: true
       })
     }
-    // Dias do próximo mês
     const remainingDays = 42 - days.length
     for (let i = 1; i <= remainingDays; i++) {
       days.push({
@@ -199,11 +195,22 @@ export function CalendarioCampanhas() {
 
   const getCampanhasForDay = (date: Date) => {
     const dateStr = date.toISOString().split('T')[0]
-    return campanhas.filter(camp => {
+    
+    // Filtrar campanhas que estão ativas nesta data
+    let campanhasFiltradas = campanhas.filter(camp => {
       const inicio = camp.data_inicio
       const fim = camp.data_fim
       return dateStr >= inicio && dateStr <= fim
     })
+
+    // Aplicar filtro de lojas
+    if (filterLojas.length > 0) {
+      campanhasFiltradas = campanhasFiltradas.filter(camp => {
+        return camp.lojas?.some(loja => filterLojas.includes(loja.id))
+      })
+    }
+
+    return campanhasFiltradas
   }
 
   const changeMonth = (increment: number) => {
@@ -212,6 +219,18 @@ export function CalendarioCampanhas() {
       newDate.setMonth(prev.getMonth() + increment)
       return newDate
     })
+  }
+
+  const toggleFilterLoja = (lojaId: string) => {
+    setFilterLojas(prev =>
+      prev.includes(lojaId)
+        ? prev.filter(id => id !== lojaId)
+        : [...prev, lojaId]
+    )
+  }
+
+  const clearFilters = () => {
+    setFilterLojas([])
   }
 
   const days = getDaysInMonth(currentDate)
@@ -230,7 +249,7 @@ export function CalendarioCampanhas() {
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-4">
         <CardTitle className="text-lg flex items-center gap-2">
           <CalendarDays className="h-5 w-5" />
           Calendário de Campanhas
@@ -247,6 +266,48 @@ export function CalendarioCampanhas() {
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
+          
+          <div className="relative">
+            <Button 
+              variant={filterLojas.length > 0 ? "default" : "outline"} 
+              size="sm"
+              onClick={() => setShowFilter(!showFilter)}
+              className="gap-1"
+            >
+              <Filter className="h-4 w-4" />
+              Filtrar Lojas
+              {filterLojas.length > 0 && (
+                <Badge variant="secondary" className="ml-1 h-5 px-1">
+                  {filterLojas.length}
+                </Badge>
+              )}
+            </Button>
+            
+            {showFilter && (
+              <div className="absolute right-0 top-full mt-2 w-80 bg-popover border rounded-lg shadow-lg z-10 p-4">
+                <div className="flex justify-between items-center mb-3">
+                  <h4 className="font-medium">Filtrar por loja</h4>
+                  <Button variant="ghost" size="sm" onClick={clearFilters}>
+                    Limpar
+                  </Button>
+                </div>
+                <div className="max-h-60 overflow-y-auto space-y-1">
+                  {lojas.map(loja => (
+                    <label key={loja.id} className="flex items-center gap-2 p-2 hover:bg-muted rounded cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={filterLojas.includes(loja.id)}
+                        onChange={() => toggleFilterLoja(loja.id)}
+                        className="rounded border-gray-300"
+                      />
+                      <span className="text-sm">{loja.cod_loja} - {loja.nome_loja}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button size="sm" className="gap-1">
@@ -363,6 +424,25 @@ export function CalendarioCampanhas() {
           </Dialog>
         </div>
       </CardHeader>
+      
+      {filterLojas.length > 0 && (
+        <div className="px-6 pb-2 flex flex-wrap gap-2">
+          <span className="text-sm text-muted-foreground">Filtrando por:</span>
+          {filterLojas.map(lojaId => {
+            const loja = lojas.find(l => l.id === lojaId)
+            return (
+              <Badge key={lojaId} variant="secondary" className="gap-1">
+                {loja?.cod_loja}
+                <X
+                  className="h-3 w-3 cursor-pointer hover:text-red-500"
+                  onClick={() => toggleFilterLoja(lojaId)}
+                />
+              </Badge>
+            )
+          })}
+        </div>
+      )}
+      
       <CardContent>
         <div className="grid grid-cols-7 gap-1">
           {weekDays.map(day => (
