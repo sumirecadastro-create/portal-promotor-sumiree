@@ -13,71 +13,49 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Plus, Search, Edit, Package } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
+import { useToast } from '@/hooks/use-toast'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
 
 interface Marca {
   id: string
-  marca_produto: string
-  categoria_produto: string
-  status: string
-  totalPromotores?: number
+  nome: string
+  created_at?: string
 }
 
 export default function Marcas() {
   const [marcas, setMarcas] = useState<Marca[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [open, setOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [newMarca, setNewMarca] = useState('')
+  const { toast } = useToast()
 
   const loadData = async () => {
     try {
-      // Buscar todos os produtos (marcas estão na collection produtos)
-      const { data: produtos, error: produtosError } = await supabase
-        .from('produtos')
+      const { data, error } = await supabase
+        .from('marcas')
         .select('*')
-        .order('marca_produto')
-
-      if (produtosError) throw produtosError
-
-      // Agrupar por marca
-      const marcasMap = new Map<string, Marca>()
-
-      produtos?.forEach(prod => {
-        const marcaNome = prod.marca_produto
-        const categoriaNome = prod.categoria_produto
-
-        if (marcaNome) {
-          if (!marcasMap.has(marcaNome)) {
-            marcasMap.set(marcaNome, {
-              id: marcaNome,
-              marca_produto: marcaNome,
-              categoria_produto: categoriaNome || 'Sem categoria',
-              status: 'ativo',
-              totalPromotores: 0
-            })
-          }
-        }
-      })
-
-      // Buscar promotores para contar quantos representam cada marca
-      const { data: promotores, error: promotoresError } = await supabase
-        .from('promotores')
-        .select('marca_produto')
-
-      if (promotoresError) throw promotoresError
-
-      // Contar promotores por marca
-      promotores?.forEach(prom => {
-        const marcaNome = prom.marca_produto
-        if (marcaNome) {
-          const marcaItem = marcasMap.get(marcaNome)
-          if (marcaItem) {
-            marcaItem.totalPromotores = (marcaItem.totalPromotores || 0) + 1
-          }
-        }
-      })
-
-      setMarcas(Array.from(marcasMap.values()))
+        .order('nome')
+      
+      if (error) throw error
+      setMarcas(data || [])
     } catch (error) {
       console.error('Erro ao carregar marcas:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Não foi possível carregar as marcas',
+      })
     } finally {
       setLoading(false)
     }
@@ -87,17 +65,70 @@ export default function Marcas() {
     loadData()
   }, [])
 
+  const handleCreateMarca = async () => {
+    if (!newMarca.trim()) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Nome da marca é obrigatório',
+      })
+      return
+    }
+
+    setSaving(true)
+    try {
+      const { error } = await supabase
+        .from('marcas')
+        .insert({ nome: newMarca.trim() })
+      
+      if (error) throw error
+      
+      toast({
+        title: 'Sucesso',
+        description: 'Marca criada com sucesso!',
+      })
+      setOpen(false)
+      setNewMarca('')
+      await loadData()
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: error.message || 'Erro ao criar marca',
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDeleteMarca = async (id: string, nome: string) => {
+    if (confirm(`Deseja realmente excluir a marca "${nome}"?`)) {
+      try {
+        const { error } = await supabase
+          .from('marcas')
+          .delete()
+          .eq('id', id)
+        
+        if (error) throw error
+        
+        toast({
+          title: 'Sucesso',
+          description: 'Marca excluída com sucesso!',
+        })
+        await loadData()
+      } catch (error: any) {
+        toast({
+          variant: 'destructive',
+          title: 'Erro',
+          description: error.message || 'Erro ao excluir marca',
+        })
+      }
+    }
+  }
+
   const filteredMarcas = marcas.filter(marca =>
-    marca.marca_produto?.toLowerCase().includes(search.toLowerCase())
+    marca.nome?.toLowerCase().includes(search.toLowerCase())
   )
-
-  const handleEdit = (marca: Marca) => {
-    console.log('Editar marca:', marca.marca_produto)
-  }
-
-  const handleNewMarca = () => {
-    console.log('Nova marca')
-  }
 
   return (
     <div className="space-y-6">
@@ -115,14 +146,49 @@ export default function Marcas() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <Button onClick={handleNewMarca}>
-            <Plus className="mr-2 h-4 w-4" /> Nova Marca
-          </Button>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2">
+                <Plus className="h-4 w-4" />
+                Nova Marca
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Nova Marca</DialogTitle>
+                <DialogDescription>
+                  Cadastre uma nova marca para ser associada aos promotores.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="nome">Nome da Marca *</Label>
+                  <Input
+                    id="nome"
+                    placeholder="Ex: Haskell"
+                    value={newMarca}
+                    onChange={(e) => setNewMarca(e.target.value)}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleCreateMarca} disabled={saving}>
+                  {saving ? 'Salvando...' : 'Salvar'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
       <Card>
-        <CardContent className="p-0">
+        <CardHeader>
+          <CardTitle className="text-lg">Lista de Marcas</CardTitle>
+        </CardHeader>
+        <CardContent>
           {loading ? (
             <div className="flex justify-center p-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -132,8 +198,6 @@ export default function Marcas() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="pl-6">Nome da Marca</TableHead>
-                  <TableHead>Categoria Principal</TableHead>
-                  <TableHead className="text-center">Promotores</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right pr-6">Ações</TableHead>
                 </TableRow>
@@ -144,34 +208,29 @@ export default function Marcas() {
                     <TableCell className="pl-6 font-medium">
                       <div className="flex items-center gap-2">
                         <Package className="h-4 w-4 text-muted-foreground" />
-                        {marca.marca_produto}
+                        {marca.nome}
                       </div>
                     </TableCell>
-                    <TableCell>{marca.categoria_produto}</TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant="secondary" className="bg-blue-100 text-blue-800">
-                        {marca.totalPromotores || 0} promotores
-                      </Badge>
-                    </TableCell>
                     <TableCell>
-                      <Badge 
-                        variant={marca.status === 'ativo' ? 'default' : 'secondary'}
-                        className={marca.status === 'ativo' ? 'bg-emerald-500 hover:bg-emerald-600' : ''}
-                      >
-                        {marca.status === 'ativo' ? 'Ativo' : 'Inativo'}
+                      <Badge variant="default" className="bg-emerald-500 hover:bg-emerald-600">
+                        Ativo
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right pr-6">
-                      <Button variant="ghost" size="sm" onClick={() => handleEdit(marca)}>
-                        <Edit className="h-4 w-4 mr-1" />
-                        Editar
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteMarca(marca.id, marca.nome)}
+                        className="text-red-500 hover:text-red-700"
+                      >
+                        Excluir
                       </Button>
                     </TableCell>
                   </TableRow>
                 ))}
                 {filteredMarcas.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-6 text-muted-foreground">
+                    <TableCell colSpan={3} className="text-center py-6 text-muted-foreground">
                       Nenhuma marca encontrada.
                     </TableCell>
                   </TableRow>
