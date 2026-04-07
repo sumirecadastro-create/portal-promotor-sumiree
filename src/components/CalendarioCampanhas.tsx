@@ -24,6 +24,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 
 interface Campanha {
   id: string
@@ -340,9 +346,18 @@ export function CalendarioCampanhas() {
     setFilterLojas([])
   }
 
-  // NOVA FUNÇÃO: Selecionar todas as lojas no filtro
   const selecionarTodasLojas = () => {
     setFilterLojas(lojas.map(loja => loja.id))
+  }
+
+  // Função para gerar o texto do tooltip com as lojas da campanha
+  const getLojasTooltip = (campanha: Campanha) => {
+    if (!campanha.lojas || campanha.lojas.length === 0) {
+      return "Nenhuma loja vinculada"
+    }
+    
+    const lojasList = campanha.lojas.map(loja => `${loja.cod_loja} - ${loja.nome_loja}`).join('\n')
+    return `Lojas participantes:\n${lojasList}`
   }
 
   const days = getDaysInMonth(currentDate)
@@ -360,242 +375,132 @@ export function CalendarioCampanhas() {
   }
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-4">
-        <CardTitle className="text-lg flex items-center gap-2">
-          <CalendarDays className="h-5 w-5" />
-          Calendário de Campanhas
-        </CardTitle>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1">
-            <Button variant="outline" size="icon" onClick={() => changeMonth(-1)}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="font-medium min-w-[140px] text-center">
-              {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
-            </span>
-            <Button variant="outline" size="icon" onClick={() => changeMonth(1)}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-          
-          <div className="relative">
-            <Button 
-              variant={filterLojas.length > 0 ? "default" : "outline"} 
-              size="sm"
-              onClick={() => setShowFilter(!showFilter)}
-              className="gap-1"
-            >
-              <Filter className="h-4 w-4" />
-              Filtrar Lojas
-              {filterLojas.length > 0 && (
-                <Badge variant="secondary" className="ml-1 h-5 px-1">
-                  {filterLojas.length}
-                </Badge>
-              )}
-            </Button>
-            
-            {showFilter && (
-              <div className="absolute right-0 top-full mt-2 w-80 bg-popover border rounded-lg shadow-lg z-10 p-4">
-                {/* CABEÇALHO DO FILTRO COM "SELECIONAR TODOS" E "LIMPAR" */}
-                <div className="flex justify-between items-center mb-3">
-                  <h4 className="font-medium">Filtrar por loja</h4>
-                  <div className="flex gap-2">
-                    <Button variant="ghost" size="sm" onClick={selecionarTodasLojas}>
-                      Selecionar todos
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={clearFilters}>
-                      Limpar
-                    </Button>
-                  </div>
-                </div>
-                <div className="max-h-60 overflow-y-auto space-y-1">
-                  {lojas.map(loja => (
-                    <label key={loja.id} className="flex items-center gap-2 p-2 hover:bg-muted rounded cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={filterLojas.includes(loja.id)}
-                        onChange={() => toggleFilterLoja(loja.id)}
-                        className="rounded border-gray-300"
-                      />
-                      <span className="text-sm">{loja.cod_loja} - {loja.nome_loja}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" className="gap-1">
-                <Plus className="h-4 w-4" />
-                Nova Campanha
+    <TooltipProvider>
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-4">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <CalendarDays className="h-5 w-5" />
+            Calendário de Campanhas
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <Button variant="outline" size="icon" onClick={() => changeMonth(-1)}>
+                <ChevronLeft className="h-4 w-4" />
               </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Nova Campanha</DialogTitle>
-                <DialogDescription>
-                  Cadastre uma nova campanha e selecione as lojas participantes.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="nome">Nome da Campanha *</Label>
-                  <Input
-                    id="nome"
-                    placeholder="Ex: Promoção de Verão"
-                    value={newCampanha.nome}
-                    onChange={(e) => setNewCampanha({ ...newCampanha, nome: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="descricao">Descrição</Label>
-                  <Textarea
-                    id="descricao"
-                    placeholder="Detalhes da campanha..."
-                    value={newCampanha.descricao}
-                    onChange={(e) => setNewCampanha({ ...newCampanha, descricao: e.target.value })}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="data_inicio">Data Início *</Label>
-                    <Input
-                      id="data_inicio"
-                      type="date"
-                      value={newCampanha.data_inicio}
-                      onChange={(e) => setNewCampanha({ ...newCampanha, data_inicio: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="data_fim">Data Fim *</Label>
-                    <Input
-                      id="data_fim"
-                      type="date"
-                      value={newCampanha.data_fim}
-                      onChange={(e) => setNewCampanha({ ...newCampanha, data_fim: e.target.value })}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="cor">Cor da Campanha</Label>
-                  <Input
-                    id="cor"
-                    type="color"
-                    value={newCampanha.cor}
-                    onChange={(e) => setNewCampanha({ ...newCampanha, cor: e.target.value })}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Lojas Participantes</Label>
-                  <Select
-                    value={selectedLojas[0] || ''}
-                    onValueChange={(value) => {
-                      if (!selectedLojas.includes(value)) {
-                        setSelectedLojas([...selectedLojas, value])
-                      }
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione uma loja" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {lojas.map((loja) => (
-                        <SelectItem key={loja.id} value={loja.id}>
-                          {loja.cod_loja} - {loja.nome_loja}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  {selectedLojas.length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {selectedLojas.map(lojaId => {
-                        const loja = lojas.find(l => l.id === lojaId)
-                        return (
-                          <span key={lojaId} className="bg-muted px-2 py-1 rounded-md text-sm flex items-center gap-1">
-                            {loja?.cod_loja}
-                            <button
-                              type="button"
-                              className="text-red-500 hover:text-red-700"
-                              onClick={() => setSelectedLojas(selectedLojas.filter(id => id !== lojaId))}
-                            >
-                              ×
-                            </button>
-                          </span>
-                        )
-                      })}
+              <span className="font-medium min-w-[140px] text-center">
+                {monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}
+              </span>
+              <Button variant="outline" size="icon" onClick={() => changeMonth(1)}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+            
+            <div className="relative">
+              <Button 
+                variant={filterLojas.length > 0 ? "default" : "outline"} 
+                size="sm"
+                onClick={() => setShowFilter(!showFilter)}
+                className="gap-1"
+              >
+                <Filter className="h-4 w-4" />
+                Filtrar Lojas
+                {filterLojas.length > 0 && (
+                  <Badge variant="secondary" className="ml-1 h-5 px-1">
+                    {filterLojas.length}
+                  </Badge>
+                )}
+              </Button>
+              
+              {showFilter && (
+                <div className="absolute right-0 top-full mt-2 w-80 bg-popover border rounded-lg shadow-lg z-10 p-4">
+                  <div className="flex justify-between items-center mb-3">
+                    <h4 className="font-medium">Filtrar por loja</h4>
+                    <div className="flex gap-2">
+                      <Button variant="ghost" size="sm" onClick={selecionarTodasLojas}>
+                        Selecionar todos
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={clearFilters}>
+                        Limpar
+                      </Button>
                     </div>
-                  )}
+                  </div>
+                  <div className="max-h-60 overflow-y-auto space-y-1">
+                    {lojas.map(loja => (
+                      <label key={loja.id} className="flex items-center gap-2 p-2 hover:bg-muted rounded cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={filterLojas.includes(loja.id)}
+                          onChange={() => toggleFilterLoja(loja.id)}
+                          className="rounded border-gray-300"
+                        />
+                        <span className="text-sm">{loja.cod_loja} - {loja.nome_loja}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button onClick={handleCreateCampanha} disabled={saving}>
-                  {saving ? 'Salvando...' : 'Salvar'}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+              )}
+            </div>
 
-          <Dialog open={editOpen} onOpenChange={setEditOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Editar Campanha</DialogTitle>
-                <DialogDescription>
-                  Altere os dados da campanha e as lojas participantes.
-                </DialogDescription>
-              </DialogHeader>
-              {editingCampanha && (
+            <Dialog open={open} onOpenChange={setOpen}>
+              <DialogTrigger asChild>
+                <Button size="sm" className="gap-1">
+                  <Plus className="h-4 w-4" />
+                  Nova Campanha
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Nova Campanha</DialogTitle>
+                  <DialogDescription>
+                    Cadastre uma nova campanha e selecione as lojas participantes.
+                  </DialogDescription>
+                </DialogHeader>
                 <div className="space-y-4 py-4">
                   <div className="space-y-2">
-                    <Label htmlFor="edit_nome">Nome da Campanha *</Label>
+                    <Label htmlFor="nome">Nome da Campanha *</Label>
                     <Input
-                      id="edit_nome"
+                      id="nome"
                       placeholder="Ex: Promoção de Verão"
-                      value={editingCampanha.nome}
-                      onChange={(e) => setEditingCampanha({ ...editingCampanha, nome: e.target.value })}
+                      value={newCampanha.nome}
+                      onChange={(e) => setNewCampanha({ ...newCampanha, nome: e.target.value })}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="edit_descricao">Descrição</Label>
+                    <Label htmlFor="descricao">Descrição</Label>
                     <Textarea
-                      id="edit_descricao"
+                      id="descricao"
                       placeholder="Detalhes da campanha..."
-                      value={editingCampanha.descricao}
-                      onChange={(e) => setEditingCampanha({ ...editingCampanha, descricao: e.target.value })}
+                      value={newCampanha.descricao}
+                      onChange={(e) => setNewCampanha({ ...newCampanha, descricao: e.target.value })}
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="edit_data_inicio">Data Início *</Label>
+                      <Label htmlFor="data_inicio">Data Início *</Label>
                       <Input
-                        id="edit_data_inicio"
+                        id="data_inicio"
                         type="date"
-                        value={editingCampanha.data_inicio}
-                        onChange={(e) => setEditingCampanha({ ...editingCampanha, data_inicio: e.target.value })}
+                        value={newCampanha.data_inicio}
+                        onChange={(e) => setNewCampanha({ ...newCampanha, data_inicio: e.target.value })}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="edit_data_fim">Data Fim *</Label>
+                      <Label htmlFor="data_fim">Data Fim *</Label>
                       <Input
-                        id="edit_data_fim"
+                        id="data_fim"
                         type="date"
-                        value={editingCampanha.data_fim}
-                        onChange={(e) => setEditingCampanha({ ...editingCampanha, data_fim: e.target.value })}
+                        value={newCampanha.data_fim}
+                        onChange={(e) => setNewCampanha({ ...newCampanha, data_fim: e.target.value })}
                       />
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="edit_cor">Cor da Campanha</Label>
+                    <Label htmlFor="cor">Cor da Campanha</Label>
                     <Input
-                      id="edit_cor"
+                      id="cor"
                       type="color"
-                      value={editingCampanha.cor}
-                      onChange={(e) => setEditingCampanha({ ...editingCampanha, cor: e.target.value })}
+                      value={newCampanha.cor}
+                      onChange={(e) => setNewCampanha({ ...newCampanha, cor: e.target.value })}
                     />
                   </div>
                   <div className="space-y-2">
@@ -640,90 +545,210 @@ export function CalendarioCampanhas() {
                     )}
                   </div>
                 </div>
-              )}
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setEditOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button onClick={handleEditCampanha} disabled={saving}>
-                  {saving ? 'Salvando...' : 'Salvar'}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </CardHeader>
-      
-      {filterLojas.length > 0 && (
-        <div className="px-6 pb-2 flex flex-wrap gap-2">
-          <span className="text-sm text-muted-foreground">Filtrando por:</span>
-          {filterLojas.map(lojaId => {
-            const loja = lojas.find(l => l.id === lojaId)
-            return (
-              <Badge key={lojaId} variant="secondary" className="gap-1">
-                {loja?.cod_loja}
-                <X
-                  className="h-3 w-3 cursor-pointer hover:text-red-500"
-                  onClick={() => toggleFilterLoja(lojaId)}
-                />
-              </Badge>
-            )
-          })}
-        </div>
-      )}
-      
-      <CardContent>
-        <div className="grid grid-cols-7 gap-1">
-          {weekDays.map(day => (
-            <div key={day} className="text-center text-sm font-medium text-muted-foreground py-2">
-              {day}
-            </div>
-          ))}
-          {days.map((day, idx) => {
-            const campanhasDoDia = getCampanhasForDay(day.date)
-            const isToday = day.date.toDateString() === new Date().toDateString()
-            
-            return (
-              <div
-                key={idx}
-                className={`min-h-[120px] border rounded-lg p-1 transition-all ${
-                  day.isCurrentMonth ? 'bg-background' : 'bg-muted/30 text-muted-foreground'
-                } ${isToday ? 'border-primary shadow-sm' : 'border-border'}`}
-              >
-                <div className={`text-right text-sm p-1 ${isToday ? 'font-bold text-primary' : ''}`}>
-                  {day.date.getDate()}
-                </div>
-                <div className="space-y-1">
-                  {campanhasDoDia.slice(0, 2).map(camp => (
-                    <div
-                      key={camp.id}
-                      className="group relative text-xs rounded px-1 py-0.5 truncate cursor-pointer hover:opacity-80"
-                      style={{ backgroundColor: camp.cor || '#FF1686', color: '#fff' }}
-                      onClick={() => openEditDialog(camp)}
-                    >
-                      {camp.nome}
-                      <button
-                        className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleDeleteCampanha(camp)
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button onClick={handleCreateCampanha} disabled={saving}>
+                    {saving ? 'Salvando...' : 'Salvar'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            <Dialog open={editOpen} onOpenChange={setEditOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Editar Campanha</DialogTitle>
+                  <DialogDescription>
+                    Altere os dados da campanha e as lojas participantes.
+                  </DialogDescription>
+                </DialogHeader>
+                {editingCampanha && (
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit_nome">Nome da Campanha *</Label>
+                      <Input
+                        id="edit_nome"
+                        placeholder="Ex: Promoção de Verão"
+                        value={editingCampanha.nome}
+                        onChange={(e) => setEditingCampanha({ ...editingCampanha, nome: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit_descricao">Descrição</Label>
+                      <Textarea
+                        id="edit_descricao"
+                        placeholder="Detalhes da campanha..."
+                        value={editingCampanha.descricao}
+                        onChange={(e) => setEditingCampanha({ ...editingCampanha, descricao: e.target.value })}
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="edit_data_inicio">Data Início *</Label>
+                        <Input
+                          id="edit_data_inicio"
+                          type="date"
+                          value={editingCampanha.data_inicio}
+                          onChange={(e) => setEditingCampanha({ ...editingCampanha, data_inicio: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit_data_fim">Data Fim *</Label>
+                        <Input
+                          id="edit_data_fim"
+                          type="date"
+                          value={editingCampanha.data_fim}
+                          onChange={(e) => setEditingCampanha({ ...editingCampanha, data_fim: e.target.value })}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit_cor">Cor da Campanha</Label>
+                      <Input
+                        id="edit_cor"
+                        type="color"
+                        value={editingCampanha.cor}
+                        onChange={(e) => setEditingCampanha({ ...editingCampanha, cor: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Lojas Participantes</Label>
+                      <Select
+                        value={selectedLojas[0] || ''}
+                        onValueChange={(value) => {
+                          if (!selectedLojas.includes(value)) {
+                            setSelectedLojas([...selectedLojas, value])
+                          }
                         }}
                       >
-                        <Trash2 className="h-3 w-3 text-white hover:text-red-200" />
-                      </button>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione uma loja" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {lojas.map((loja) => (
+                            <SelectItem key={loja.id} value={loja.id}>
+                              {loja.cod_loja} - {loja.nome_loja}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {selectedLojas.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {selectedLojas.map(lojaId => {
+                            const loja = lojas.find(l => l.id === lojaId)
+                            return (
+                              <span key={lojaId} className="bg-muted px-2 py-1 rounded-md text-sm flex items-center gap-1">
+                                {loja?.cod_loja}
+                                <button
+                                  type="button"
+                                  className="text-red-500 hover:text-red-700"
+                                  onClick={() => setSelectedLojas(selectedLojas.filter(id => id !== lojaId))}
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            )
+                          })}
+                        </div>
+                      )}
                     </div>
-                  ))}
-                  {campanhasDoDia.length > 2 && (
-                    <div className="text-xs text-muted-foreground text-center">
-                      +{campanhasDoDia.length - 2}
-                    </div>
-                  )}
-                </div>
+                  </div>
+                )}
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setEditOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button onClick={handleEditCampanha} disabled={saving}>
+                    {saving ? 'Salvando...' : 'Salvar'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </CardHeader>
+        
+        {filterLojas.length > 0 && (
+          <div className="px-6 pb-2 flex flex-wrap gap-2">
+            <span className="text-sm text-muted-foreground">Filtrando por:</span>
+            {filterLojas.map(lojaId => {
+              const loja = lojas.find(l => l.id === lojaId)
+              return (
+                <Badge key={lojaId} variant="secondary" className="gap-1">
+                  {loja?.cod_loja}
+                  <X
+                    className="h-3 w-3 cursor-pointer hover:text-red-500"
+                    onClick={() => toggleFilterLoja(lojaId)}
+                  />
+                </Badge>
+              )
+            })}
+          </div>
+        )}
+        
+        <CardContent>
+          <div className="grid grid-cols-7 gap-1">
+            {weekDays.map(day => (
+              <div key={day} className="text-center text-sm font-medium text-muted-foreground py-2">
+                {day}
               </div>
-            )
-          })}
-        </div>
-      </CardContent>
-    </Card>
+            ))}
+            {days.map((day, idx) => {
+              const campanhasDoDia = getCampanhasForDay(day.date)
+              const isToday = day.date.toDateString() === new Date().toDateString()
+              
+              return (
+                <div
+                  key={idx}
+                  className={`min-h-[120px] border rounded-lg p-1 transition-all ${
+                    day.isCurrentMonth ? 'bg-background' : 'bg-muted/30 text-muted-foreground'
+                  } ${isToday ? 'border-primary shadow-sm' : 'border-border'}`}
+                >
+                  <div className={`text-right text-sm p-1 ${isToday ? 'font-bold text-primary' : ''}`}>
+                    {day.date.getDate()}
+                  </div>
+                  <div className="space-y-1">
+                    {campanhasDoDia.slice(0, 2).map(camp => (
+                      <Tooltip key={camp.id}>
+                        <TooltipTrigger asChild>
+                          <div
+                            className="text-xs rounded px-1 py-0.5 truncate cursor-pointer hover:opacity-80 relative group"
+                            style={{ backgroundColor: camp.cor || '#FF1686', color: '#fff' }}
+                            onClick={() => openEditDialog(camp)}
+                          >
+                            {camp.nome}
+                            <button
+                              className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleDeleteCampanha(camp)
+                              }}
+                            >
+                              <Trash2 className="h-3 w-3 text-white hover:text-red-200" />
+                            </button>
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent 
+                          side="top" 
+                          className="max-w-xs whitespace-pre-line bg-gray-900 text-white p-2 text-xs"
+                        >
+                          {getLojasTooltip(camp)}
+                        </TooltipContent>
+                      </Tooltip>
+                    ))}
+                    {campanhasDoDia.length > 2 && (
+                      <div className="text-xs text-muted-foreground text-center">
+                        +{campanhasDoDia.length - 2}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    </TooltipProvider>
   )
 }
