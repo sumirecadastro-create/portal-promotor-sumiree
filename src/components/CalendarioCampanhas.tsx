@@ -169,7 +169,6 @@ export function CalendarioCampanhas() {
 
     setSaving(true)
     try {
-      // Atualizar campanha
       const { error: campanhaError } = await supabase
         .from('campanhas')
         .update({
@@ -183,7 +182,6 @@ export function CalendarioCampanhas() {
 
       if (campanhaError) throw campanhaError
 
-      // Remover relações antigas
       const { error: deleteError } = await supabase
         .from('lojas_campanhas')
         .delete()
@@ -191,7 +189,6 @@ export function CalendarioCampanhas() {
 
       if (deleteError) throw deleteError
 
-      // Adicionar novas relações
       if (selectedLojas.length > 0) {
         const lojasCampanhas = selectedLojas.map(lojaId => ({
           loja_id: lojaId,
@@ -228,7 +225,6 @@ export function CalendarioCampanhas() {
     if (!confirm(`Deseja realmente excluir a campanha "${campanha.nome}"?`)) return
 
     try {
-      // Remover relações primeiro
       const { error: relError } = await supabase
         .from('lojas_campanhas')
         .delete()
@@ -236,7 +232,6 @@ export function CalendarioCampanhas() {
 
       if (relError) throw relError
 
-      // Remover campanha
       const { error: campanhaError } = await supabase
         .from('campanhas')
         .delete()
@@ -345,6 +340,11 @@ export function CalendarioCampanhas() {
     setFilterLojas([])
   }
 
+  // NOVA FUNÇÃO: Selecionar todas as lojas no filtro
+  const selecionarTodasLojas = () => {
+    setFilterLojas(lojas.map(loja => loja.id))
+  }
+
   const days = getDaysInMonth(currentDate)
   const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
   const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -397,11 +397,17 @@ export function CalendarioCampanhas() {
             
             {showFilter && (
               <div className="absolute right-0 top-full mt-2 w-80 bg-popover border rounded-lg shadow-lg z-10 p-4">
+                {/* CABEÇALHO DO FILTRO COM "SELECIONAR TODOS" E "LIMPAR" */}
                 <div className="flex justify-between items-center mb-3">
                   <h4 className="font-medium">Filtrar por loja</h4>
-                  <Button variant="ghost" size="sm" onClick={clearFilters}>
-                    Limpar
-                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="ghost" size="sm" onClick={selecionarTodasLojas}>
+                      Selecionar todos
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={clearFilters}>
+                      Limpar
+                    </Button>
+                  </div>
                 </div>
                 <div className="max-h-60 overflow-y-auto space-y-1">
                   {lojas.map(loja => (
@@ -535,7 +541,6 @@ export function CalendarioCampanhas() {
             </DialogContent>
           </Dialog>
 
-          {/* Dialog de Edição */}
           <Dialog open={editOpen} onOpenChange={setEditOpen}>
             <DialogContent>
               <DialogHeader>
