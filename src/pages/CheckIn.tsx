@@ -3,13 +3,26 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
-import { getActiveVisit, createVisit, updateVisit, Visita } from '@/services/visitas'
-import { getLojaVinculada } from '@/services/vinculacoes'
+import { createVisit, updateVisit, getActiveVisitsByDay, Visita } from '@/services/visitas'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/use-auth'
-import { MapPin, CheckCircle2, AlertCircle, Store, User, Clock, Calendar } from 'lucide-react'
+import { MapPin, CheckCircle2, User, Store, Clock, Calendar, XCircle } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+
+interface Promotor {
+  id: string
+  promotor_nome: string
+  marca_produto: string
+  status: string
+}
 
 interface Loja {
   id: string
@@ -18,157 +31,132 @@ interface Loja {
   endereco: string
 }
 
-interface Promotor {
-  id: string
-  promotor_nome: string
-  email: string
-  telefone: string
-  marca_produto: string
-  fabricante_produto: string
+interface VisitaAtiva extends Visita {
+  promotor_nome?: string
+  loja_nome?: string
+  loja_cod?: string
 }
 
 export default function CheckIn() {
   const { user } = useAuth()
   const { toast } = useToast()
 
-  const [lojaVinculada, setLojaVinculada] = useState<Loja | null>(null)
-  const [promotor, setPromotor] = useState<Promotor | null>(null)
+  const [promotores, setPromotores] = useState<Promotor[]>([])
+  const [lojas, setLojas] = useState<Loja[]>([])
+  const [visitasAtivas, setVisitasAtivas] = useState<VisitaAtiva[]>([])
+  
+  const [selectedPromotorId, setSelectedPromotorId] = useState<string>('')
+  const [selectedLojaId, setSelectedLojaId] = useState<string>('')
   const [observacoes, setObservacoes] = useState('')
-  const [activeVisit, setActiveVisit] = useState<Visita | null>(null)
-  const [promoterId, setPromoterId] = useState<string | null>(null)
+  
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
-  const [semVinculacao, setSemVinculacao] = useState(false)
-  const [visitDuration, setVisitDuration] = useState<string>('')
+  const [activeVisit, setActiveVisit] = useState<Visita | null>(null)
 
-  useEffect(() => {
-    const initialize = async () => {
-      try {
-        // Buscar o promotor vinculado ao usuário atual
-        let myPromoterId = null
-        let myPromoterData = null
+  // Carregar dados iniciais
+  const loadData = async () => {
+    try {
+      const hoje = new Date().toISOString().split('T')[0]
+      
+      // Buscar promotores ativos
+      const { data: promotoresData, error: promotoresError } = await supabase
+        .from('promotores')
+        .select('id, promotor_nome, marca_produto, status')
+        .eq('status', 'ativo')
+        .order('promotor_nome')
+      
+      if (promotoresError) throw promotoresError
+      setPromotores(promotoresData || [])
 
-        if (user?.id) {
-          const { data, error } = await supabase
+      // Buscar lojas ativas
+      const { data: lojasData, error: lojasError } = await supabase
+        .from('lojas')
+        .select('id, cod_loja, nome_loja, endereco')
+        .order('nome_loja')
+      
+      if (lojasError) throw lojasError
+      setLojas(lojasData || [])
+
+      // Buscar visitas ativas de hoje
+      const visitasData = await getActiveVisitsByDay(hoje)
+      
+      // Buscar nomes dos promotores e lojas para as visitas ativas
+      const visitasComNomes = await Promise.all(
+        (visitasData || []).map(async (visita) => {
+          const { data: promotor } = await supabase
             .from('promotores')
-            .select('*')
-            .eq('user_id', user.id)
+            .select('promotor_nome')
+            .eq('id', visita.promotor_id)
             .single()
           
-          if (!error && data) {
-            myPromoterId = data.id
-            myPromoterData = data
-            setPromotor({
-              id: data.id,
-              promotor_nome: data.promotor_nome,
-              email: data.email || '',
-              telefone: data.contato_responsavel || '',
-              marca_produto: data.marca_produto || '',
-              fabricante_produto: data.fabricante_produto || ''
-            })
-          }
-        }
-
-        // Fallback: pegar o primeiro promotor se não encontrar
-        if (!myPromoterId) {
-          const { data, error } = await supabase
-            .from('promotores')
-            .select('*')
-            .limit(1)
+          const { data: loja } = await supabase
+            .from('lojas')
+            .select('nome_loja, cod_loja')
+            .eq('id', visita.loja_id)
+            .single()
           
-          if (!error && data && data.length > 0) {
-            myPromoterId = data[0].id
-            myPromoterData = data[0]
-            setPromotor({
-              id: data[0].id,
-              promotor_nome: data[0].promotor_nome,
-              email: data[0].email || '',
-              telefone: data[0].contato_responsavel || '',
-              marca_produto: data[0].marca_produto || '',
-              fabricante_produto: data[0].fabricante_produto || ''
-            })
+          return {
+            ...visita,
+            promotor_nome: promotor?.promotor_nome || 'Desconhecido',
+            loja_nome: loja?.nome_loja || 'Desconhecida',
+            loja_cod: loja?.cod_loja || ''
           }
-        }
-
-        setPromoterId(myPromoterId)
-
-        if (myPromoterId) {
-          // Buscar loja vinculada ao promotor
-          const lojaIdVinculada = await getLojaVinculada(myPromoterId)
-          
-          if (lojaIdVinculada) {
-            const { data: lojaData } = await supabase
-              .from('lojas')
-              .select('*')
-              .eq('id', lojaIdVinculada)
-              .single()
-            
-            if (lojaData) {
-              setLojaVinculada(lojaData)
-            }
-          } else {
-            setSemVinculacao(true)
-          }
-
-          // Buscar visita ativa
-          const visit = await getActiveVisit(myPromoterId)
-          if (visit) {
-            setActiveVisit(visit)
-            setObservacoes(visit.observacoes || '')
-          }
-        }
-      } catch (error) {
-        console.error('Erro ao carregar dados:', error)
-        toast({ 
-          variant: 'destructive', 
-          title: 'Erro ao carregar dados',
-          description: 'Não foi possível carregar as informações necessárias.'
         })
-      } finally {
-        setLoading(false)
-      }
-    }
-    
-    initialize()
-  }, [user, toast])
-
-  // Calcular duração da visita a cada minuto
-  useEffect(() => {
-    if (!activeVisit) return
-
-    const updateDuration = () => {
-      const start = new Date(activeVisit.check_in)
-      const now = new Date()
-      const diffMs = now.getTime() - start.getTime()
-      const diffHrs = Math.floor(diffMs / (1000 * 60 * 60))
-      const diffMins = Math.floor((diffMs % (3600000)) / 60000)
+      )
       
-      if (diffHrs > 0) {
-        setVisitDuration(`${diffHrs}h ${diffMins}min`)
-      } else {
-        setVisitDuration(`${diffMins} minutos`)
-      }
+      setVisitasAtivas(visitasComNomes)
+      
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error)
+      toast({ 
+        variant: 'destructive', 
+        title: 'Erro ao carregar dados',
+        description: 'Não foi possível carregar as informações necessárias.'
+      })
+    } finally {
+      setLoading(false)
     }
+  }
 
-    updateDuration()
-    const interval = setInterval(updateDuration, 60000)
-    return () => clearInterval(interval)
-  }, [activeVisit])
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  // Verificar se promotor já tem visita ativa hoje
+  const promotorTemVisitaAtiva = (promotorId: string) => {
+    return visitasAtivas.some(v => v.promotor_id === promotorId)
+  }
+
+  // Verificar se loja já tem visita ativa hoje
+  const lojaTemVisitaAtiva = (lojaId: string) => {
+    return visitasAtivas.some(v => v.loja_id === lojaId)
+  }
 
   const handleCheckIn = async () => {
-    if (!promoterId) {
+    if (!selectedPromotorId || !selectedLojaId) {
       toast({ 
         title: 'Atenção', 
-        description: 'Nenhum promotor identificado.', 
+        description: 'Selecione um promotor e uma loja.', 
         variant: 'destructive' 
       })
       return
     }
 
-    if (!lojaVinculada) {
+    // Verificar se promotor já está em visita ativa
+    if (promotorTemVisitaAtiva(selectedPromotorId)) {
       toast({ 
-        title: 'Atenção', 
-        description: 'Você não tem uma loja vinculada. Procure o gerente.', 
+        title: 'Promotor já está em visita', 
+        description: 'Este promotor já possui uma visita ativa hoje. Finalize a visita atual primeiro.', 
+        variant: 'destructive' 
+      })
+      return
+    }
+
+    // Verificar se loja já tem visita ativa
+    if (lojaTemVisitaAtiva(selectedLojaId)) {
+      toast({ 
+        title: 'Loja já possui visita ativa', 
+        description: 'Esta loja já possui um promotor em visita hoje.', 
         variant: 'destructive' 
       })
       return
@@ -178,14 +166,23 @@ export default function CheckIn() {
     try {
       const now = new Date().toISOString()
       const visit = await createVisit({
-        promotor_id: promoterId,
-        loja_id: lojaVinculada.id,
+        promotor_id: selectedPromotorId,
+        loja_id: selectedLojaId,
         check_in: now,
+        observacoes: observacoes || null,
       })
-      setActiveVisit(visit)
+      
+      // Recarregar dados para mostrar a nova visita
+      await loadData()
+      
+      // Limpar formulário
+      setSelectedPromotorId('')
+      setSelectedLojaId('')
+      setObservacoes('')
+      
       toast({
         title: 'Check-in realizado!',
-        description: `Você iniciou seu expediente na ${lojaVinculada.nome_loja}`,
+        description: `Visita iniciada com sucesso.`,
         className: 'bg-emerald-500 text-white',
       })
     } catch (error: any) {
@@ -200,23 +197,21 @@ export default function CheckIn() {
     }
   }
 
-  const handleCheckOut = async () => {
-    if (!activeVisit) return
+  const handleCheckOut = async (visitaId: string, promotorNome: string, lojaNome: string) => {
+    if (!confirm(`Finalizar visita de ${promotorNome} na loja ${lojaNome}?`)) return
 
     setActionLoading(true)
     try {
       const now = new Date().toISOString()
-      await updateVisit(activeVisit.id, {
-        check_out: now,
-        observacoes,
-      })
-      setActiveVisit(null)
-      setObservacoes('')
+      await updateVisit(visitaId, { check_out: now })
+      
       toast({ 
         title: 'Check-out realizado!', 
-        description: 'Seu expediente foi finalizado com sucesso.',
+        description: `Visita de ${promotorNome} finalizada.`,
         className: 'bg-blue-500 text-white'
       })
+      
+      await loadData()
     } catch (error: any) {
       console.error('Erro no check-out:', error)
       toast({ 
@@ -229,16 +224,13 @@ export default function CheckIn() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center p-12 space-y-4">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-        <p className="text-muted-foreground">Carregando suas informações...</p>
-      </div>
-    )
+  const formatTime = (dateString: string) => {
+    return new Date(dateString).toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit'
+    })
   }
 
-  const isVisitActive = !!activeVisit
   const hoje = new Date().toLocaleDateString('pt-BR', {
     weekday: 'long',
     year: 'numeric',
@@ -246,202 +238,229 @@ export default function CheckIn() {
     day: 'numeric'
   })
 
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 space-y-4">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        <p className="text-muted-foreground">Carregando...</p>
+      </div>
+    )
+  }
+
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
+    <div className="max-w-4xl mx-auto space-y-6">
       {/* Cabeçalho */}
       <div className="text-center space-y-2 mb-8">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm mb-2">
           <Calendar className="h-3 w-3" />
           <span>{hoje}</span>
         </div>
-        <h2 className="text-3xl font-bold tracking-tight">Operação em Loja</h2>
+        <h2 className="text-3xl font-bold tracking-tight">Operação Check-in</h2>
         <p className="text-muted-foreground">
-          Registre sua presença e atuação nos pontos de venda.
+          Gerencie as visitas dos promotores nas lojas.
         </p>
       </div>
 
-      {/* Alertas */}
-      {semVinculacao && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            Você não está vinculado a nenhuma loja. Entre em contato com o gerente para fazer a vinculação.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {!promoterId && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>
-            Nenhum registro de promotor vinculado a esta conta.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Informações do Promotor */}
-      {promotor && !semVinculacao && (
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                <User className="h-5 w-5 text-primary" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm text-muted-foreground">Bem-vindo,</p>
-                <p className="font-medium">{promotor.promotor_nome}</p>
-              </div>
-              {(promotor.marca_produto || promotor.fabricante_produto) && (
-                <Badge variant="outline" className="text-xs">
-                  {promotor.marca_produto || promotor.fabricante_produto}
-                </Badge>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Card principal de Check-in */}
-      <Card
-        className={`border-2 transition-all duration-500 ${
-          isVisitActive 
-            ? 'border-emerald-500 shadow-lg shadow-emerald-500/10' 
-            : 'border-border'
-        }`}
-      >
+      {/* Card de Check-in */}
+      <Card className="border-2 border-primary/20">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <MapPin className={isVisitActive ? 'text-emerald-500' : 'text-muted-foreground'} />
-            Local da Visita
+            <MapPin className="text-primary" />
+            Iniciar Nova Visita
           </CardTitle>
           <CardDescription>
-            {isVisitActive
-              ? 'Você está atualmente em operação nesta loja.'
-              : semVinculacao
-              ? 'Você não tem uma loja vinculada. Procure o gerente.'
-              : 'Sua loja designada para hoje'}
+            Selecione o promotor e a loja para iniciar uma visita.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Loja vinculada */}
-          {!semVinculacao && lojaVinculada && (
-            <div className="p-4 bg-gradient-to-r from-primary/5 to-primary/10 rounded-lg border border-primary/20">
-              <div className="flex items-start justify-between">
-                <div className="space-y-2 flex-1">
-                  <div className="flex items-center gap-2">
-                    <Store className="h-4 w-4 text-primary" />
-                    <span className="text-xs font-medium text-primary uppercase tracking-wider">
-                      Loja Designada
-                    </span>
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-lg">{lojaVinculada.nome_loja}</h3>
-                    <p className="text-sm text-muted-foreground">Código: {lojaVinculada.cod_loja}</p>
-                    {lojaVinculada.endereco && (
-                      <p className="text-xs text-muted-foreground mt-1">{lojaVinculada.endereco}</p>
-                    )}
-                  </div>
-                </div>
-                {!isVisitActive && (
-                  <Badge className="bg-green-500 text-white">
-                    Disponível
-                  </Badge>
-                )}
-              </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium flex items-center gap-2">
+                <User className="h-4 w-4" />
+                Promotor
+              </label>
+              <Select value={selectedPromotorId} onValueChange={setSelectedPromotorId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione um promotor" />
+                </SelectTrigger>
+                <SelectContent>
+                  {promotores.map((promotor) => (
+                    <SelectItem 
+                      key={promotor.id} 
+                      value={promotor.id}
+                      disabled={promotorTemVisitaAtiva(promotor.id)}
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <span>{promotor.promotor_nome}</span>
+                        {promotor.marca_produto && (
+                          <Badge variant="outline" className="ml-2 text-xs">
+                            {promotor.marca_produto}
+                          </Badge>
+                        )}
+                        {promotorTemVisitaAtiva(promotor.id) && (
+                          <Badge variant="secondary" className="ml-2 text-xs bg-yellow-500">
+                            Em visita
+                          </Badge>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          )}
 
-          {/* Status do Check-in */}
-          {isVisitActive && (
-            <div className="flex items-center justify-between p-4 bg-emerald-50 rounded-lg">
-              <div className="flex items-center gap-3">
-                <span className="relative flex h-3 w-3">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-                </span>
-                <div>
-                  <p className="text-sm font-medium text-emerald-700">Check-in ativo</p>
-                  <p className="text-xs text-emerald-600">
-                    Iniciado às {new Date(activeVisit.check_in).toLocaleTimeString('pt-BR', {
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    })}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-1 text-emerald-700">
-                <Clock className="h-3 w-3" />
-                <span className="text-sm font-medium">{visitDuration}</span>
-              </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium flex items-center gap-2">
+                <Store className="h-4 w-4" />
+                Loja
+              </label>
+              <Select value={selectedLojaId} onValueChange={setSelectedLojaId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione uma loja" />
+                </SelectTrigger>
+                <SelectContent>
+                  {lojas.map((loja) => (
+                    <SelectItem 
+                      key={loja.id} 
+                      value={loja.id}
+                      disabled={lojaTemVisitaAtiva(loja.id)}
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <span>{loja.nome_loja} - {loja.cod_loja}</span>
+                        {lojaTemVisitaAtiva(loja.id) && (
+                          <Badge variant="secondary" className="ml-2 text-xs bg-yellow-500">
+                            Ocupada
+                          </Badge>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          )}
+          </div>
 
-          {/* Botão de ação principal */}
-          {!isVisitActive ? (
-            <Button
-              className="w-full h-14 text-lg font-semibold mt-4 transition-all transform active:scale-[0.98]"
-              onClick={handleCheckIn}
-              disabled={!lojaVinculada || actionLoading || !promoterId || semVinculacao}
-              size="lg"
-            >
-              {actionLoading ? (
-                <div className="flex items-center gap-2">
-                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                  <span>Processando...</span>
-                </div>
-              ) : (
-                'Iniciar Visita (Check-in)'
-              )}
-            </Button>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Observações (opcional)</label>
+            <Textarea
+              placeholder="Informações adicionais sobre a visita..."
+              className="resize-none"
+              rows={3}
+              value={observacoes}
+              onChange={(e) => setObservacoes(e.target.value)}
+            />
+          </div>
+
+          <Button
+            className="w-full h-12 text-base font-semibold"
+            onClick={handleCheckIn}
+            disabled={!selectedPromotorId || !selectedLojaId || actionLoading}
+          >
+            {actionLoading ? (
+              <div className="flex items-center gap-2">
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
+                <span>Processando...</span>
+              </div>
+            ) : (
+              'Iniciar Visita (Check-in)'
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Lista de Visitas Ativas */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Clock className="h-5 w-5" />
+            Visitas em Andamento Hoje
+          </CardTitle>
+          <CardDescription>
+            {visitasAtivas.length} visita(s) ativa(s) no momento
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {visitasAtivas.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              Nenhuma visita ativa no momento.
+            </div>
           ) : (
-            <Button
-              variant="destructive"
-              className="w-full h-14 text-lg font-semibold mt-4 transition-all transform active:scale-[0.98]"
-              onClick={handleCheckOut}
-              disabled={actionLoading}
-            >
-              {actionLoading ? (
-                <div className="flex items-center gap-2">
-                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                  <span>Processando...</span>
+            <div className="space-y-3">
+              {visitasAtivas.map((visita) => (
+                <div
+                  key={visita.id}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border rounded-lg hover:bg-muted/50 gap-3"
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge variant="default" className="bg-emerald-500">
+                        Em andamento
+                      </Badge>
+                      <span className="font-medium">{visita.promotor_nome}</span>
+                      <span className="text-muted-foreground">→</span>
+                      <span>{visita.loja_nome}</span>
+                      <Badge variant="outline" className="text-xs">
+                        {visita.loja_cod}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        <span>Início: {formatTime(visita.check_in)}</span>
+                      </div>
+                      {visita.observacoes && (
+                        <div className="flex items-center gap-1">
+                          <span className="text-xs">📝 {visita.observacoes}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleCheckOut(visita.id, visita.promotor_nome || '', visita.loja_nome || '')}
+                    className="text-red-500 hover:text-red-700 hover:bg-red-50 border-red-200"
+                    disabled={actionLoading}
+                  >
+                    <XCircle className="h-4 w-4 mr-1" />
+                    Finalizar
+                  </Button>
                 </div>
-              ) : (
-                'Finalizar Visita (Check-out)'
-              )}
-            </Button>
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Card de observações (aparece apenas durante check-in ativo) */}
-      {isVisitActive && (
-        <Card className="animate-in slide-in-from-bottom-4 duration-500">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CheckCircle2 className="text-primary" />
-              Atuação na Loja
-            </CardTitle>
-            <CardDescription>
-              Registre informações importantes sobre sua visita.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Observações da Visita</label>
-              <Textarea
-                placeholder="Ex: Faltou estoque de produto X, gerente solicitou display novo, cliente interessado em produto Y..."
-                className="resize-none min-h-[120px]"
-                value={observacoes}
-                onChange={(e) => setObservacoes(e.target.value)}
-                disabled={actionLoading}
-              />
-              <p className="text-xs text-muted-foreground">
-                Estas observações serão registradas no relatório da visita.
-              </p>
+      {/* Resumo rápido */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Promotores Disponíveis</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {promotores.filter(p => !promotorTemVisitaAtiva(p.id)).length}
+                </p>
+              </div>
+              <User className="h-8 w-8 text-muted-foreground" />
             </div>
           </CardContent>
         </Card>
-      )}
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Lojas Disponíveis</p>
+                <p className="text-2xl font-bold text-blue-600">
+                  {lojas.filter(l => !lojaTemVisitaAtiva(l.id)).length}
+                </p>
+              </div>
+              <Store className="h-8 w-8 text-muted-foreground" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }
