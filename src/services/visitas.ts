@@ -8,81 +8,62 @@ export interface Visita {
   check_out?: string
   observacoes?: string
   status: string
-  created_at?: string
 }
 
-export async function getActiveVisit(promoterId: string): Promise<Visita | null> {
-  try {
-    const { data, error } = await supabase
-      .from('visitas')
-      .select('*')
-      .eq('promotor_id', promoterId)
-      .is('check_out', null)
-      .order('check_in', { ascending: false })
-      .limit(1)
-      .single()
-    
-    if (error) throw error
-    return data
-  } catch (error) {
-    return null
-  }
-}
-
-export async function createVisit(data: {
-  promotor_id: string
-  loja_id: string
-  check_in: string
-}): Promise<Visita> {
-  const { data: visita, error } = await supabase
+export async function getActiveVisit(promotorId: string): Promise<Visita | null> {
+  const { data, error } = await supabase
     .from('visitas')
-    .insert({
-      promotor_id: data.promotor_id,
-      loja_id: data.loja_id,
-      check_in: data.check_in,
-      status: 'pendente'
-    })
+    .select('*')
+    .eq('promotor_id', promotorId)
+    .is('check_out', null)
+    .single()
+  
+  if (error) return null
+  return data
+}
+
+export async function getActiveVisitsByDay(date: string): Promise<Visita[]> {
+  const { data, error } = await supabase
+    .from('visitas')
+    .select('*')
+    .gte('check_in', `${date}T00:00:00`)
+    .lt('check_in', `${date}T23:59:59`)
+    .is('check_out', null)
+  
+  if (error) {
+    console.error('Erro ao buscar visitas ativas:', error)
+    return []
+  }
+  return data || []
+}
+
+export async function createVisit(visit: Omit<Visita, 'id' | 'status'>): Promise<Visita> {
+  const { data, error } = await supabase
+    .from('visitas')
+    .insert({ ...visit, status: 'em_andamento' })
     .select()
     .single()
   
   if (error) throw error
-  return visita
+  return data
 }
 
-export async function updateVisit(
-  id: string,
-  data: { check_out: string; observacoes?: string }
-): Promise<Visita> {
-  const { data: visita, error } = await supabase
+export async function updateVisit(id: string, updates: Partial<Visita>): Promise<Visita> {
+  const { data, error } = await supabase
     .from('visitas')
-    .update({
-      check_out: data.check_out,
-      observacoes: data.observacoes,
-      status: 'realizada'
-    })
+    .update({ ...updates, status: updates.check_out ? 'concluida' : 'em_andamento' })
     .eq('id', id)
     .select()
     .single()
   
   if (error) throw error
-  return visita
-}
-
-export async function getVisitasByPromotor(promotorId: string): Promise<Visita[]> {
-  const { data, error } = await supabase
-    .from('visitas')
-    .select('*, lojas(nome_loja)')
-    .eq('promotor_id', promotorId)
-    .order('check_in', { ascending: false })
-  
-  if (error) throw error
-  return data || []
+  return data
 }
 
 export async function getAllVisitas(): Promise<Visita[]> {
   const { data, error } = await supabase
     .from('visitas')
-    .select('*, promotores(promotor_nome), lojas(nome_loja)')
+    .select('*')
     .order('check_in', { ascending: false })
   
   if (error) throw error
