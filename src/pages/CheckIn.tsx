@@ -6,7 +6,7 @@ import { useToast } from '@/hooks/use-toast'
 import { createVisit, updateVisit, getActiveVisitsByDay, Visita } from '@/services/visitas'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/use-auth'
-import { MapPin, CheckCircle2, User, Store, Clock, Calendar, XCircle } from 'lucide-react'
+import { MapPin, CheckCircle2, User, Store, Clock, Calendar, XCircle, Package } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -21,6 +21,7 @@ interface Promotor {
   id: string
   promotor_nome: string
   marca_produto: string
+  fabricante_produto: string
   status: string
 }
 
@@ -33,6 +34,7 @@ interface Loja {
 
 interface VisitaAtiva extends Visita {
   promotor_nome?: string
+  promotor_marca?: string
   loja_nome?: string
   loja_cod?: string
 }
@@ -51,7 +53,6 @@ export default function CheckIn() {
   
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
-  const [activeVisit, setActiveVisit] = useState<Visita | null>(null)
 
   // Carregar dados iniciais
   const loadData = async () => {
@@ -61,7 +62,7 @@ export default function CheckIn() {
       // Buscar promotores ativos
       const { data: promotoresData, error: promotoresError } = await supabase
         .from('promotores')
-        .select('id, promotor_nome, marca_produto, status')
+        .select('id, promotor_nome, marca_produto, fabricante_produto, status')
         .eq('status', 'ativo')
         .order('promotor_nome')
       
@@ -85,7 +86,7 @@ export default function CheckIn() {
         (visitasData || []).map(async (visita) => {
           const { data: promotor } = await supabase
             .from('promotores')
-            .select('promotor_nome')
+            .select('promotor_nome, marca_produto')
             .eq('id', visita.promotor_id)
             .single()
           
@@ -98,6 +99,7 @@ export default function CheckIn() {
           return {
             ...visita,
             promotor_nome: promotor?.promotor_nome || 'Desconhecido',
+            promotor_marca: promotor?.marca_produto || '',
             loja_nome: loja?.nome_loja || 'Desconhecida',
             loja_cod: loja?.cod_loja || ''
           }
@@ -122,15 +124,12 @@ export default function CheckIn() {
     loadData()
   }, [])
 
-  // Verificar se promotor já tem visita ativa hoje
+  // Verificar se promotor já tem visita ativa hoje (NÃO pode estar em duas lojas)
   const promotorTemVisitaAtiva = (promotorId: string) => {
     return visitasAtivas.some(v => v.promotor_id === promotorId)
   }
 
-  // Verificar se loja já tem visita ativa hoje
-  const lojaTemVisitaAtiva = (lojaId: string) => {
-    return visitasAtivas.some(v => v.loja_id === lojaId)
-  }
+  // NÃO verificar se loja tem visita ativa - pode ter múltiplos promotores!
 
   const handleCheckIn = async () => {
     if (!selectedPromotorId || !selectedLojaId) {
@@ -142,7 +141,7 @@ export default function CheckIn() {
       return
     }
 
-    // Verificar se promotor já está em visita ativa
+    // Verificar se promotor já está em visita ativa (impedir duplicidade do mesmo promotor)
     if (promotorTemVisitaAtiva(selectedPromotorId)) {
       toast({ 
         title: 'Promotor já está em visita', 
@@ -152,20 +151,10 @@ export default function CheckIn() {
       return
     }
 
-    // Verificar se loja já tem visita ativa
-    if (lojaTemVisitaAtiva(selectedLojaId)) {
-      toast({ 
-        title: 'Loja já possui visita ativa', 
-        description: 'Esta loja já possui um promotor em visita hoje.', 
-        variant: 'destructive' 
-      })
-      return
-    }
-
     setActionLoading(true)
     try {
       const now = new Date().toISOString()
-      const visit = await createVisit({
+      await createVisit({
         promotor_id: selectedPromotorId,
         loja_id: selectedLojaId,
         check_in: now,
@@ -238,6 +227,20 @@ export default function CheckIn() {
     day: 'numeric'
   })
 
+  // Agrupar visitas por loja para exibição
+  const visitasPorLoja = visitasAtivas.reduce((acc, visita) => {
+    const lojaId = visita.loja_id
+    if (!acc[lojaId]) {
+      acc[lojaId] = {
+        loja_nome: visita.loja_nome,
+        loja_cod: visita.loja_cod,
+        promotores: []
+      }
+    }
+    acc[lojaId].promotores.push(visita)
+    return acc
+  }, {} as Record<string, { loja_nome: string; loja_cod: string; promotores: VisitaAtiva[] }>)
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center p-12 space-y-4">
@@ -248,7 +251,7 @@ export default function CheckIn() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-5xl mx-auto space-y-6">
       {/* Cabeçalho */}
       <div className="text-center space-y-2 mb-8">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm mb-2">
@@ -290,15 +293,16 @@ export default function CheckIn() {
                       value={promotor.id}
                       disabled={promotorTemVisitaAtiva(promotor.id)}
                     >
-                      <div className="flex items-center justify-between w-full">
+                      <div className="flex items-center justify-between w-full gap-2">
                         <span>{promotor.promotor_nome}</span>
                         {promotor.marca_produto && (
-                          <Badge variant="outline" className="ml-2 text-xs">
+                          <Badge variant="outline" className="text-xs">
+                            <Package className="h-3 w-3 mr-1" />
                             {promotor.marca_produto}
                           </Badge>
                         )}
                         {promotorTemVisitaAtiva(promotor.id) && (
-                          <Badge variant="secondary" className="ml-2 text-xs bg-yellow-500">
+                          <Badge variant="secondary" className="text-xs bg-yellow-500">
                             Em visita
                           </Badge>
                         )}
@@ -307,6 +311,11 @@ export default function CheckIn() {
                   ))}
                 </SelectContent>
               </Select>
+              {selectedPromotorId && promotorTemVisitaAtiva(selectedPromotorId) && (
+                <p className="text-xs text-red-500 mt-1">
+                  Este promotor já está em visita hoje. Finalize a visita atual primeiro.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -320,23 +329,17 @@ export default function CheckIn() {
                 </SelectTrigger>
                 <SelectContent>
                   {lojas.map((loja) => (
-                    <SelectItem 
-                      key={loja.id} 
-                      value={loja.id}
-                      disabled={lojaTemVisitaAtiva(loja.id)}
-                    >
+                    <SelectItem key={loja.id} value={loja.id}>
                       <div className="flex items-center justify-between w-full">
                         <span>{loja.nome_loja} - {loja.cod_loja}</span>
-                        {lojaTemVisitaAtiva(loja.id) && (
-                          <Badge variant="secondary" className="ml-2 text-xs bg-yellow-500">
-                            Ocupada
-                          </Badge>
-                        )}
                       </div>
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground mt-1">
+                Atenção: Uma loja pode receber múltiplos promotores de marcas diferentes.
+              </p>
             </div>
           </div>
 
@@ -354,7 +357,7 @@ export default function CheckIn() {
           <Button
             className="w-full h-12 text-base font-semibold"
             onClick={handleCheckIn}
-            disabled={!selectedPromotorId || !selectedLojaId || actionLoading}
+            disabled={!selectedPromotorId || !selectedLojaId || actionLoading || promotorTemVisitaAtiva(selectedPromotorId)}
           >
             {actionLoading ? (
               <div className="flex items-center gap-2">
@@ -368,7 +371,7 @@ export default function CheckIn() {
         </CardContent>
       </Card>
 
-      {/* Lista de Visitas Ativas */}
+      {/* Lista de Visitas Ativas - Agrupada por Loja */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -376,7 +379,7 @@ export default function CheckIn() {
             Visitas em Andamento Hoje
           </CardTitle>
           <CardDescription>
-            {visitasAtivas.length} visita(s) ativa(s) no momento
+            {visitasAtivas.length} promotor(es) em visita no momento
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -385,46 +388,59 @@ export default function CheckIn() {
               Nenhuma visita ativa no momento.
             </div>
           ) : (
-            <div className="space-y-3">
-              {visitasAtivas.map((visita) => (
-                <div
-                  key={visita.id}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border rounded-lg hover:bg-muted/50 gap-3"
-                >
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Badge variant="default" className="bg-emerald-500">
-                        Em andamento
-                      </Badge>
-                      <span className="font-medium">{visita.promotor_nome}</span>
-                      <span className="text-muted-foreground">→</span>
-                      <span>{visita.loja_nome}</span>
-                      <Badge variant="outline" className="text-xs">
-                        {visita.loja_cod}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-                      <div className="flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        <span>Início: {formatTime(visita.check_in)}</span>
-                      </div>
-                      {visita.observacoes && (
-                        <div className="flex items-center gap-1">
-                          <span className="text-xs">📝 {visita.observacoes}</span>
-                        </div>
-                      )}
-                    </div>
+            <div className="space-y-6">
+              {Object.entries(visitasPorLoja).map(([lojaId, lojaData]) => (
+                <div key={lojaId} className="border rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-3 pb-2 border-b">
+                    <Store className="h-4 w-4 text-primary" />
+                    <span className="font-semibold">{lojaData.loja_nome}</span>
+                    <Badge variant="outline" className="text-xs">
+                      {lojaData.loja_cod}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {lojaData.promotores.length} promotor(es)
+                    </span>
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleCheckOut(visita.id, visita.promotor_nome || '', visita.loja_nome || '')}
-                    className="text-red-500 hover:text-red-700 hover:bg-red-50 border-red-200"
-                    disabled={actionLoading}
-                  >
-                    <XCircle className="h-4 w-4 mr-1" />
-                    Finalizar
-                  </Button>
+                  <div className="space-y-2">
+                    {lojaData.promotores.map((visita) => (
+                      <div
+                        key={visita.id}
+                        className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-muted/30 rounded-lg gap-2"
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <User className="h-3 w-3 text-muted-foreground" />
+                            <span className="font-medium">{visita.promotor_nome}</span>
+                            {visita.promotor_marca && (
+                              <Badge variant="secondary" className="text-xs">
+                                <Package className="h-3 w-3 mr-1" />
+                                {visita.promotor_marca}
+                              </Badge>
+                            )}
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <Clock className="h-3 w-3" />
+                              <span>Início: {formatTime(visita.check_in)}</span>
+                            </div>
+                          </div>
+                          {visita.observacoes && (
+                            <div className="text-xs text-muted-foreground mt-1 ml-5">
+                              📝 {visita.observacoes}
+                            </div>
+                          )}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleCheckOut(visita.id, visita.promotor_nome || '', visita.loja_nome || '')}
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50 border-red-200"
+                          disabled={actionLoading}
+                        >
+                          <XCircle className="h-4 w-4 mr-1" />
+                          Finalizar
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
@@ -433,7 +449,20 @@ export default function CheckIn() {
       </Card>
 
       {/* Resumo rápido */}
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Promotores em Visita</p>
+                <p className="text-2xl font-bold text-yellow-600">
+                  {visitasAtivas.length}
+                </p>
+              </div>
+              <User className="h-8 w-8 text-muted-foreground" />
+            </div>
+          </CardContent>
+        </Card>
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
@@ -451,9 +480,9 @@ export default function CheckIn() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Lojas Disponíveis</p>
+                <p className="text-sm text-muted-foreground">Lojas com Visita</p>
                 <p className="text-2xl font-bold text-blue-600">
-                  {lojas.filter(l => !lojaTemVisitaAtiva(l.id)).length}
+                  {Object.keys(visitasPorLoja).length}
                 </p>
               </div>
               <Store className="h-8 w-8 text-muted-foreground" />
