@@ -57,57 +57,94 @@ export default function CheckIn() {
   const loadData = async () => {
     try {
       const hoje = new Date().toISOString().split('T')[0]
+      console.log('📅 Data de hoje:', hoje)
       
-      // Buscar promotores ativos
-      const { data: promotoresData, error: promotoresError } = await supabase
-        .from('promotores')
-        .select('id, promotor_nome, marca_produto, fabricante_produto, status')
-        .order('promotor_nome')
-      
-      if (promotoresError) throw promotoresError
-      setPromotores(promotoresData || [])
+      // 1. Buscar promotores
+      let promotoresData = []
+      try {
+        console.log('🔍 Buscando promotores...')
+        const { data, error } = await supabase
+          .from('promotores')
+          .select('id, promotor_nome, marca_produto, fabricante_produto, status')
+          .order('promotor_nome')
+        
+        if (error) throw error
+        promotoresData = data || []
+        console.log('✅ Promotores carregados:', promotoresData.length)
+      } catch (err) {
+        console.error('❌ Erro ao carregar promotores:', err)
+      }
+      setPromotores(promotoresData)
 
-      // Buscar lojas
-      const { data: lojasData, error: lojasError } = await supabase
-        .from('lojas')
-        .select('id, cod_loja, nome_loja, endereco')
-        .order('nome_loja')
-      
-      if (lojasError) throw lojasError
-      setLojas(lojasData || [])
+      // 2. Buscar lojas
+      let lojasData = []
+      try {
+        console.log('🔍 Buscando lojas...')
+        const { data, error } = await supabase
+          .from('lojas')
+          .select('id, cod_loja, nome_loja, endereco')
+          .order('nome_loja')
+        
+        if (error) throw error
+        lojasData = data || []
+        console.log('✅ Lojas carregadas:', lojasData.length)
+      } catch (err) {
+        console.error('❌ Erro ao carregar lojas:', err)
+      }
+      setLojas(lojasData)
 
-      // Buscar visitas ativas de hoje
-      const visitasData = await getActiveVisitsByDay(hoje)
+      // 3. Buscar visitas ativas de hoje
+      let visitasData = []
+      try {
+        console.log('🔍 Buscando visitas ativas...')
+        visitasData = await getActiveVisitsByDay(hoje)
+        console.log('✅ Visitas ativas encontradas:', visitasData.length)
+      } catch (err) {
+        console.error('❌ Erro ao carregar visitas:', err)
+        visitasData = []
+      }
       
-      // Buscar nomes dos promotores e lojas para as visitas ativas
+      // 4. Buscar nomes dos promotores e lojas para as visitas ativas
       const visitasComNomes = await Promise.all(
         (visitasData || []).map(async (visita) => {
-          const { data: promotor } = await supabase
-            .from('promotores')
-            .select('promotor_nome, marca_produto')
-            .eq('id', visita.promotor_id)
-            .single()
-          
-          const { data: loja } = await supabase
-            .from('lojas')
-            .select('nome_loja, cod_loja')
-            .eq('id', visita.loja_id)
-            .single()
-          
-          return {
-            ...visita,
-            promotor_nome: promotor?.promotor_nome || 'Desconhecido',
-            promotor_marca: promotor?.marca_produto || '',
-            loja_nome: loja?.nome_loja || 'Desconhecida',
-            loja_cod: loja?.cod_loja || ''
+          try {
+            const { data: promotor } = await supabase
+              .from('promotores')
+              .select('promotor_nome, marca_produto')
+              .eq('id', visita.promotor_id)
+              .single()
+            
+            const { data: loja } = await supabase
+              .from('lojas')
+              .select('nome_loja, cod_loja')
+              .eq('id', visita.loja_id)
+              .single()
+            
+            return {
+              ...visita,
+              promotor_nome: promotor?.promotor_nome || 'Desconhecido',
+              promotor_marca: promotor?.marca_produto || '',
+              loja_nome: loja?.nome_loja || 'Desconhecida',
+              loja_cod: loja?.cod_loja || ''
+            }
+          } catch (err) {
+            console.error('Erro ao buscar dados da visita:', err)
+            return {
+              ...visita,
+              promotor_nome: 'Desconhecido',
+              promotor_marca: '',
+              loja_nome: 'Desconhecida',
+              loja_cod: ''
+            }
           }
         })
       )
       
       setVisitasAtivas(visitasComNomes)
+      console.log('✅ Dados carregados com sucesso!')
       
     } catch (error) {
-      console.error('Erro ao carregar dados:', error)
+      console.error('❌ ERRO GERAL:', error)
       toast({ 
         variant: 'destructive', 
         title: 'Erro ao carregar dados',
@@ -122,12 +159,10 @@ export default function CheckIn() {
     loadData()
   }, [])
 
-  // ✅ APENAS esta validação: promotor não pode estar em duas lojas
+  // Verificar se promotor já tem visita ativa hoje
   const promotorTemVisitaAtiva = (promotorId: string) => {
     return visitasAtivas.some(v => v.promotor_id === promotorId)
   }
-
-  // ❌ NÃO tem validação de loja ocupada - pode ter múltiplos promotores!
 
   const handleCheckIn = async () => {
     if (!selectedPromotorId || !selectedLojaId) {
@@ -139,7 +174,6 @@ export default function CheckIn() {
       return
     }
 
-    // Verificar se promotor já está em visita ativa
     if (promotorTemVisitaAtiva(selectedPromotorId)) {
       toast({ 
         title: 'Promotor já está em visita', 
