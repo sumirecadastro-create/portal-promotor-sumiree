@@ -65,7 +65,7 @@ export default function CheckIn() {
         console.log('🔍 Buscando promotores...')
         const { data, error } = await supabase
           .from('promotores')
-          .select('id, promotor_nome, marca_produto, fabricante_produto, status')
+          .select('id, promotor_nome, marca_produto, status')
           .order('promotor_nome')
         
         if (error) throw error
