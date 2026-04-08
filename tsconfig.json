@@ -1,4 +1,3 @@
-/* Typescript config for the project: https://www.typescriptlang.org/tsconfig/ */
 {
   "files": [],
   "references": [
