@@ -120,8 +120,7 @@ export default function Index() {
         </Card>
       </div>
 
-      {/* Calendário de Campanhas */}
-      <CalendarioCampanhas />
+     
     </div>
   )
 }
