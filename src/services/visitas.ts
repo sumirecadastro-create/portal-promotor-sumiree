@@ -69,3 +69,13 @@ export async function getAllVisitas(): Promise<Visita[]> {
   if (error) throw error
   return data || []
 }
+
+// 👇 ADICIONE ESTA FUNÇÃO NO FINAL 👇
+export async function testConnection() {
+  console.log('Testando conexão com Supabase...')
+  const { data, error } = await supabase
+    .from('visitas')
+    .select('count')
+  console.log('Resultado:', { data, error })
+  return { data, error }
+}
