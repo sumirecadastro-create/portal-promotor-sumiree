@@ -6,8 +6,7 @@ import { useToast } from '@/hooks/use-toast'
 import { createVisit, updateVisit, getActiveVisitsByDay, Visita } from '@/services/visitas'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/use-auth'
-import { MapPin, CheckCircle2, User, Store, Clock, Calendar, XCircle, Package } from 'lucide-react'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { MapPin, User, Store, Clock, Calendar, XCircle, Package } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import {
   Select,
@@ -63,13 +62,12 @@ export default function CheckIn() {
       const { data: promotoresData, error: promotoresError } = await supabase
         .from('promotores')
         .select('id, promotor_nome, marca_produto, fabricante_produto, status')
-        .eq('status', 'ativo')
         .order('promotor_nome')
       
       if (promotoresError) throw promotoresError
       setPromotores(promotoresData || [])
 
-      // Buscar lojas ativas
+      // Buscar lojas
       const { data: lojasData, error: lojasError } = await supabase
         .from('lojas')
         .select('id, cod_loja, nome_loja, endereco')
@@ -124,12 +122,12 @@ export default function CheckIn() {
     loadData()
   }, [])
 
-  // Verificar se promotor já tem visita ativa hoje (NÃO pode estar em duas lojas)
+  // ✅ APENAS esta validação: promotor não pode estar em duas lojas
   const promotorTemVisitaAtiva = (promotorId: string) => {
     return visitasAtivas.some(v => v.promotor_id === promotorId)
   }
 
-  // NÃO verificar se loja tem visita ativa - pode ter múltiplos promotores!
+  // ❌ NÃO tem validação de loja ocupada - pode ter múltiplos promotores!
 
   const handleCheckIn = async () => {
     if (!selectedPromotorId || !selectedLojaId) {
@@ -141,7 +139,7 @@ export default function CheckIn() {
       return
     }
 
-    // Verificar se promotor já está em visita ativa (impedir duplicidade do mesmo promotor)
+    // Verificar se promotor já está em visita ativa
     if (promotorTemVisitaAtiva(selectedPromotorId)) {
       toast({ 
         title: 'Promotor já está em visita', 
@@ -161,10 +159,8 @@ export default function CheckIn() {
         observacoes: observacoes || null,
       })
       
-      // Recarregar dados para mostrar a nova visita
       await loadData()
       
-      // Limpar formulário
       setSelectedPromotorId('')
       setSelectedLojaId('')
       setObservacoes('')
@@ -227,7 +223,7 @@ export default function CheckIn() {
     day: 'numeric'
   })
 
-  // Agrupar visitas por loja para exibição
+  // Agrupar visitas por loja
   const visitasPorLoja = visitasAtivas.reduce((acc, visita) => {
     const lojaId = visita.loja_id
     if (!acc[lojaId]) {
@@ -311,11 +307,6 @@ export default function CheckIn() {
                   ))}
                 </SelectContent>
               </Select>
-              {selectedPromotorId && promotorTemVisitaAtiva(selectedPromotorId) && (
-                <p className="text-xs text-red-500 mt-1">
-                  Este promotor já está em visita hoje. Finalize a visita atual primeiro.
-                </p>
-              )}
             </div>
 
             <div className="space-y-2">
@@ -337,8 +328,8 @@ export default function CheckIn() {
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground mt-1">
-                Atenção: Uma loja pode receber múltiplos promotores de marcas diferentes.
+              <p className="text-xs text-muted-foreground">
+                Uma loja pode receber múltiplos promotores de marcas diferentes.
               </p>
             </div>
           </div>
