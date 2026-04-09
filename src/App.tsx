@@ -11,6 +11,7 @@ import PromotorDetail from './pages/PromotorDetail'
 import CheckIn from './pages/CheckIn'
 import Categorias from './pages/Categorias'
 import Marcas from './pages/Marcas'
+import Acoes from './pages/Acoes'
 import Relatorios from './pages/Relatorios'
 import Campanhas from './pages/Campanhas' 
 import NotFound from './pages/NotFound'
@@ -36,6 +37,7 @@ const App = () => (
               <Route path="/check-in" element={<CheckIn />} />
               <Route path="/categorias" element={<Categorias />} />
               <Route path="/marcas" element={<Marcas />} />
+              <Route path="/acoes" element={<Acoes />} />
               <Route path="/relatorios" element={<Relatorios />} />
               <Route path="/campanhas" element={<Campanhas />} />
             </Route>
