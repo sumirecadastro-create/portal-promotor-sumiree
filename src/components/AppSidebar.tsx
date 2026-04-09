@@ -10,6 +10,7 @@ import {
   Settings,
   LogOut,
   User,
+  Calendar,
 } from 'lucide-react'
 import {
   Sidebar,
@@ -32,6 +33,7 @@ const allItems = [
   { title: 'Check-in (Operação)', url: '/check-in', icon: MapPin },
   { title: 'Categorias', url: '/categorias', icon: Tags },
   { title: 'Marcas', url: '/marcas', icon: Bookmark },
+  { title: 'Campanhas', url: '/campanhas', icon: Calendar },
   { title: 'Relatórios', url: '/relatorios', icon: BarChart3 },
 ]
 
