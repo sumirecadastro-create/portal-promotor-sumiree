@@ -12,6 +12,7 @@ import CheckIn from './pages/CheckIn'
 import Categorias from './pages/Categorias'
 import Marcas from './pages/Marcas'
 import Relatorios from './pages/Relatorios'
+import Campanhas from './pages/Campanhas' 
 import NotFound from './pages/NotFound'
 import Login from './pages/Login'
 import { AuthProvider } from './hooks/use-auth'
@@ -36,6 +37,7 @@ const App = () => (
               <Route path="/categorias" element={<Categorias />} />
               <Route path="/marcas" element={<Marcas />} />
               <Route path="/relatorios" element={<Relatorios />} />
+              <Route path="/campanhas" element={<Campanhas />} />
             </Route>
           </Route>
           <Route path="*" element={<NotFound />} />
