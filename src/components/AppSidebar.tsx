@@ -11,6 +11,7 @@ import {
   LogOut,
   User,
   Calendar,
+  Target,
 } from 'lucide-react'
 import {
   Sidebar,
@@ -23,7 +24,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarFooter,
-  Target,
 } from '@/components/ui/sidebar'
 import { useAuth } from '@/hooks/use-auth'
 
