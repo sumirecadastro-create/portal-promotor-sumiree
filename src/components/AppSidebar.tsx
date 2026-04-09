@@ -11,7 +11,7 @@ import {
   LogOut,
   User,
   Calendar,
-  Target,
+  Target,  // ← Mover Target para AQUI (vem do lucide-react)
 } from 'lucide-react'
 import {
   Sidebar,
@@ -24,6 +24,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarFooter,
+  // Target,  // ← REMOVER DAQUI (não existe no sidebar)
 } from '@/components/ui/sidebar'
 import { useAuth } from '@/hooks/use-auth'
 
@@ -34,7 +35,7 @@ const allItems = [
   { title: 'Check-in (Operação)', url: '/check-in', icon: MapPin },
   { title: 'Categorias', url: '/categorias', icon: Tags },
   { title: 'Marcas', url: '/marcas', icon: Bookmark },
-  { title: 'Ações', url: '/acoes', icon: Target },
+  { title: 'Ações', url: '/acoes', icon: Target },  // ← Agora Target existe
   { title: 'Campanhas', url: '/campanhas', icon: Calendar },
   { title: 'Relatórios', url: '/relatorios', icon: BarChart3 },
 ]
@@ -43,13 +44,12 @@ export function AppSidebar() {
   const location = useLocation()
   const { user, signOut } = useAuth()
 
-  // Forçar admin para mostrar todos os itens enquanto debug
   const role = 'admin'
 
   const items = allItems.filter((item) => {
     if (role === 'admin') return true
     if (role === 'gerente')
-      return ['Dashboard', 'Lojas', 'Promotores', 'Relatórios'].includes(item.title)
+      return ['Dashboard', 'Lojas', 'Promotores', 'Ações', 'Campanhas', 'Relatórios'].includes(item.title)
     if (role === 'promotor') return ['Dashboard', 'Check-in (Operação)'].includes(item.title)
     return false
   })
