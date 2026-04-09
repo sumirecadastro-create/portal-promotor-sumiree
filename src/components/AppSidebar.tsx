@@ -23,6 +23,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarFooter,
+  Target,
 } from '@/components/ui/sidebar'
 import { useAuth } from '@/hooks/use-auth'
 
@@ -33,6 +34,7 @@ const allItems = [
   { title: 'Check-in (Operação)', url: '/check-in', icon: MapPin },
   { title: 'Categorias', url: '/categorias', icon: Tags },
   { title: 'Marcas', url: '/marcas', icon: Bookmark },
+  { title: 'Ações', url: '/acoes', icon: Target },
   { title: 'Campanhas', url: '/campanhas', icon: Calendar },
   { title: 'Relatórios', url: '/relatorios', icon: BarChart3 },
 ]
