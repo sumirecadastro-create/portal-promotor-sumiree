@@ -14,7 +14,6 @@ import {
   X,
   Save,
   Calendar as CalendarIcon,
-  MapPin,
   UserPlus
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -37,7 +36,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Checkbox } from '@/components/ui/checkbox'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 
@@ -74,9 +72,8 @@ export default function Campanhas() {
   const [showFilterModal, setShowFilterModal] = useState(false)
   const [showNovaCampanhaModal, setShowNovaCampanhaModal] = useState(false)
   
-  // Estados dos filtros
+  // Estado dos filtros
   const [filtroStatus, setFiltroStatus] = useState<string>('todos')
-  const [filtroRegiao, setFiltroRegiao] = useState<string>('todas')
   
   // Estado da nova campanha
   const [novaCampanha, setNovaCampanha] = useState({
@@ -160,17 +157,11 @@ export default function Campanhas() {
     carregarDados()
   }, [mesAtual, filtroStatus])
 
-  // Filtrar lojas
-  const lojasFiltradas = lojas.filter(loja => {
-    const matchTexto = loja.nome_loja.toLowerCase().includes(lojaFiltro.toLowerCase()) ||
-      (loja.codigo && loja.codigo.toLowerCase().includes(lojaFiltro.toLowerCase()))
-    
-    // Filtro de região (mock - você pode adicionar campo região na tabela lojas)
-    const matchRegiao = filtroRegiao === 'todas' || true
-    // TODO: Implementar filtro de região quando tiver o campo na tabela
-    
-    return matchTexto && matchRegiao
-  })
+  // Filtrar lojas pelo nome/código apenas
+  const lojasFiltradas = lojas.filter(loja =>
+    loja.nome_loja.toLowerCase().includes(lojaFiltro.toLowerCase()) ||
+    (loja.codigo && loja.codigo.toLowerCase().includes(lojaFiltro.toLowerCase()))
+  )
 
   function getCampanhasDoDia(lojaId: string, dia: number) {
     const dataAtual = new Date(ano, mes, dia)
@@ -263,12 +254,26 @@ export default function Campanhas() {
 
   const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
+  // Contar filtros ativos
+  const filtrosAtivos = (filtroStatus !== 'todos') ? 1 : 0
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" style={{ color: PRIMARY_COLOR }} />
           <p className="text-gray-500">Carregando calendário...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <div className="text-red-500 mb-4">⚠️ {error}</div>
+          <Button onClick={() => carregarDados()}>Tentar novamente</Button>
         </div>
       </div>
     )
@@ -298,9 +303,9 @@ export default function Campanhas() {
             >
               <Filter className="h-4 w-4 mr-2" />
               Filtrar
-              {(filtroStatus !== 'todos' || filtroRegiao !== 'todas') && (
+              {filtrosAtivos > 0 && (
                 <Badge className="ml-2 bg-white text-pink-600" variant="secondary">
-                  Ativo
+                  {filtrosAtivos}
                 </Badge>
               )}
             </Button>
@@ -362,12 +367,19 @@ export default function Campanhas() {
           <div className="w-5 h-3 bg-yellow-100 border border-yellow-300 rounded"></div>
           <span>Hoje</span>
         </div>
-        <div className="flex items-center gap-2 ml-4 text-gray-500 text-xs">
+        {filtroStatus !== 'todos' && (
+          <div className="flex items-center gap-2 ml-4">
+            <Badge variant="outline" className="text-xs">
+              Status: {filtroStatus === 'ativa' ? 'Ativa' : filtroStatus === 'pendente' ? 'Pendente' : 'Concluída'}
+            </Badge>
+          </div>
+        )}
+        <div className="flex items-center gap-2 ml-auto text-gray-500 text-xs">
           <span>Total: {lojasFiltradas.length} lojas exibidas</span>
         </div>
       </div>
 
-      {/* Calendário - mantém o mesmo código anterior */}
+      {/* Calendário */}
       <Card className="overflow-hidden shadow-lg border-0">
         <CardContent className="p-0 overflow-x-auto">
           <div className="min-w-[1200px]">
@@ -463,13 +475,13 @@ export default function Campanhas() {
         </CardContent>
       </Card>
 
-      {/* Modal de Filtro */}
+      {/* Modal de Filtro - SEM REGIÃO */}
       <Dialog open={showFilterModal} onOpenChange={setShowFilterModal}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Filtrar Campanhas</DialogTitle>
             <DialogDescription>
-              Ajuste os filtros para visualizar as campanhas desejadas.
+              Filtre as campanhas por status.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
@@ -480,26 +492,10 @@ export default function Campanhas() {
                   <SelectValue placeholder="Selecione um status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
+                  <SelectItem value="todos">Todos os status</SelectItem>
                   <SelectItem value="ativa">Ativa</SelectItem>
                   <SelectItem value="pendente">Pendente</SelectItem>
                   <SelectItem value="concluida">Concluída</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right">Região</Label>
-              <Select value={filtroRegiao} onValueChange={setFiltroRegiao}>
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="Selecione uma região" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todas">Todas</SelectItem>
-                  <SelectItem value="norte">Norte</SelectItem>
-                  <SelectItem value="sul">Sul</SelectItem>
-                  <SelectItem value="leste">Leste</SelectItem>
-                  <SelectItem value="oeste">Oeste</SelectItem>
-                  <SelectItem value="centro">Centro</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -507,7 +503,6 @@ export default function Campanhas() {
           <DialogFooter>
             <Button variant="outline" onClick={() => {
               setFiltroStatus('todos')
-              setFiltroRegiao('todas')
             }}>
               Limpar filtros
             </Button>
