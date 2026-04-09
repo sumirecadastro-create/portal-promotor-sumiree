@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { 
   Calendar, 
   ChevronLeft, 
@@ -9,111 +9,45 @@ import {
   CheckCircle2, 
   Clock,
   Store,
-  Users
+  Users,
+  Loader2
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { supabase } from '@/lib/supabase'
 
-// Lista completa de lojas
-const MOCK_LOJAS = [
-  { id: '1', codigo: 'L01', nome: 'Avaré 1' },
-  { id: '3', codigo: 'L03', nome: 'Marília 1' },
-  { id: '4', codigo: 'L04', nome: 'Araçatuba' },
-  { id: '5', codigo: 'L05', nome: 'Pres. Prudente' },
-  { id: '7', codigo: 'L07', nome: 'Marilia 2' },
-  { id: '8', codigo: 'L08', nome: 'Bauru 1' },
-  { id: '9', codigo: 'L09', nome: 'Assis' },
-  { id: '10', codigo: 'L10', nome: 'Andradina' },
-  { id: '11', codigo: 'L11', nome: 'Birigui' },
-  { id: '12', codigo: 'L12', nome: 'Itapeva' },
-  { id: '13', codigo: 'L13', nome: 'Bauru 2 (shopping)' },
-  { id: '14', codigo: 'L14', nome: 'Ourinhos' },
-  { id: '25', codigo: 'L25', nome: 'Santa Cruz' },
-  { id: '26', codigo: 'L26', nome: 'Republica' },
-  { id: '29', codigo: 'L29', nome: 'Avaré 2' },
-  { id: '30', codigo: 'L30', nome: 'Aricanduva Shopping' },
-  { id: '32', codigo: 'L32', nome: 'Teodoro' },
-  { id: '33', codigo: 'L33', nome: 'Itaim' },
-  { id: '34', codigo: 'L34', nome: 'Higienopolis' },
-  { id: '35', codigo: 'L35', nome: 'Penha' },
-  { id: '40', codigo: 'L40', nome: 'Bragança 1' },
-  { id: '41', codigo: 'L41', nome: 'Bragança 2' },
-  { id: '42', codigo: 'L42', nome: 'Barueri 2' },
-  { id: '43', codigo: 'L43', nome: 'Barueri 1' },
-  { id: '44', codigo: 'L44', nome: 'Perus' },
-  { id: '45', codigo: 'L45', nome: 'Cruzeiro' },
-  { id: '46', codigo: 'L46', nome: 'Guaratinguetá 1' },
-  { id: '47', codigo: 'L47', nome: 'Guaratinguetá 2 (Shopping)' },
-  { id: '48', codigo: 'L48', nome: 'Lorena' },
-  { id: '49', codigo: 'L49', nome: 'Pindamonhangada' },
-  { id: '50', codigo: 'L50', nome: 'Taubaté 1' },
-  { id: '51', codigo: 'L51', nome: 'Taubaté 2' },
-  { id: '52', codigo: 'L52', nome: 'Cotia' },
-  { id: '54', codigo: 'L54', nome: 'São Roque' },
-  { id: '55', codigo: 'L55', nome: 'Botucatu 1' },
-  { id: '56', codigo: 'L56', nome: 'Botucatu 2' },
-  { id: '57', codigo: 'L57', nome: 'Jau' },
-  { id: '58', codigo: 'L58', nome: 'Sorocaba' },
-  { id: '60', codigo: 'L60', nome: 'São Carlos 1 (Centro)' },
-  { id: '61', codigo: 'L61', nome: 'São Carlos 2 (Sallum)' },
-  { id: '62', codigo: 'L62', nome: 'São Carlos 3 (Shopping)' },
-  { id: '63', codigo: 'L63', nome: 'Ribeirao Preto (Shopping)' },
-  { id: '64', codigo: 'L64', nome: 'Ipiranga' },
-  { id: '66', codigo: 'L66', nome: 'Piedade' },
-  { id: '67', codigo: 'L67', nome: 'Francisco Morato' },
-  { id: '68', codigo: 'L68', nome: 'Marília 3' },
-  { id: '70', codigo: 'L70', nome: 'Votorantim' },
-  { id: '71', codigo: 'L71', nome: 'Porto Ferreira' },
-  { id: '72', codigo: 'L72', nome: 'Bragança Shopping' },
-  { id: '77', codigo: 'L77', nome: 'São José Centro' },
-  { id: '78', codigo: 'L78', nome: 'São José Satélite' },
-  { id: '79', codigo: 'L79', nome: 'São José América (shopping)' },
-  { id: '80', codigo: 'L80', nome: 'Caçapava' },
-  { id: '81', codigo: 'L81', nome: 'Cruzeiro 2' },
-  { id: '83', codigo: 'L83', nome: 'Jandira' },
-  { id: '84', codigo: 'L84', nome: 'Prudente Shopping' },
-]
+// Interface para Loja (igual à tabela do Supabase)
+interface Loja {
+  id: string
+  nome_loja: string
+  codigo?: string
+  created_at?: string
+}
 
-// Dados mockados de campanhas (exemplo)
-const MOCK_CAMPANHAS = [
-  {
-    id: '1',
-    nome: 'Promoção Haskell',
-    loja_id: '1',
-    data_inicio: '2026-04-01',
-    data_fim: '2026-04-15',
-    promotores: ['Haskell', 'Bauny', 'Vult'],
-    status: 'ativa',
-  },
-  {
-    id: '2',
-    nome: 'Campanha Verão',
-    loja_id: '3',
-    data_inicio: '2026-04-05',
-    data_fim: '2026-04-20',
-    promotores: ['Ana', 'Carlos'],
-    status: 'ativa',
-  },
-  {
-    id: '3',
-    nome: 'Liquidação',
-    loja_id: '4',
-    data_inicio: '2026-04-10',
-    data_fim: '2026-04-25',
-    promotores: ['Mariana', 'José', 'Paulo'],
-    status: 'pendente',
-  },
-]
+// Interface para Campanha
+interface Campanha {
+  id: string
+  nome: string
+  loja_id: string
+  data_inicio: string
+  data_fim: string
+  promotores: string[]
+  status: string
+  tipo?: string
+}
 
 const PRIMARY_COLOR = '#FF1686'
 
 export default function Campanhas() {
-  const [mesAtual, setMesAtual] = useState(new Date(2026, 3, 1))
+  const [mesAtual, setMesAtual] = useState(new Date())
   const [lojaFiltro, setLojaFiltro] = useState('')
-  const [campanhas] = useState(MOCK_CAMPANHAS)
+  const [lojas, setLojas] = useState<Loja[]>([])
+  const [campanhas, setCampanhas] = useState<Campanha[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const ano = mesAtual.getFullYear()
   const mes = mesAtual.getMonth()
@@ -123,21 +57,81 @@ export default function Campanhas() {
   const hoje = new Date()
   hoje.setHours(0, 0, 0, 0)
 
-  const lojasFiltradas = MOCK_LOJAS.filter(loja =>
-    loja.codigo.toLowerCase().includes(lojaFiltro.toLowerCase()) ||
-    loja.nome.toLowerCase().includes(lojaFiltro.toLowerCase())
+  // Buscar lojas do Supabase
+  async function carregarLojas() {
+    try {
+      const { data, error } = await supabase
+        .from('lojas')
+        .select('*')
+        .order('nome_loja', { ascending: true })
+      
+      if (error) throw error
+      
+      // Formatar os dados das lojas
+      const lojasFormatadas = (data || []).map((loja: any) => ({
+        id: loja.id,
+        nome_loja: loja.nome_loja,
+        codigo: loja.codigo || loja.nome_loja.substring(0, 8) // fallback
+      }))
+      
+      setLojas(lojasFormatadas)
+    } catch (err) {
+      console.error('Erro ao carregar lojas:', err)
+      setError('Não foi possível carregar as lojas')
+    }
+  }
+
+  // Buscar campanhas do Supabase
+  async function carregarCampanhas() {
+    try {
+      // Buscar campanhas do mês atual
+      const startDate = new Date(ano, mes, 1).toISOString()
+      const endDate = new Date(ano, mes + 1, 0).toISOString()
+      
+      const { data, error } = await supabase
+        .from('campanhas')
+        .select('*')
+        .gte('data_inicio', startDate)
+        .lte('data_fim', endDate)
+      
+      if (error) throw error
+      
+      setCampanhas(data || [])
+    } catch (err) {
+      console.error('Erro ao carregar campanhas:', err)
+      // Não mostra erro para campanhas, apenas deixa vazio
+    }
+  }
+
+  // Carregar todos os dados
+  async function carregarDados() {
+    setLoading(true)
+    setError(null)
+    await Promise.all([carregarLojas(), carregarCampanhas()])
+    setLoading(false)
+  }
+
+  useEffect(() => {
+    carregarDados()
+  }, [mesAtual])
+
+  // Filtrar lojas pelo nome ou código
+  const lojasFiltradas = lojas.filter(loja =>
+    loja.nome_loja.toLowerCase().includes(lojaFiltro.toLowerCase()) ||
+    (loja.codigo && loja.codigo.toLowerCase().includes(lojaFiltro.toLowerCase()))
   )
 
+  // Verificar se uma loja tem campanha em um dia específico
   function getCampanhasDoDia(lojaId: string, dia: number) {
     const dataAtual = new Date(ano, mes, dia)
     dataAtual.setHours(0, 0, 0, 0)
     
-    return campanhas.filter(c => {
-      const inicio = new Date(c.data_inicio)
-      const fim = new Date(c.data_fim)
+    return campanhas.filter(campanha => {
+      const inicio = new Date(campanha.data_inicio)
+      const fim = new Date(campanha.data_fim)
       inicio.setHours(0, 0, 0, 0)
       fim.setHours(23, 59, 59, 999)
-      return c.loja_id === lojaId && dataAtual >= inicio && dataAtual <= fim
+      return campanha.loja_id === lojaId && dataAtual >= inicio && dataAtual <= fim
     })
   }
 
@@ -153,9 +147,31 @@ export default function Campanhas() {
 
   const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" style={{ color: PRIMARY_COLOR }} />
+          <p className="text-gray-500">Carregando calendário...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <div className="text-red-500 mb-4">⚠️ {error}</div>
+          <Button onClick={() => carregarDados()}>Tentar novamente</Button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
-      {/* Cabeçalho com cor principal */}
+      {/* Cabeçalho - igual ao anterior */}
       <div className="rounded-lg p-6 text-white" style={{ background: `linear-gradient(135deg, ${PRIMARY_COLOR} 0%, #cc1168 100%)` }}>
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
@@ -164,7 +180,7 @@ export default function Campanhas() {
               Calendário de Campanhas
             </h1>
             <p className="text-pink-100 text-sm mt-1">
-              Visualização rápida de todas as campanhas por loja
+              {lojas.length} lojas cadastradas • {campanhas.length} campanhas no período
             </p>
           </div>
           
@@ -225,6 +241,9 @@ export default function Campanhas() {
           <div className="w-5 h-3 bg-yellow-100 border border-yellow-300 rounded"></div>
           <span>Hoje</span>
         </div>
+        <div className="flex items-center gap-2 ml-4 text-gray-500 text-xs">
+          <span>Total: {lojasFiltradas.length} lojas exibidas</span>
+        </div>
       </div>
 
       {/* Calendário */}
@@ -256,16 +275,17 @@ export default function Campanhas() {
               })}
             </div>
 
-            {/* Linhas das lojas */}
+            {/* Linhas das lojas - AGORA VEM DO SUPABASE */}
             {lojasFiltradas.map((loja) => (
               <div key={loja.id} className="grid border-b hover:bg-gray-50 transition-colors"
                 style={{ gridTemplateColumns: `250px repeat(${dias.length}, 70px)` }}>
                 
-                {/* Info da loja */}
                 <div className="p-3 font-medium sticky left-0 bg-white z-10 border-r">
-                  <div className="font-bold text-gray-800">{loja.codigo}</div>
-                  <div className="text-xs text-gray-500 truncate" title={loja.nome}>
-                    {loja.nome}
+                  <div className="font-bold text-gray-800">
+                    {loja.codigo || loja.id.substring(0, 6)}
+                  </div>
+                  <div className="text-xs text-gray-500 truncate" title={loja.nome_loja}>
+                    {loja.nome_loja}
                   </div>
                 </div>
 
@@ -292,7 +312,7 @@ export default function Campanhas() {
                                                       campanha.status === 'pendente' ? '#f59e0b' : '#3b82f6'}`
                               }}
                             >
-                              {campanha.promotores.map((p, idx) => (
+                              {campanha.promotores?.map((p, idx) => (
                                 <div key={idx} className="truncate">
                                   {p}
                                 </div>
@@ -322,7 +342,7 @@ export default function Campanhas() {
         </CardContent>
       </Card>
 
-      {/* Resumo rápido com cor principal */}
+      {/* Resumo */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card className="text-white" style={{ background: `linear-gradient(135deg, ${PRIMARY_COLOR} 0%, #cc1168 100%)` }}>
           <CardContent className="p-4">
@@ -352,8 +372,8 @@ export default function Campanhas() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm opacity-90">Lojas com Campanha</p>
-                <p className="text-2xl font-bold">{new Set(campanhas.map(c => c.loja_id)).size}</p>
+                <p className="text-sm opacity-90">Lojas no Sistema</p>
+                <p className="text-2xl font-bold">{lojas.length}</p>
               </div>
               <Store className="h-8 w-8 opacity-80" />
             </div>
@@ -364,10 +384,10 @@ export default function Campanhas() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm opacity-90">Promotores Alocados</p>
-                <p className="text-2xl font-bold">{campanhas.reduce((acc, c) => acc + c.promotores.length, 0)}</p>
+                <p className="text-sm opacity-90">Total de Campanhas</p>
+                <p className="text-2xl font-bold">{campanhas.length}</p>
               </div>
-              <Users className="h-8 w-8 opacity-80" />
+              <Calendar className="h-8 w-8 opacity-80" />
             </div>
           </CardContent>
         </Card>
