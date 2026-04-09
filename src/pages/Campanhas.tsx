@@ -13,8 +13,8 @@ import {
   Loader2,
   X,
   Save,
-  Calendar as CalendarIcon,
-  UserPlus
+  Search,
+  Check
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -36,6 +36,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 
@@ -62,7 +75,7 @@ const PRIMARY_COLOR = '#FF1686'
 export default function Campanhas() {
   // Estados principais
   const [mesAtual, setMesAtual] = useState(new Date())
-  const [lojaFiltro, setLojaFiltro] = useState('')
+  const [lojaFiltroNome, setLojaFiltroNome] = useState('')
   const [lojas, setLojas] = useState<Loja[]>([])
   const [campanhas, setCampanhas] = useState<Campanha[]>([])
   const [loading, setLoading] = useState(true)
@@ -74,6 +87,8 @@ export default function Campanhas() {
   
   // Estado dos filtros
   const [filtroStatus, setFiltroStatus] = useState<string>('todos')
+  const [lojasSelecionadas, setLojasSelecionadas] = useState<string[]>([]) // IDs das lojas selecionadas
+  const [buscaLojaFiltro, setBuscaLojaFiltro] = useState('')
   
   // Estado da nova campanha
   const [novaCampanha, setNovaCampanha] = useState({
@@ -130,7 +145,6 @@ export default function Campanhas() {
         .gte('data_inicio', startDate)
         .lte('data_fim', endDate)
       
-      // Aplicar filtro de status
       if (filtroStatus !== 'todos') {
         query = query.eq('status', filtroStatus)
       }
@@ -145,7 +159,6 @@ export default function Campanhas() {
     }
   }
 
-  // Carregar todos os dados
   async function carregarDados() {
     setLoading(true)
     setError(null)
@@ -157,11 +170,17 @@ export default function Campanhas() {
     carregarDados()
   }, [mesAtual, filtroStatus])
 
-  // Filtrar lojas pelo nome/código apenas
-  const lojasFiltradas = lojas.filter(loja =>
-    loja.nome_loja.toLowerCase().includes(lojaFiltro.toLowerCase()) ||
-    (loja.codigo && loja.codigo.toLowerCase().includes(lojaFiltro.toLowerCase()))
-  )
+  // Filtrar lojas pelo nome (busca rápida) E pelas lojas selecionadas
+  const lojasFiltradas = lojas.filter(loja => {
+    // Filtro por nome (busca rápida)
+    const matchNome = loja.nome_loja.toLowerCase().includes(lojaFiltroNome.toLowerCase()) ||
+      (loja.codigo && loja.codigo.toLowerCase().includes(lojaFiltroNome.toLowerCase()))
+    
+    // Filtro por lojas selecionadas no modal
+    const matchSelecao = lojasSelecionadas.length === 0 || lojasSelecionadas.includes(loja.id)
+    
+    return matchNome && matchSelecao
+  })
 
   function getCampanhasDoDia(lojaId: string, dia: number) {
     const dataAtual = new Date(ano, mes, dia)
@@ -186,7 +205,23 @@ export default function Campanhas() {
     setMesAtual(new Date(ano, mes + delta, 1))
   }
 
-  // Função para criar nova campanha
+  // Funções para gerenciar lojas selecionadas
+  function toggleLojaSelecionada(lojaId: string) {
+    setLojasSelecionadas(prev =>
+      prev.includes(lojaId)
+        ? prev.filter(id => id !== lojaId)
+        : [...prev, lojaId]
+    )
+  }
+
+  function selecionarTodasLojas() {
+    if (lojasSelecionadas.length === lojas.length) {
+      setLojasSelecionadas([])
+    } else {
+      setLojasSelecionadas(lojas.map(l => l.id))
+    }
+  }
+
   async function criarNovaCampanha() {
     if (!novaCampanha.nome || !novaCampanha.loja_id || !novaCampanha.data_inicio || !novaCampanha.data_fim) {
       alert('Preencha todos os campos obrigatórios')
@@ -209,7 +244,6 @@ export default function Campanhas() {
 
       if (error) throw error
 
-      // Fechar modal e recarregar dados
       setShowNovaCampanhaModal(false)
       setNovaCampanha({
         nome: '',
@@ -231,7 +265,6 @@ export default function Campanhas() {
     }
   }
 
-  // Adicionar campo de promotor
   function adicionarPromotor() {
     setNovaCampanha({
       ...novaCampanha,
@@ -253,9 +286,8 @@ export default function Campanhas() {
   }
 
   const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
-
-  // Contar filtros ativos
-  const filtrosAtivos = (filtroStatus !== 'todos') ? 1 : 0
+  
+  const filtrosAtivos = (filtroStatus !== 'todos' ? 1 : 0) + (lojasSelecionadas.length > 0 ? 1 : 0)
 
   if (loading) {
     return (
@@ -263,17 +295,6 @@ export default function Campanhas() {
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" style={{ color: PRIMARY_COLOR }} />
           <p className="text-gray-500">Carregando calendário...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <div className="text-red-500 mb-4">⚠️ {error}</div>
-          <Button onClick={() => carregarDados()}>Tentar novamente</Button>
         </div>
       </div>
     )
@@ -340,9 +361,9 @@ export default function Campanhas() {
         </h2>
         <div className="w-64">
           <Input
-            placeholder="🔍 Filtrar loja por nome..."
-            value={lojaFiltro}
-            onChange={(e) => setLojaFiltro(e.target.value)}
+            placeholder="🔍 Buscar loja por nome..."
+            value={lojaFiltroNome}
+            onChange={(e) => setLojaFiltroNome(e.target.value)}
             className="border-gray-300 focus:border-pink-500 focus:ring-pink-500"
             style={{ '--tw-ring-color': PRIMARY_COLOR } as React.CSSProperties}
           />
@@ -374,8 +395,15 @@ export default function Campanhas() {
             </Badge>
           </div>
         )}
+        {lojasSelecionadas.length > 0 && (
+          <div className="flex items-center gap-2 ml-4">
+            <Badge variant="outline" className="text-xs">
+              {lojasSelecionadas.length} loja(s) selecionada(s)
+            </Badge>
+          </div>
+        )}
         <div className="flex items-center gap-2 ml-auto text-gray-500 text-xs">
-          <span>Total: {lojasFiltradas.length} lojas exibidas</span>
+          <span>Exibindo: {lojasFiltradas.length} de {lojas.length} lojas</span>
         </div>
       </div>
 
@@ -468,27 +496,28 @@ export default function Campanhas() {
               <div className="text-center py-20 text-gray-500">
                 <Store className="h-12 w-12 mx-auto mb-3 text-gray-300" />
                 <p>Nenhuma loja encontrada</p>
-                <p className="text-sm">Tente ajustar o filtro de busca</p>
+                <p className="text-sm">Tente ajustar os filtros ou a busca</p>
               </div>
             )}
           </div>
         </CardContent>
       </Card>
 
-      {/* Modal de Filtro - SEM REGIÃO */}
+      {/* Modal de Filtro - COM SELEÇÃO DE LOJAS */}
       <Dialog open={showFilterModal} onOpenChange={setShowFilterModal}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Filtrar Campanhas</DialogTitle>
             <DialogDescription>
-              Filtre as campanhas por status.
+              Selecione as lojas e status que deseja visualizar.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right">Status</Label>
+          <div className="grid gap-6 py-4">
+            {/* Filtro por Status */}
+            <div className="space-y-2">
+              <Label>Status da Campanha</Label>
               <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-                <SelectTrigger className="col-span-3">
+                <SelectTrigger>
                   <SelectValue placeholder="Selecione um status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -499,12 +528,91 @@ export default function Campanhas() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Filtro por Lojas */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Lojas para exibir</Label>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={selecionarTodasLojas}
+                  className="text-xs"
+                >
+                  {lojasSelecionadas.length === lojas.length ? 'Desmarcar todas' : 'Selecionar todas'}
+                </Button>
+              </div>
+              
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    className="w-full justify-between"
+                  >
+                    {lojasSelecionadas.length === 0
+                      ? "Todas as lojas"
+                      : `${lojasSelecionadas.length} loja(s) selecionada(s)`}
+                    <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[400px] p-0">
+                  <Command>
+                    <CommandInput placeholder="Buscar loja..." />
+                    <CommandList>
+                      <CommandEmpty>Nenhuma loja encontrada.</CommandEmpty>
+                      <CommandGroup>
+                        {lojas.map((loja) => (
+                          <CommandItem
+                            key={loja.id}
+                            value={loja.id}
+                            onSelect={() => toggleLojaSelecionada(loja.id)}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                lojasSelecionadas.includes(loja.id) ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            {loja.codigo} - {loja.nome_loja}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              
+              {/* Lista de lojas selecionadas */}
+              {lojasSelecionadas.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {lojasSelecionadas.slice(0, 5).map(lojaId => {
+                    const loja = lojas.find(l => l.id === lojaId)
+                    return (
+                      <Badge key={lojaId} variant="secondary" className="text-xs">
+                        {loja?.codigo}
+                        <X 
+                          className="ml-1 h-3 w-3 cursor-pointer" 
+                          onClick={() => toggleLojaSelecionada(lojaId)}
+                        />
+                      </Badge>
+                    )
+                  })}
+                  {lojasSelecionadas.length > 5 && (
+                    <Badge variant="secondary" className="text-xs">
+                      +{lojasSelecionadas.length - 5}
+                    </Badge>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => {
               setFiltroStatus('todos')
+              setLojasSelecionadas([])
             }}>
-              Limpar filtros
+              Limpar todos os filtros
             </Button>
             <Button onClick={() => setShowFilterModal(false)} style={{ background: PRIMARY_COLOR }}>
               Aplicar filtros
@@ -513,7 +621,7 @@ export default function Campanhas() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Nova Campanha */}
+      {/* Modal de Nova Campanha - mantém o mesmo */}
       <Dialog open={showNovaCampanhaModal} onOpenChange={setShowNovaCampanhaModal}>
         <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -613,7 +721,7 @@ export default function Campanhas() {
                   onClick={adicionarPromotor}
                   className="w-full"
                 >
-                  <UserPlus className="h-4 w-4 mr-2" />
+                  <Users className="h-4 w-4 mr-2" />
                   Adicionar promotor
                 </Button>
               </div>
