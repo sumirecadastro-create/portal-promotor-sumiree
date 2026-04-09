@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Calendar, ChevronLeft, ChevronRight, Filter, Plus } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 
-// Dados mockados para exemplo (depois substituir pelo Supabase)
+// Dados mockados
 const MOCK_LOJAS = [
   { id: '1', codigo: 'LJ 01', nome: 'AVARE 1' },
   { id: '3', codigo: 'LJ 03', nome: 'MARILIA 1' },
@@ -13,56 +13,8 @@ const MOCK_LOJAS = [
   { id: '5', codigo: 'LJ 05', nome: 'P. PRUDENTE' },
   { id: '7', codigo: 'LJ 07', nome: 'MARILIA 2' },
   { id: '8', codigo: 'LJ 08', nome: 'BAURU 1' },
-  { id: '9', codigo: 'LJ 09', nome: 'ASSIS' },
-  { id: '10', codigo: 'LJ 10', nome: 'ANDRADINA' },
-  { id: '11', codigo: 'LJ 11', nome: 'BIRIGUI' },
-  { id: '12', codigo: 'LJ 12', nome: 'ITAPEVA' },
-  { id: '13', codigo: 'LJ 13', nome: 'BAURU 2 SHOP' },
-  { id: '14', codigo: 'LJ 14', nome: 'OURINHOS' },
-  { id: '25', codigo: 'LJ 25', nome: 'SANTA CRUZ' },
-  { id: '26', codigo: 'LJ 26', nome: 'BARAO' },
-  { id: '29', codigo: 'LJ 29', nome: 'AVARE 2' },
-  { id: '30', codigo: 'LJ 30', nome: 'ARICANDUVA' },
-  { id: '32', codigo: 'LJ 32', nome: 'TEODORO' },
-  { id: '33', codigo: 'LJ 33', nome: 'ITAIM' },
-  { id: '34', codigo: 'LJ 34', nome: 'HIGIENOPOLIS' },
-  { id: '35', codigo: 'LJ 35', nome: 'PENHA' },
-  { id: '42', codigo: 'LJ 42', nome: 'BARUERI 2 OUT' },
-  { id: '43', codigo: 'LJ 43', nome: 'BARUERI 1' },
-  { id: '44', codigo: 'LJ 44', nome: 'PERUS' },
-  { id: '45', codigo: 'LJ 45', nome: 'CRUZEIRO 1' },
-  { id: '46', codigo: 'LJ 46', nome: 'GUARA 1 CENTRO' },
-  { id: '47', codigo: 'LJ 47', nome: 'GUARA SHOP' },
-  { id: '48', codigo: 'LJ 48', nome: 'LORENA' },
-  { id: '49', codigo: 'LJ 49', nome: 'PINDA' },
-  { id: '50', codigo: 'LJ 50', nome: 'TAUBATE 1' },
-  { id: '51', codigo: 'LJ 51', nome: 'TAUBATE 2' },
-  { id: '52', codigo: 'LJ 52', nome: 'COTIA' },
-  { id: '54', codigo: 'LJ 54', nome: 'SAO ROQUE' },
-  { id: '55', codigo: 'LJ 55', nome: 'BOTUCATU 1' },
-  { id: '56', codigo: 'LJ 56', nome: 'BOTUCATU 2' },
-  { id: '57', codigo: 'LJ 57', nome: 'JAU' },
-  { id: '58', codigo: 'LJ 58', nome: 'SOROCABA 1' },
-  { id: '60', codigo: 'LJ 60', nome: 'S.C 1 CENTRO' },
-  { id: '61', codigo: 'LJ 61', nome: 'S.C 2 V. PRADO' },
-  { id: '62', codigo: 'LJ 62', nome: 'S.C SHOP' },
-  { id: '63', codigo: 'LJ 63', nome: 'RIBEIRAO SHOP' },
-  { id: '64', codigo: 'LJ 64', nome: 'IPIRANGA' },
-  { id: '66', codigo: 'LJ 66', nome: 'PIEDADE' },
-  { id: '67', codigo: 'LJ 67', nome: 'FRAN. MORATO' },
-  { id: '71', codigo: 'LJ 71', nome: 'PORTO FERREIRA' },
-  { id: '72', codigo: 'LJ 72', nome: 'BRAGANCA SHOP' },
-  { id: '77', codigo: 'LJ 77', nome: 'SJC 1 CENTRO' },
-  { id: '79', codigo: 'LJ 79', nome: 'SJC SHOP' },
-  { id: '80', codigo: 'LJ 80', nome: 'CACAPAVA' },
-  { id: '81', codigo: 'LJ 81', nome: 'CRUZEIRO 2' },
-  { id: '83', codigo: 'LJ 83', nome: 'JANDIRA' },
-  { id: '84', codigo: 'LJ 84', nome: 'PRUDENSHOP' },
-  { id: '85', codigo: 'LJ 85', nome: 'BRAGANCA I' },
-  { id: '86', codigo: 'LJ 86', nome: 'BRAGANCA II' },
 ]
 
-// Dados mockados de campanhas
 const MOCK_CAMPANHAS = [
   {
     id: '1',
@@ -74,52 +26,45 @@ const MOCK_CAMPANHAS = [
   }
 ]
 
-export default function CampanhasPage() {
+export default function Campanhas() {
   const [mesAtual, setMesAtual] = useState(new Date(2026, 3, 1)) // Abril 2026
   const [lojaFiltro, setLojaFiltro] = useState('')
-  const [campanhas, setCampanhas] = useState(MOCK_CAMPANHAS)
-  const [loading, setLoading] = useState(false)
+  const [campanhas] = useState(MOCK_CAMPANHAS)
 
   const ano = mesAtual.getFullYear()
   const mes = mesAtual.getMonth()
   
-  // Obter dias do mês
+  // Apenas os dias do mês (sem dias vazios)
   const diasNoMes = new Date(ano, mes + 1, 0).getDate()
   const dias = Array.from({ length: diasNoMes }, (_, i) => i + 1)
-  
-  // Primeiro dia da semana (0 = Domingo)
-  const primeiroDiaSemana = new Date(ano, mes, 1).getDay()
-  const diasCompletos = [...Array(primeiroDiaSemana).fill(null), ...dias]
 
-  // Filtrar lojas
   const lojasFiltradas = MOCK_LOJAS.filter(loja =>
     loja.codigo.toLowerCase().includes(lojaFiltro.toLowerCase()) ||
     loja.nome.toLowerCase().includes(lojaFiltro.toLowerCase())
   )
 
-  // Função para verificar se uma loja tem campanha em um dia específico
   function getCampanhaDoDia(lojaId: string, dia: number) {
     const dataAtual = new Date(ano, mes, dia)
     dataAtual.setHours(0, 0, 0, 0)
     
-    const campanha = campanhas.find(c => {
+    return campanhas.find(c => {
       const inicio = new Date(c.data_inicio)
       const fim = new Date(c.data_fim)
       inicio.setHours(0, 0, 0, 0)
       fim.setHours(23, 59, 59, 999)
-      
       return c.loja_id === lojaId && dataAtual >= inicio && dataAtual <= fim
     })
-    
-    return campanha
   }
 
   function mudarMes(delta: number) {
     setMesAtual(new Date(ano, mes + delta, 1))
   }
 
+  // Nomes dos dias da semana
+  const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
+
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       {/* Cabeçalho */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
@@ -159,67 +104,56 @@ export default function CampanhasPage() {
         <h2 className="text-xl font-semibold">
           {mesAtual.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}
         </h2>
-        <div className="w-32">
+        <div className="w-48">
           <Input
             placeholder="Filtrar loja..."
             value={lojaFiltro}
             onChange={(e) => setLojaFiltro(e.target.value)}
-            className="text-sm"
           />
         </div>
       </div>
 
-      {/* Calendário Matricial */}
+      {/* Calendário - Sem colunas vazias */}
       <Card className="overflow-hidden">
         <CardContent className="p-0 overflow-x-auto">
           <div className="min-w-[800px]">
-            {/* Cabeçalho com dias */}
-            <div className="grid" style={{ gridTemplateColumns: `200px repeat(${diasCompletos.length}, 80px)` }}>
-              <div className="bg-muted/50 p-3 font-semibold border-b border-r sticky left-0 bg-white z-10">
+            {/* Cabeçalho com dias da semana */}
+            <div className="grid border-b" style={{ gridTemplateColumns: `200px repeat(${dias.length}, 80px)` }}>
+              <div className="bg-muted p-3 font-semibold sticky left-0 bg-white z-10">
                 Loja / Dia
               </div>
-              {diasCompletos.map((dia, idx) => (
-                <div key={idx} className="bg-muted/50 p-3 text-center font-semibold border-b border-r">
-                  {dia ? (
-                    <div>
-                      <div className="text-sm">{dia}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {new Date(ano, mes, dia).toLocaleString('pt-BR', { weekday: 'short' })}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-muted-foreground">-</div>
-                  )}
-                </div>
-              ))}
+              {dias.map((dia) => {
+                const data = new Date(ano, mes, dia)
+                const nomeDia = diasSemana[data.getDay()]
+                return (
+                  <div key={dia} className="bg-muted p-3 text-center font-semibold">
+                    <div className="text-sm">{dia}</div>
+                    <div className="text-xs text-muted-foreground">{nomeDia}</div>
+                  </div>
+                )
+              })}
             </div>
 
             {/* Linhas das lojas */}
             {lojasFiltradas.map((loja) => (
-              <div key={loja.id} className="grid" style={{ gridTemplateColumns: `200px repeat(${diasCompletos.length}, 80px)` }}>
+              <div key={loja.id} className="grid border-b" style={{ gridTemplateColumns: `200px repeat(${dias.length}, 80px)` }}>
                 {/* Nome da loja */}
-                <div className="p-3 border-b border-r font-medium bg-white sticky left-0 bg-white z-10">
+                <div className="p-3 font-medium sticky left-0 bg-white z-10">
                   <div className="text-sm font-semibold">{loja.codigo}</div>
                   <div className="text-xs text-muted-foreground">{loja.nome}</div>
                 </div>
 
-                {/* Dias */}
-                {diasCompletos.map((dia, idx) => {
-                  if (!dia) return <div key={idx} className="p-2 border-b border-r bg-gray-50"></div>
-                  
+                {/* Dias do mês */}
+                {dias.map((dia) => {
                   const campanha = getCampanhaDoDia(loja.id, dia)
                   
                   return (
-                    <div key={idx} className="p-2 border-b border-r align-top min-h-[80px] hover:bg-muted/20 transition-colors">
-                      {campanha && (
-                        <div className="space-y-1">
-                          {campanha.promotores.map((promotor, pIdx) => (
-                            <Badge key={pIdx} variant="secondary" className="text-xs w-full justify-start">
-                              {promotor}
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
+                    <div key={dia} className="p-2 align-top min-h-[80px] hover:bg-muted/20">
+                      {campanha && campanha.promotores.map((promotor, pIdx) => (
+                        <Badge key={pIdx} variant="secondary" className="text-xs mb-1 w-full justify-start">
+                          {promotor}
+                        </Badge>
+                      ))}
                     </div>
                   )
                 })}
@@ -234,18 +168,6 @@ export default function CampanhasPage() {
           </div>
         </CardContent>
       </Card>
-
-      {/* Legenda */}
-      <div className="flex gap-4 text-sm">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 bg-blue-100 rounded"></div>
-          <span>Campanha ativa</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 bg-gray-100 rounded"></div>
-          <span>Sem campanha</span>
-        </div>
-      </div>
     </div>
   )
 }
