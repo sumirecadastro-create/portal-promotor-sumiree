@@ -5,7 +5,6 @@ import {
   ChevronRight, 
   Filter, 
   Plus, 
-  TrendingUp, 
   CheckCircle2, 
   Clock,
   AlertCircle,
@@ -857,4 +856,62 @@ export default function Acoes() {
             </div>
             
             <div className="grid grid-cols-4 items-start gap-4">
-              <Label className="text-right
+              <Label className="text-right pt-2">Responsáveis</Label>
+              <div className="col-span-3 space-y-2">
+                {novaAcao.responsaveis.map((responsavel, index) => (
+                  <div key={index} className="flex gap-2">
+                    <Input
+                      value={responsavel}
+                      onChange={(e) => atualizarResponsavel(index, e.target.value)}
+                      placeholder={`Responsável ${index + 1}`}
+                      className="flex-1"
+                    />
+                    {novaAcao.responsaveis.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removerResponsavel(index)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={adicionarResponsavel}
+                  className="w-full"
+                >
+                  <Users className="h-4 w-4 mr-2" />
+                  Adicionar responsável
+                </Button>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-4 items-start gap-4">
+              <Label className="text-right pt-2">Descrição</Label>
+              <textarea
+                className="col-span-3 min-h-[80px] p-2 border rounded-md text-sm"
+                value={novaAcao.descricao}
+                onChange={(e) => setNovaAcao({ ...novaAcao, descricao: e.target.value })}
+                placeholder="Descrição detalhada da ação..."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowNovaAcaoModal(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={criarNovaAcao} disabled={salvando} style={{ background: PRIMARY_COLOR }}>
+              {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+              Salvar ação
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
