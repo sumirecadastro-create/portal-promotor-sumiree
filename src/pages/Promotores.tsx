@@ -4,11 +4,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Search, MapPin, Store, Plus, Edit, Trash2 } from 'lucide-react'
-import { getPromotores, Promotor, createPromotor, updatePromotor, deletePromotor } from '@/services/promotores'
+import { Search, MapPin, Store, Plus, Edit, Trash2, X } from 'lucide-react'
+import { getPromotores, Promotor, createPromotor, updatePromotor, deletePromotor, getMarcasDisponiveis, Marca } from '@/services/promotores'
 import { getLojas } from '@/services/lojas'
 import { getGerentes, Gerente } from '@/services/gerentes'
-import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
 import {
   Dialog,
@@ -26,6 +25,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { Badge } from '@/components/ui/badge'
+import { Checkbox } from '@/components/ui/checkbox'
 
 interface Loja {
   id: string
@@ -33,17 +39,11 @@ interface Loja {
   nome_loja: string
 }
 
-interface Produto {
-  id: string
-  marca_produto: string
-  fabricante_produto: string
-}
-
 export default function Promotores() {
   const [promotores, setPromotores] = useState<Promotor[]>([])
   const [lojas, setLojas] = useState<Loja[]>([])
   const [gerentes, setGerentes] = useState<Gerente[]>([])
-  const [produtos, setProdutos] = useState<Produto[]>([])
+  const [marcasDisponiveis, setMarcasDisponiveis] = useState<Marca[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
@@ -57,8 +57,7 @@ export default function Promotores() {
     promotor_nome: '',
     loja_id: '',
     gerente_id: '',
-    marca_produto: '',
-    fabricante_produto: '',
+    marca_ids: [] as string[],
     dias_semana: '',
     contato_responsavel: '',
     status: 'ativo'
@@ -66,16 +65,16 @@ export default function Promotores() {
 
   const loadData = async () => {
     try {
-      const [promotoresData, lojasData, gerentesData, produtosData] = await Promise.all([
+      const [promotoresData, lojasData, gerentesData, marcasData] = await Promise.all([
         getPromotores(),
         getLojas(),
         getGerentes(),
-        supabase.from('produtos').select('id, marca_produto, fabricante_produto')
+        getMarcasDisponiveis()
       ])
       setPromotores(promotoresData)
       setLojas(lojasData)
       setGerentes(gerentesData)
-      if (produtosData.data) setProdutos(produtosData.data)
+      setMarcasDisponiveis(marcasData)
     } catch (error) {
       console.error('Erro ao carregar dados:', error)
     } finally {
@@ -86,11 +85,6 @@ export default function Promotores() {
   useEffect(() => {
     loadData()
   }, [])
-
-  // Filtrar gerentes pela loja selecionada
-  const gerentesFiltrados = gerentes.filter(g => 
-    editingPromotor?.loja_id ? g.cod_loja === editingPromotor.loja_id : true
-  )
 
   const handleCreatePromotor = async () => {
     if (!newPromotor.promotor_nome) {
@@ -115,8 +109,7 @@ export default function Promotores() {
           promotor_nome: '',
           loja_id: '',
           gerente_id: '',
-          marca_produto: '',
-          fabricante_produto: '',
+          marca_ids: [],
           dias_semana: '',
           contato_responsavel: '',
           status: 'ativo'
@@ -153,8 +146,7 @@ export default function Promotores() {
         promotor_nome: editingPromotor.promotor_nome,
         loja_id: editingPromotor.loja_id,
         gerente_id: editingPromotor.gerente_id,
-        marca_produto: editingPromotor.marca_produto,
-        fabricante_produto: editingPromotor.fabricante_produto,
+        marca_ids: editingPromotor.marcas?.map(m => m.id) || [],
         dias_semana: editingPromotor.dias_semana,
         contato_responsavel: editingPromotor.contato_responsavel,
         status: editingPromotor.status || 'ativo'
@@ -223,13 +215,90 @@ export default function Promotores() {
     return promoter.gerentes?.nome_gerente || 'Sem gerente'
   }
 
-  const getMarca = (promoter: Promotor) => {
-    return promoter.marca_produto || 'Sem Marca'
+  const getMarcasText = (promoter: Promotor) => {
+    if (!promoter.marcas || promoter.marcas.length === 0) return 'Sem marcas'
+    return promoter.marcas.map(m => m.nome_marca).join(', ')
   }
 
-  // Obter lista única de marcas e fabricantes dos produtos
-  const marcas = [...new Set(produtos.map(p => p.marca_produto).filter(Boolean))]
-  const fabricantes = [...new Set(produtos.map(p => p.fabricante_produto).filter(Boolean))]
+  // Função para toggle de marca no multiselect
+  const toggleMarca = (marcaId: string, currentIds: string[]) => {
+    if (currentIds.includes(marcaId)) {
+      return currentIds.filter(id => id !== marcaId)
+    } else {
+      return [...currentIds, marcaId]
+    }
+  }
+
+  // Componente de multiselect para marcas
+  const MarcasMultiSelect = ({ 
+    selectedIds, 
+    onChange, 
+    disabled = false 
+  }: { 
+    selectedIds: string[], 
+    onChange: (ids: string[]) => void,
+    disabled?: boolean
+  }) => {
+    const [open, setOpen] = useState(false)
+
+    const selectedMarcas = marcasDisponiveis.filter(m => selectedIds.includes(m.id))
+
+    return (
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            role="combobox"
+            disabled={disabled}
+            className="w-full justify-between min-h-[40px] h-auto"
+          >
+            <div className="flex flex-wrap gap-1">
+              {selectedMarcas.length > 0 ? (
+                selectedMarcas.map(marca => (
+                  <Badge key={marca.id} variant="secondary" className="text-xs">
+                    {marca.nome_marca}
+                  </Badge>
+                ))
+              ) : (
+                <span className="text-muted-foreground">Selecione as marcas...</span>
+              )}
+            </div>
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-full p-0" align="start">
+          <div className="p-2 border-b">
+            <Input
+              placeholder="Buscar marca..."
+              className="h-8"
+              onChange={(e) => {
+                // Filtro seria implementado aqui
+              }}
+            />
+          </div>
+          <div className="max-h-64 overflow-y-auto p-2">
+            {marcasDisponiveis.map((marca) => (
+              <div
+                key={marca.id}
+                className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
+                onClick={() => onChange(toggleMarca(marca.id, selectedIds))}
+              >
+                <Checkbox
+                  checked={selectedIds.includes(marca.id)}
+                  onCheckedChange={() => onChange(toggleMarca(marca.id, selectedIds))}
+                />
+                <Label className="cursor-pointer flex-1">{marca.nome_marca}</Label>
+              </div>
+            ))}
+            {marcasDisponiveis.length === 0 && (
+              <div className="text-center py-4 text-muted-foreground">
+                Nenhuma marca cadastrada
+              </div>
+            )}
+          </div>
+        </PopoverContent>
+      </Popover>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -301,53 +370,26 @@ export default function Promotores() {
                     <SelectValue placeholder={newPromotor.loja_id ? "Selecione um gerente" : "Primeiro selecione uma loja"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {gerentesFiltrados.map((gerente) => (
-                      <SelectItem key={gerente.id} value={gerente.id}>
-                        {gerente.nome_gerente} {gerente.telefone ? `- ${gerente.telefone}` : ''}
-                      </SelectItem>
-                    ))}
+                    {gerentes
+                      .filter(g => {
+                        const lojaSelecionada = lojas.find(l => l.id === newPromotor.loja_id)
+                        return lojaSelecionada ? g.cod_loja === lojaSelecionada.cod_loja : false
+                      })
+                      .map((gerente) => (
+                        <SelectItem key={gerente.id} value={gerente.id}>
+                          {gerente.nome_gerente} {gerente.telefone ? `- ${gerente.telefone}` : ''}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="marca_produto">Marca que Atende</Label>
-                  <Select
-                    value={newPromotor.marca_produto}
-                    onValueChange={(value) => setNewPromotor({ ...newPromotor, marca_produto: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione uma marca" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {marcas.map((marca) => (
-                        <SelectItem key={marca} value={marca}>
-                          {marca}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="fabricante_produto">Fabricante que Atende</Label>
-                  <Select
-                    value={newPromotor.fabricante_produto}
-                    onValueChange={(value) => setNewPromotor({ ...newPromotor, fabricante_produto: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione um fabricante" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {fabricantes.map((fabricante) => (
-                        <SelectItem key={fabricante} value={fabricante}>
-                          {fabricante}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-2">
+                <Label>Marcas que Atende</Label>
+                <MarcasMultiSelect
+                  selectedIds={newPromotor.marca_ids}
+                  onChange={(ids) => setNewPromotor({ ...newPromotor, marca_ids: ids })}
+                />
               </div>
 
               <div className="space-y-2">
@@ -434,53 +476,29 @@ export default function Promotores() {
                       <SelectValue placeholder={editingPromotor.loja_id ? "Selecione um gerente" : "Primeiro selecione uma loja"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {gerentes.filter(g => g.cod_loja === lojas.find(l => l.id === editingPromotor.loja_id)?.cod_loja).map((gerente) => (
-                        <SelectItem key={gerente.id} value={gerente.id}>
-                          {gerente.nome_gerente} {gerente.telefone ? `- ${gerente.telefone}` : ''}
-                        </SelectItem>
-                      ))}
+                      {gerentes
+                        .filter(g => {
+                          const lojaSelecionada = lojas.find(l => l.id === editingPromotor.loja_id)
+                          return lojaSelecionada ? g.cod_loja === lojaSelecionada.cod_loja : false
+                        })
+                        .map((gerente) => (
+                          <SelectItem key={gerente.id} value={gerente.id}>
+                            {gerente.nome_gerente} {gerente.telefone ? `- ${gerente.telefone}` : ''}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="edit_marca_produto">Marca que Atende</Label>
-                    <Select
-                      value={editingPromotor.marca_produto || ''}
-                      onValueChange={(value) => setEditingPromotor({ ...editingPromotor, marca_produto: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione uma marca" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {marcas.map((marca) => (
-                          <SelectItem key={marca} value={marca}>
-                            {marca}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="edit_fabricante_produto">Fabricante que Atende</Label>
-                    <Select
-                      value={editingPromotor.fabricante_produto || ''}
-                      onValueChange={(value) => setEditingPromotor({ ...editingPromotor, fabricante_produto: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione um fabricante" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {fabricantes.map((fabricante) => (
-                          <SelectItem key={fabricante} value={fabricante}>
-                            {fabricante}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="space-y-2">
+                  <Label>Marcas que Atende</Label>
+                  <MarcasMultiSelect
+                    selectedIds={editingPromotor.marcas?.map(m => m.id) || []}
+                    onChange={(ids) => setEditingPromotor({ 
+                      ...editingPromotor, 
+                      marcas: marcasDisponiveis.filter(m => ids.includes(m.id))
+                    })}
+                  />
                 </div>
 
                 <div className="space-y-2">
@@ -534,7 +552,7 @@ export default function Promotores() {
 
                   <div>
                     <h3 className="font-semibold text-lg">{promoter.promotor_nome}</h3>
-                    <p className="text-sm text-muted-foreground">{getMarca(promoter)}</p>
+                    <p className="text-sm text-muted-foreground">{getMarcasText(promoter)}</p>
                   </div>
 
                   <div className="flex flex-col gap-2 w-full text-sm text-muted-foreground mt-4 text-left border-t pt-4">
