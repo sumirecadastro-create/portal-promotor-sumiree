@@ -281,8 +281,8 @@ export default function Promotores() {
       return 'Sem marcas'
     }
     const marcasNomes = promoter.marcas
-      .filter(m => m && m.nome)
-      .map(m => m.nome)
+      .filter(m => m && m.nome_marca)
+      .map(m => m.nome_marca)
     return marcasNomes.length > 0 ? marcasNomes.join(', ') : 'Sem marcas'
   }
 
@@ -312,7 +312,7 @@ export default function Promotores() {
     const safeMarcas = Array.isArray(marcasDisponiveis) ? marcasDisponiveis : []
     
     const filteredMarcas = safeMarcas.filter(marca => 
-      marca?.nome?.toLowerCase().includes(marcaSearch.toLowerCase())
+      marca?.nome_marca?.toLowerCase().includes(marcaSearch.toLowerCase())
     )
 
     const selectedMarcas = safeMarcas.filter(m => safeSelectedIds.includes(m?.id))
@@ -330,7 +330,7 @@ export default function Promotores() {
               {selectedMarcas.length > 0 ? (
                 selectedMarcas.map(marca => (
                   <Badge key={marca.id} variant="secondary" className="text-xs">
-                    {marca.nome}
+                    {marca.nome_marca}
                   </Badge>
                 ))
               ) : (
@@ -360,7 +360,7 @@ export default function Promotores() {
                     checked={safeSelectedIds.includes(marca.id)}
                     onCheckedChange={() => onChange(toggleMarca(marca.id, safeSelectedIds))}
                   />
-                  <Label className="cursor-pointer flex-1">{marca.nome}</Label>
+                  <Label className="cursor-pointer flex-1">{marca.nome_marca}</Label>
                 </div>
               ))
             ) : (
