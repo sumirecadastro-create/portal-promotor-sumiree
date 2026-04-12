@@ -39,7 +39,7 @@ interface Loja {
   nome_loja: string
 }
 
-// Componente de Error Boundary simplificado
+// Componente de erro
 function ErrorFallback({ error, resetError }: { error: Error; resetError: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center p-12 text-center">
@@ -90,7 +90,7 @@ export default function Promotores() {
     setError(null)
     
     try {
-      console.log('🚀 Iniciando carregamento de dados...')
+      console.log('🚀 Carregando dados...')
       
       const [promotoresData, lojasData, gerentesData, marcasData] = await Promise.all([
         getPromotores(),
@@ -106,26 +106,18 @@ export default function Promotores() {
         marcas: marcasData?.length || 0
       })
       
-      // Garantir que todos os dados sejam arrays
-      const finalPromotores = Array.isArray(promotoresData) ? promotoresData : []
-      const finalLojas = Array.isArray(lojasData) ? lojasData : []
-      const finalGerentes = Array.isArray(gerentesData) ? gerentesData : []
-      const finalMarcas = Array.isArray(marcasData) ? marcasData : []
-      
-      setPromotores(finalPromotores)
-      setLojas(finalLojas)
-      setGerentes(finalGerentes)
-      setMarcasDisponiveis(finalMarcas)
-      
-      console.log('✅ Estado atualizado com sucesso')
+      setPromotores(Array.isArray(promotoresData) ? promotoresData : [])
+      setLojas(Array.isArray(lojasData) ? lojasData : [])
+      setGerentes(Array.isArray(gerentesData) ? gerentesData : [])
+      setMarcasDisponiveis(Array.isArray(marcasData) ? marcasData : [])
       
     } catch (err: any) {
-      console.error('❌ Erro fatal no loadData:', err)
+      console.error('❌ Erro ao carregar:', err)
       setError(err instanceof Error ? err : new Error(err?.message || 'Erro desconhecido'))
       toast({
         variant: 'destructive',
         title: 'Erro ao carregar',
-        description: err?.message || 'Não foi possível carregar os dados. Tente novamente.',
+        description: err?.message || 'Não foi possível carregar os dados',
       })
     } finally {
       setLoading(false)
@@ -289,8 +281,8 @@ export default function Promotores() {
       return 'Sem marcas'
     }
     const marcasNomes = promoter.marcas
-      .filter(m => m && m.nome_marca)
-      .map(m => m.nome_marca)
+      .filter(m => m && m.nome)
+      .map(m => m.nome)
     return marcasNomes.length > 0 ? marcasNomes.join(', ') : 'Sem marcas'
   }
 
@@ -303,7 +295,7 @@ export default function Promotores() {
     }
   }
 
-  // Componente de multiselect
+  // Componente de multiselect para marcas
   const MarcasMultiSelect = ({ 
     selectedIds, 
     onChange, 
@@ -320,7 +312,7 @@ export default function Promotores() {
     const safeMarcas = Array.isArray(marcasDisponiveis) ? marcasDisponiveis : []
     
     const filteredMarcas = safeMarcas.filter(marca => 
-      marca?.nome_marca?.toLowerCase().includes(marcaSearch.toLowerCase())
+      marca?.nome?.toLowerCase().includes(marcaSearch.toLowerCase())
     )
 
     const selectedMarcas = safeMarcas.filter(m => safeSelectedIds.includes(m?.id))
@@ -338,7 +330,7 @@ export default function Promotores() {
               {selectedMarcas.length > 0 ? (
                 selectedMarcas.map(marca => (
                   <Badge key={marca.id} variant="secondary" className="text-xs">
-                    {marca.nome_marca}
+                    {marca.nome}
                   </Badge>
                 ))
               ) : (
@@ -368,12 +360,12 @@ export default function Promotores() {
                     checked={safeSelectedIds.includes(marca.id)}
                     onCheckedChange={() => onChange(toggleMarca(marca.id, safeSelectedIds))}
                   />
-                  <Label className="cursor-pointer flex-1">{marca.nome_marca}</Label>
+                  <Label className="cursor-pointer flex-1">{marca.nome}</Label>
                 </div>
               ))
             ) : (
               <div className="text-center py-4 text-muted-foreground">
-                Nenhuma marca encontrada
+                {marcaSearch ? 'Nenhuma marca encontrada' : 'Nenhuma marca cadastrada'}
               </div>
             )}
           </div>
@@ -389,18 +381,6 @@ export default function Promotores() {
 
   return (
     <div className="space-y-6">
-      {/* Debug info (remova depois) */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded p-2 text-xs">
-          <details>
-            <summary className="cursor-pointer font-mono">Debug: {promotores.length} promotores, {lojas.length} lojas, {gerentes.length} gerentes, {marcasDisponiveis.length} marcas</summary>
-            <pre className="mt-2 overflow-auto">
-              {JSON.stringify({ promotores: promotores.length, lojas: lojas.length, gerentes: gerentes.length, marcas: marcasDisponiveis.length }, null, 2)}
-            </pre>
-          </details>
-        </div>
-      )}
-
       <div className="flex flex-col sm:flex-row justify-between gap-4">
         <div className="relative w-full sm:w-96">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -522,6 +502,7 @@ export default function Promotores() {
           </DialogContent>
         </Dialog>
 
+        {/* Dialog de Edição */}
         <Dialog open={editOpen} onOpenChange={setEditOpen}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
