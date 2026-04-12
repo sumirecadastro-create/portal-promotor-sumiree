@@ -46,6 +46,7 @@ export default function Promotores() {
   const [marcasDisponiveis, setMarcasDisponiveis] = useState<Marca[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [editingPromotor, setEditingPromotor] = useState<Promotor | null>(null)
@@ -64,6 +65,9 @@ export default function Promotores() {
   })
 
   const loadData = async () => {
+    setLoading(true)
+    setError(null)
+    
     try {
       const [promotoresData, lojasData, gerentesData, marcasData] = await Promise.all([
         getPromotores(),
@@ -71,12 +75,26 @@ export default function Promotores() {
         getGerentes(),
         getMarcasDisponiveis()
       ])
-      setPromotores(promotoresData)
-      setLojas(lojasData)
-      setGerentes(gerentesData)
-      setMarcasDisponiveis(marcasData)
-    } catch (error) {
-      console.error('Erro ao carregar dados:', error)
+      
+      // Garantir que todos os dados sejam arrays, mesmo se a API retornar null/undefined
+      setPromotores(Array.isArray(promotoresData) ? promotoresData : [])
+      setLojas(Array.isArray(lojasData) ? lojasData : [])
+      setGerentes(Array.isArray(gerentesData) ? gerentesData : [])
+      setMarcasDisponiveis(Array.isArray(marcasData) ? marcasData : [])
+      
+    } catch (err: any) {
+      console.error('Erro ao carregar dados:', err)
+      setError(err?.message || 'Erro ao carregar dados. Tente novamente.')
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao carregar',
+        description: err?.message || 'Não foi possível carregar os dados. Tente novamente.',
+      })
+      // Garantir arrays vazios em caso de erro para evitar quebra
+      setPromotores([])
+      setLojas([])
+      setGerentes([])
+      setMarcasDisponiveis([])
     } finally {
       setLoading(false)
     }
@@ -87,7 +105,7 @@ export default function Promotores() {
   }, [])
 
   const handleCreatePromotor = async () => {
-    if (!newPromotor.promotor_nome) {
+    if (!newPromotor.promotor_nome?.trim()) {
       toast({
         variant: 'destructive',
         title: 'Erro',
@@ -118,11 +136,11 @@ export default function Promotores() {
       } else {
         throw new Error('Erro ao criar promotor')
       }
-    } catch (error: any) {
+    } catch (err: any) {
       toast({
         variant: 'destructive',
         title: 'Erro',
-        description: error.message || 'Erro ao criar promotor',
+        description: err?.message || 'Erro ao criar promotor',
       })
     } finally {
       setSaving(false)
@@ -131,7 +149,7 @@ export default function Promotores() {
 
   const handleUpdatePromotor = async () => {
     if (!editingPromotor) return
-    if (!editingPromotor.promotor_nome) {
+    if (!editingPromotor.promotor_nome?.trim()) {
       toast({
         variant: 'destructive',
         title: 'Erro',
@@ -142,15 +160,20 @@ export default function Promotores() {
 
     setSaving(true)
     try {
+      const marcaIds = editingPromotor.marcas && Array.isArray(editingPromotor.marcas) 
+        ? editingPromotor.marcas.map(m => m?.id).filter(Boolean)
+        : []
+      
       const result = await updatePromotor(editingPromotor.id, {
         promotor_nome: editingPromotor.promotor_nome,
-        loja_id: editingPromotor.loja_id,
-        gerente_id: editingPromotor.gerente_id,
-        marca_ids: editingPromotor.marcas?.map(m => m.id) || [],
-        dias_semana: editingPromotor.dias_semana,
-        contato_responsavel: editingPromotor.contato_responsavel,
+        loja_id: editingPromotor.loja_id || '',
+        gerente_id: editingPromotor.gerente_id || '',
+        marca_ids: marcaIds,
+        dias_semana: editingPromotor.dias_semana || '',
+        contato_responsavel: editingPromotor.contato_responsavel || '',
         status: editingPromotor.status || 'ativo'
       })
+      
       if (result) {
         toast({
           title: 'Sucesso',
@@ -162,11 +185,11 @@ export default function Promotores() {
       } else {
         throw new Error('Erro ao atualizar promotor')
       }
-    } catch (error: any) {
+    } catch (err: any) {
       toast({
         variant: 'destructive',
         title: 'Erro',
-        description: error.message || 'Erro ao atualizar promotor',
+        description: err?.message || 'Erro ao atualizar promotor',
       })
     } finally {
       setSaving(false)
@@ -174,7 +197,9 @@ export default function Promotores() {
   }
 
   const handleDeletePromotor = async (promotor: Promotor) => {
-    if (!confirm(`Deseja realmente excluir o promotor "${promotor.promotor_nome}"?`)) return
+    if (!promotor?.id) return
+    
+    if (!confirm(`Deseja realmente excluir o promotor "${promotor.promotor_nome || 'este promotor'}"?`)) return
 
     try {
       const result = await deletePromotor(promotor.id)
@@ -187,41 +212,59 @@ export default function Promotores() {
       } else {
         throw new Error('Erro ao excluir promotor')
       }
-    } catch (error: any) {
+    } catch (err: any) {
       toast({
         variant: 'destructive',
         title: 'Erro',
-        description: error.message || 'Erro ao excluir promotor',
+        description: err?.message || 'Erro ao excluir promotor',
       })
     }
   }
 
   const openEditDialog = (promotor: Promotor) => {
+    if (!promotor) return
     setEditingPromotor({ ...promotor })
     setEditOpen(true)
   }
 
-  const filteredPromotores = promotores.filter((p) =>
-    p.promotor_nome?.toLowerCase().includes(search.toLowerCase())
-  )
+  // Filtro seguro contra null/undefined
+  const filteredPromotores = Array.isArray(promotores) 
+    ? promotores.filter((p) => {
+        if (!p?.promotor_nome) return false
+        const searchTerm = search?.toLowerCase() || ''
+        return p.promotor_nome.toLowerCase().includes(searchTerm)
+      })
+    : []
 
-  const getInitials = (name: string) => (name ? name.substring(0, 2).toUpperCase() : 'PR')
+  const getInitials = (name: string) => {
+    if (!name || typeof name !== 'string') return 'PR'
+    return name.substring(0, 2).toUpperCase()
+  }
 
   const getLojaNome = (promoter: Promotor) => {
+    if (!promoter) return 'Nenhuma loja vinculada'
     return promoter.lojas?.nome_loja || 'Nenhuma loja vinculada'
   }
 
   const getGerenteNome = (promoter: Promotor) => {
+    if (!promoter) return 'Sem gerente'
     return promoter.gerentes?.nome_gerente || 'Sem gerente'
   }
 
   const getMarcasText = (promoter: Promotor) => {
-    if (!promoter.marcas || promoter.marcas.length === 0) return 'Sem marcas'
-    return promoter.marcas.map(m => m.nome_marca).join(', ')
+    if (!promoter) return 'Sem marcas'
+    if (!promoter.marcas || !Array.isArray(promoter.marcas) || promoter.marcas.length === 0) {
+      return 'Sem marcas'
+    }
+    const marcasNomes = promoter.marcas
+      .filter(m => m && m.nome_marca)
+      .map(m => m.nome_marca)
+    return marcasNomes.length > 0 ? marcasNomes.join(', ') : 'Sem marcas'
   }
 
   // Função para toggle de marca no multiselect
   const toggleMarca = (marcaId: string, currentIds: string[]) => {
+    if (!Array.isArray(currentIds)) return [marcaId]
     if (currentIds.includes(marcaId)) {
       return currentIds.filter(id => id !== marcaId)
     } else {
@@ -239,12 +282,20 @@ export default function Promotores() {
     onChange: (ids: string[]) => void,
     disabled?: boolean
   }) => {
-    const [open, setOpen] = useState(false)
+    const [popoverOpen, setPopoverOpen] = useState(false)
+    const [marcaSearch, setMarcaSearch] = useState('')
 
-    const selectedMarcas = marcasDisponiveis.filter(m => selectedIds.includes(m.id))
+    const safeSelectedIds = Array.isArray(selectedIds) ? selectedIds : []
+    const safeMarcas = Array.isArray(marcasDisponiveis) ? marcasDisponiveis : []
+    
+    const filteredMarcas = safeMarcas.filter(marca => 
+      marca?.nome_marca?.toLowerCase().includes(marcaSearch.toLowerCase())
+    )
+
+    const selectedMarcas = safeMarcas.filter(m => safeSelectedIds.includes(m?.id))
 
     return (
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
         <PopoverTrigger asChild>
           <Button
             variant="outline"
@@ -270,33 +321,51 @@ export default function Promotores() {
             <Input
               placeholder="Buscar marca..."
               className="h-8"
-              onChange={(e) => {
-                // Filtro seria implementado aqui
-              }}
+              value={marcaSearch}
+              onChange={(e) => setMarcaSearch(e.target.value)}
             />
           </div>
           <div className="max-h-64 overflow-y-auto p-2">
-            {marcasDisponiveis.map((marca) => (
-              <div
-                key={marca.id}
-                className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
-                onClick={() => onChange(toggleMarca(marca.id, selectedIds))}
-              >
-                <Checkbox
-                  checked={selectedIds.includes(marca.id)}
-                  onCheckedChange={() => onChange(toggleMarca(marca.id, selectedIds))}
-                />
-                <Label className="cursor-pointer flex-1">{marca.nome_marca}</Label>
-              </div>
-            ))}
-            {marcasDisponiveis.length === 0 && (
+            {filteredMarcas.length > 0 ? (
+              filteredMarcas.map((marca) => (
+                <div
+                  key={marca.id}
+                  className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
+                  onClick={() => onChange(toggleMarca(marca.id, safeSelectedIds))}
+                >
+                  <Checkbox
+                    checked={safeSelectedIds.includes(marca.id)}
+                    onCheckedChange={() => onChange(toggleMarca(marca.id, safeSelectedIds))}
+                  />
+                  <Label className="cursor-pointer flex-1">{marca.nome_marca}</Label>
+                </div>
+              ))
+            ) : (
               <div className="text-center py-4 text-muted-foreground">
-                Nenhuma marca cadastrada
+                Nenhuma marca encontrada
               </div>
             )}
           </div>
         </PopoverContent>
       </Popover>
+    )
+  }
+
+  // Tela de erro
+  if (error && !loading && promotores.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center p-12 text-center">
+        <div className="text-red-500 mb-4">
+          <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </div>
+        <h3 className="text-lg font-semibold mb-2">Erro ao carregar dados</h3>
+        <p className="text-muted-foreground mb-4">{error}</p>
+        <Button onClick={() => loadData()}>
+          Tentar novamente
+        </Button>
+      </div>
     )
   }
 
@@ -350,7 +419,7 @@ export default function Promotores() {
                     <SelectValue placeholder="Selecione uma loja" />
                   </SelectTrigger>
                   <SelectContent>
-                    {lojas.map((loja) => (
+                    {Array.isArray(lojas) && lojas.map((loja) => (
                       <SelectItem key={loja.id} value={loja.id}>
                         {loja.cod_loja} - {loja.nome_loja}
                       </SelectItem>
@@ -370,7 +439,7 @@ export default function Promotores() {
                     <SelectValue placeholder={newPromotor.loja_id ? "Selecione um gerente" : "Primeiro selecione uma loja"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {gerentes
+                    {Array.isArray(gerentes) && gerentes
                       .filter(g => {
                         const lojaSelecionada = lojas.find(l => l.id === newPromotor.loja_id)
                         return lojaSelecionada ? g.cod_loja === lojaSelecionada.cod_loja : false
@@ -439,7 +508,7 @@ export default function Promotores() {
                   <Input
                     id="edit_promotor_nome"
                     placeholder="Nome completo"
-                    value={editingPromotor.promotor_nome}
+                    value={editingPromotor.promotor_nome || ''}
                     onChange={(e) => setEditingPromotor({ ...editingPromotor, promotor_nome: e.target.value })}
                   />
                 </div>
@@ -456,7 +525,7 @@ export default function Promotores() {
                       <SelectValue placeholder="Selecione uma loja" />
                     </SelectTrigger>
                     <SelectContent>
-                      {lojas.map((loja) => (
+                      {Array.isArray(lojas) && lojas.map((loja) => (
                         <SelectItem key={loja.id} value={loja.id}>
                           {loja.cod_loja} - {loja.nome_loja}
                         </SelectItem>
@@ -476,7 +545,7 @@ export default function Promotores() {
                       <SelectValue placeholder={editingPromotor.loja_id ? "Selecione um gerente" : "Primeiro selecione uma loja"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {gerentes
+                      {Array.isArray(gerentes) && gerentes
                         .filter(g => {
                           const lojaSelecionada = lojas.find(l => l.id === editingPromotor.loja_id)
                           return lojaSelecionada ? g.cod_loja === lojaSelecionada.cod_loja : false
@@ -493,11 +562,14 @@ export default function Promotores() {
                 <div className="space-y-2">
                   <Label>Marcas que Atende</Label>
                   <MarcasMultiSelect
-                    selectedIds={editingPromotor.marcas?.map(m => m.id) || []}
-                    onChange={(ids) => setEditingPromotor({ 
-                      ...editingPromotor, 
-                      marcas: marcasDisponiveis.filter(m => ids.includes(m.id))
-                    })}
+                    selectedIds={editingPromotor.marcas?.map(m => m?.id).filter(Boolean) || []}
+                    onChange={(ids) => {
+                      const selectedMarcas = marcasDisponiveis.filter(m => ids.includes(m.id))
+                      setEditingPromotor({ 
+                        ...editingPromotor, 
+                        marcas: selectedMarcas
+                      })
+                    }}
                   />
                 </div>
 
@@ -540,65 +612,66 @@ export default function Promotores() {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {filteredPromotores.map((promoter) => (
-            <Card key={promoter.id} className="hover:shadow-md transition-shadow group relative">
-              <CardContent className="p-6">
-                <div className="flex flex-col items-center text-center space-y-4">
-                  <Avatar className="h-20 w-20 border-2 border-background shadow-sm">
-                    <AvatarFallback className="text-2xl font-medium bg-primary/10 text-primary">
-                      {getInitials(promoter.promotor_nome)}
-                    </AvatarFallback>
-                  </Avatar>
+          {filteredPromotores.length > 0 ? (
+            filteredPromotores.map((promoter) => (
+              <Card key={promoter.id} className="hover:shadow-md transition-shadow group relative">
+                <CardContent className="p-6">
+                  <div className="flex flex-col items-center text-center space-y-4">
+                    <Avatar className="h-20 w-20 border-2 border-background shadow-sm">
+                      <AvatarFallback className="text-2xl font-medium bg-primary/10 text-primary">
+                        {getInitials(promoter.promotor_nome)}
+                      </AvatarFallback>
+                    </Avatar>
 
-                  <div>
-                    <h3 className="font-semibold text-lg">{promoter.promotor_nome}</h3>
-                    <p className="text-sm text-muted-foreground">{getMarcasText(promoter)}</p>
-                  </div>
+                    <div>
+                      <h3 className="font-semibold text-lg">{promoter.promotor_nome}</h3>
+                      <p className="text-sm text-muted-foreground">{getMarcasText(promoter)}</p>
+                    </div>
 
-                  <div className="flex flex-col gap-2 w-full text-sm text-muted-foreground mt-4 text-left border-t pt-4">
-                    <div className="flex items-center gap-2">
-                      <Store className="h-4 w-4 shrink-0" />
-                      <span className="truncate">{getLojaNome(promoter)}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <MapPin className="h-4 w-4 shrink-0" />
-                      <span className="truncate">Gerente: {getGerenteNome(promoter)}</span>
-                    </div>
-                    {promoter.dias_semana && (
-                      <div className="flex items-center gap-2 text-xs">
-                        <span className="font-medium">Dias:</span>
-                        <span>{promoter.dias_semana}</span>
+                    <div className="flex flex-col gap-2 w-full text-sm text-muted-foreground mt-4 text-left border-t pt-4">
+                      <div className="flex items-center gap-2">
+                        <Store className="h-4 w-4 shrink-0" />
+                        <span className="truncate">{getLojaNome(promoter)}</span>
                       </div>
-                    )}
-                  </div>
+                      <div className="flex items-center gap-2">
+                        <MapPin className="h-4 w-4 shrink-0" />
+                        <span className="truncate">Gerente: {getGerenteNome(promoter)}</span>
+                      </div>
+                      {promoter.dias_semana && (
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="font-medium">Dias:</span>
+                          <span>{promoter.dias_semana}</span>
+                        </div>
+                      )}
+                    </div>
 
-                  <div className="w-full pt-4 border-t mt-4 flex justify-end gap-2">
-                    <Button 
-                      variant="secondary" 
-                      size="sm" 
-                      className="flex-1"
-                      onClick={() => openEditDialog(promoter)}
-                    >
-                      <Edit className="h-4 w-4 mr-1" />
-                      Editar
-                    </Button>
-                    <Button 
-                      variant="destructive" 
-                      size="sm" 
-                      className="flex-1"
-                      onClick={() => handleDeletePromotor(promoter)}
-                    >
-                      <Trash2 className="h-4 w-4 mr-1" />
-                      Excluir
-                    </Button>
+                    <div className="w-full pt-4 border-t mt-4 flex justify-end gap-2">
+                      <Button 
+                        variant="secondary" 
+                        size="sm" 
+                        className="flex-1"
+                        onClick={() => openEditDialog(promoter)}
+                      >
+                        <Edit className="h-4 w-4 mr-1" />
+                        Editar
+                      </Button>
+                      <Button 
+                        variant="destructive" 
+                        size="sm" 
+                        className="flex-1"
+                        onClick={() => handleDeletePromotor(promoter)}
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Excluir
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-          {filteredPromotores.length === 0 && (
+                </CardContent>
+              </Card>
+            ))
+          ) : (
             <div className="col-span-full text-center py-12 text-muted-foreground">
-              Nenhum promotor encontrado.
+              {search ? 'Nenhum promotor encontrado para esta busca.' : 'Nenhum promotor cadastrado.'}
             </div>
           )}
         </div>
