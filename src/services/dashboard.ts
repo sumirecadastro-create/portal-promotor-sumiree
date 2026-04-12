@@ -93,63 +93,9 @@ export async function getDashboardData(): Promise<{
   }
 }
 
-// Nova função para buscar cobertura por marca (Top 20)
-export async function getCoberturaPorMarca(): Promise<MarcaCobertura[]> {
-  try {
-    console.log('🔍 Buscando cobertura por marca...')
-    
-    // Buscar todas as marcas com seus promotores
-    const { data: marcasComPromotores, error } = await supabase
-      .from('marcas')
-      .select(`
-        id,
-        nome_marca,
-        promotores_marcas (
-          promotor_id
-        )
-      `)
-      .order('nome_marca')
-    
-    if (error) {
-      console.error('❌ Erro ao buscar cobertura por marca:', error)
-      return []
-    }
-
-    if (!marcasComPromotores || marcasComPromotores.length === 0) {
-      console.log('⚠️ Nenhuma marca encontrada')
-      return []
-    }
-
-    // Contar quantos promotores por marca
-    const coberturaMarcas = marcasComPromotores.map(marca => {
-      const totalPromotores = marca.promotores_marcas?.length || 0
-      return {
-        nome_marca: marca.nome_marca,
-        total_promotores: totalPromotores,
-        cobertura_percentual: 0 // Não temos o total de lojas por marca, então deixamos 0 ou calculamos depois
-      }
-    })
-
-    // Filtrar marcas que têm pelo menos 1 promotor e pegar top 20
-    const top20 = coberturaMarcas
-      .filter(m => m.total_promotores > 0)
-      .sort((a, b) => b.total_promotores - a.total_promotores)
-      .slice(0, 20)
-
-    console.log(`📊 Top 20 marcas: ${top20.length} encontradas`)
-    
-    return top20
-
-  } catch (error) {
-    console.error('❌ Erro ao buscar cobertura por marca:', error)
-    return []
-  }
-}
-
-// Versão alternativa com cálculo de cobertura por loja (mais precisa)
 export async function getCoberturaPorMarcaComLojas(): Promise<MarcaCobertura[]> {
   try {
-    console.log('🔍 Buscando cobertura por marca com base nas lojas...')
+    console.log('🔍 Buscando cobertura por marca...')
     
     // Buscar todos os promotores com suas marcas e lojas
     const { data: promotores, error } = await supabase
@@ -171,6 +117,7 @@ export async function getCoberturaPorMarcaComLojas(): Promise<MarcaCobertura[]> 
     }
 
     if (!promotores || promotores.length === 0) {
+      console.log('⚠️ Nenhum promotor encontrado')
       return []
     }
 
@@ -211,12 +158,12 @@ export async function getCoberturaPorMarcaComLojas(): Promise<MarcaCobertura[]> 
       .sort((a, b) => b.total_promotores - a.total_promotores)
       .slice(0, 20)
 
-    console.log(`📊 Top 20 marcas (cobertura por lojas):`, top20)
+    console.log(`📊 Top ${top20.length} marcas encontradas`)
     
     return top20
 
   } catch (error) {
-    console.error('❌ Erro ao buscar cobertura por marca com lojas:', error)
+    console.error('❌ Erro ao buscar cobertura por marca:', error)
     return []
   }
 }
