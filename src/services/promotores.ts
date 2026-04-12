@@ -36,15 +36,17 @@ export async function getPromotores() {
     
     if (error) throw error
 
-    // Transformar os dados para incluir marcas como array
-    const promotoresFormatados = data?.map(promotor => ({
+    // Garantir que data é array e promotores_marcas é array
+    const promotoresFormatados = (data || []).map(promotor => ({
       ...promotor,
-      marcas: promotor.promotores_marcas
-        ?.map((pm: any) => pm.marcas)
-        .filter(Boolean) || []
+      marcas: Array.isArray(promotor.promotores_marcas) 
+        ? promotor.promotores_marcas
+            .map((pm: any) => pm?.marcas)
+            .filter(Boolean)
+        : []
     }))
 
-    return promotoresFormatados || []
+    return promotoresFormatados
   } catch (error) {
     console.error('Erro ao buscar promotores:', error)
     return []
@@ -68,12 +70,16 @@ export async function getPromotorById(id: string) {
     
     if (error) throw error
 
-    // Transformar os dados para incluir marcas como array
+    if (!data) return null
+
+    // Garantir que promotores_marcas é array
     const promotorFormatado = {
       ...data,
-      marcas: data.promotores_marcas
-        ?.map((pm: any) => pm.marcas)
-        .filter(Boolean) || []
+      marcas: Array.isArray(data.promotores_marcas)
+        ? data.promotores_marcas
+            .map((pm: any) => pm?.marcas)
+            .filter(Boolean)
+        : []
     }
 
     return promotorFormatado
@@ -210,8 +216,7 @@ export async function updatePromotor(id: string, data: {
 
 export async function deletePromotor(id: string) {
   try {
-    // Os vínculos em promotores_marcas serão deletados automaticamente
-    // se houver CASCADE configurado, ou podemos deletar manualmente
+    // Deletar vínculos primeiro
     const { error: deleteLinksError } = await supabase
       .from('promotores_marcas')
       .delete()
@@ -219,7 +224,6 @@ export async function deletePromotor(id: string) {
     
     if (deleteLinksError) {
       console.warn('Erro ao deletar vínculos:', deleteLinksError)
-      // Continua mesmo se não conseguir deletar os vínculos
     }
 
     const { error } = await supabase
