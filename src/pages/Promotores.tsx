@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Search, MapPin, Store, Plus, Edit, Trash2, X } from 'lucide-react'
+import { Search, MapPin, Store, Plus, Edit, Trash2, AlertCircle } from 'lucide-react'
 import { getPromotores, Promotor, createPromotor, updatePromotor, deletePromotor, getMarcasDisponiveis, Marca } from '@/services/promotores'
 import { getLojas } from '@/services/lojas'
 import { getGerentes, Gerente } from '@/services/gerentes'
@@ -39,6 +39,27 @@ interface Loja {
   nome_loja: string
 }
 
+// Componente de Error Boundary simplificado
+function ErrorFallback({ error, resetError }: { error: Error; resetError: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center p-12 text-center">
+      <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
+      <h3 className="text-lg font-semibold mb-2">Erro ao carregar a página</h3>
+      <p className="text-muted-foreground mb-4 max-w-md">
+        {error.message || 'Ocorreu um erro inesperado'}
+      </p>
+      <div className="flex gap-2">
+        <Button onClick={() => window.location.reload()} variant="outline">
+          Recarregar página
+        </Button>
+        <Button onClick={resetError}>
+          Tentar novamente
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 export default function Promotores() {
   const [promotores, setPromotores] = useState<Promotor[]>([])
   const [lojas, setLojas] = useState<Loja[]>([])
@@ -46,7 +67,7 @@ export default function Promotores() {
   const [marcasDisponiveis, setMarcasDisponiveis] = useState<Marca[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Error | null>(null)
   const [open, setOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
   const [editingPromotor, setEditingPromotor] = useState<Promotor | null>(null)
@@ -69,6 +90,8 @@ export default function Promotores() {
     setError(null)
     
     try {
+      console.log('🚀 Iniciando carregamento de dados...')
+      
       const [promotoresData, lojasData, gerentesData, marcasData] = await Promise.all([
         getPromotores(),
         getLojas(),
@@ -76,25 +99,34 @@ export default function Promotores() {
         getMarcasDisponiveis()
       ])
       
-      // Garantir que todos os dados sejam arrays, mesmo se a API retornar null/undefined
-      setPromotores(Array.isArray(promotoresData) ? promotoresData : [])
-      setLojas(Array.isArray(lojasData) ? lojasData : [])
-      setGerentes(Array.isArray(gerentesData) ? gerentesData : [])
-      setMarcasDisponiveis(Array.isArray(marcasData) ? marcasData : [])
+      console.log('📊 Dados recebidos:', {
+        promotores: promotoresData?.length || 0,
+        lojas: lojasData?.length || 0,
+        gerentes: gerentesData?.length || 0,
+        marcas: marcasData?.length || 0
+      })
+      
+      // Garantir que todos os dados sejam arrays
+      const finalPromotores = Array.isArray(promotoresData) ? promotoresData : []
+      const finalLojas = Array.isArray(lojasData) ? lojasData : []
+      const finalGerentes = Array.isArray(gerentesData) ? gerentesData : []
+      const finalMarcas = Array.isArray(marcasData) ? marcasData : []
+      
+      setPromotores(finalPromotores)
+      setLojas(finalLojas)
+      setGerentes(finalGerentes)
+      setMarcasDisponiveis(finalMarcas)
+      
+      console.log('✅ Estado atualizado com sucesso')
       
     } catch (err: any) {
-      console.error('Erro ao carregar dados:', err)
-      setError(err?.message || 'Erro ao carregar dados. Tente novamente.')
+      console.error('❌ Erro fatal no loadData:', err)
+      setError(err instanceof Error ? err : new Error(err?.message || 'Erro desconhecido'))
       toast({
         variant: 'destructive',
         title: 'Erro ao carregar',
         description: err?.message || 'Não foi possível carregar os dados. Tente novamente.',
       })
-      // Garantir arrays vazios em caso de erro para evitar quebra
-      setPromotores([])
-      setLojas([])
-      setGerentes([])
-      setMarcasDisponiveis([])
     } finally {
       setLoading(false)
     }
@@ -227,8 +259,8 @@ export default function Promotores() {
     setEditOpen(true)
   }
 
-  // Filtro seguro contra null/undefined
-  const filteredPromotores = Array.isArray(promotores) 
+  // Filtro seguro
+  const filteredPromotores = Array.isArray(promotores) && promotores.length > 0
     ? promotores.filter((p) => {
         if (!p?.promotor_nome) return false
         const searchTerm = search?.toLowerCase() || ''
@@ -262,7 +294,6 @@ export default function Promotores() {
     return marcasNomes.length > 0 ? marcasNomes.join(', ') : 'Sem marcas'
   }
 
-  // Função para toggle de marca no multiselect
   const toggleMarca = (marcaId: string, currentIds: string[]) => {
     if (!Array.isArray(currentIds)) return [marcaId]
     if (currentIds.includes(marcaId)) {
@@ -272,7 +303,7 @@ export default function Promotores() {
     }
   }
 
-  // Componente de multiselect para marcas
+  // Componente de multiselect
   const MarcasMultiSelect = ({ 
     selectedIds, 
     onChange, 
@@ -352,25 +383,24 @@ export default function Promotores() {
   }
 
   // Tela de erro
-  if (error && !loading && promotores.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center p-12 text-center">
-        <div className="text-red-500 mb-4">
-          <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        </div>
-        <h3 className="text-lg font-semibold mb-2">Erro ao carregar dados</h3>
-        <p className="text-muted-foreground mb-4">{error}</p>
-        <Button onClick={() => loadData()}>
-          Tentar novamente
-        </Button>
-      </div>
-    )
+  if (error) {
+    return <ErrorFallback error={error} resetError={loadData} />
   }
 
   return (
     <div className="space-y-6">
+      {/* Debug info (remova depois) */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded p-2 text-xs">
+          <details>
+            <summary className="cursor-pointer font-mono">Debug: {promotores.length} promotores, {lojas.length} lojas, {gerentes.length} gerentes, {marcasDisponiveis.length} marcas</summary>
+            <pre className="mt-2 overflow-auto">
+              {JSON.stringify({ promotores: promotores.length, lojas: lojas.length, gerentes: gerentes.length, marcas: marcasDisponiveis.length }, null, 2)}
+            </pre>
+          </details>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row justify-between gap-4">
         <div className="relative w-full sm:w-96">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -419,7 +449,7 @@ export default function Promotores() {
                     <SelectValue placeholder="Selecione uma loja" />
                   </SelectTrigger>
                   <SelectContent>
-                    {Array.isArray(lojas) && lojas.map((loja) => (
+                    {lojas.map((loja) => (
                       <SelectItem key={loja.id} value={loja.id}>
                         {loja.cod_loja} - {loja.nome_loja}
                       </SelectItem>
@@ -439,7 +469,7 @@ export default function Promotores() {
                     <SelectValue placeholder={newPromotor.loja_id ? "Selecione um gerente" : "Primeiro selecione uma loja"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {Array.isArray(gerentes) && gerentes
+                    {gerentes
                       .filter(g => {
                         const lojaSelecionada = lojas.find(l => l.id === newPromotor.loja_id)
                         return lojaSelecionada ? g.cod_loja === lojaSelecionada.cod_loja : false
@@ -492,7 +522,6 @@ export default function Promotores() {
           </DialogContent>
         </Dialog>
 
-        {/* Dialog de Edição */}
         <Dialog open={editOpen} onOpenChange={setEditOpen}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
@@ -525,7 +554,7 @@ export default function Promotores() {
                       <SelectValue placeholder="Selecione uma loja" />
                     </SelectTrigger>
                     <SelectContent>
-                      {Array.isArray(lojas) && lojas.map((loja) => (
+                      {lojas.map((loja) => (
                         <SelectItem key={loja.id} value={loja.id}>
                           {loja.cod_loja} - {loja.nome_loja}
                         </SelectItem>
@@ -545,7 +574,7 @@ export default function Promotores() {
                       <SelectValue placeholder={editingPromotor.loja_id ? "Selecione um gerente" : "Primeiro selecione uma loja"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {Array.isArray(gerentes) && gerentes
+                      {gerentes
                         .filter(g => {
                           const lojaSelecionada = lojas.find(l => l.id === editingPromotor.loja_id)
                           return lojaSelecionada ? g.cod_loja === lojaSelecionada.cod_loja : false
