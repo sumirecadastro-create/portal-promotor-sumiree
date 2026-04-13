@@ -17,7 +17,7 @@ export interface RecentVisit {
 }
 
 export interface MarcaCobertura {
-  nome_marca: string
+  nome: string
   total_promotores: number
   cobertura_percentual: number
 }
