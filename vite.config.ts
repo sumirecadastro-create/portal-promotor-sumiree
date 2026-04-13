@@ -15,14 +15,7 @@ export default defineConfig(({ mode }) => ({
     outDir: mode === 'development' ? 'dev-dist' : 'dist',
     minify: mode !== 'development',
     sourcemap: mode === 'development',
-    rolldownOptions: {
-      onwarn(warning, warn) {
-        if (warning.code === 'MODULE_LEVEL_DIRECTIVE') {
-          return
-        }
-        warn(warning)
-      },
-    },
+ 
   },
   plugins: [mode === 'development' ? uidPlugin() : undefined, react()].filter(Boolean),
   define: {
