@@ -97,18 +97,28 @@ export async function getCoberturaPorMarcaComLojas(): Promise<MarcaCobertura[]> 
   try {
     console.log('🔍 Buscando cobertura por marca...')
     
-    // Buscar todos os promotores
-    const { data: promotores, error } = await supabase
-      .from('promotores')
-      .select('id, loja_id, promotores_marcas')
+    // Buscar promotores com suas marcas via tabela de relação
+    const { data: promotoresMarcas, error } = await supabase
+      .from('promotores_marcas')
+      .select(`
+        promotor_id,
+        promotores!inner (
+          id,
+          loja_id
+        ),
+        marcas!inner (
+          id,
+          nome
+        )
+      `)
     
     if (error) {
       console.error('❌ Erro ao buscar dados:', error)
       return []
     }
 
-    if (!promotores || promotores.length === 0) {
-      console.log('⚠️ Nenhum promotor encontrado')
+    if (!promotoresMarcas || promotoresMarcas.length === 0) {
+      console.log('⚠️ Nenhum relacionamento promotor-marca encontrado')
       return []
     }
 
@@ -123,41 +133,17 @@ export async function getCoberturaPorMarcaComLojas(): Promise<MarcaCobertura[]> 
     const lojasPorMarca = new Map<string, Set<string>>()
     const nomePorMarca = new Map<string, string>()
 
-    promotores.forEach(promotor => {
-      if (!promotor.promotores_marcas || !promotor.loja_id) return
+    promotoresMarcas.forEach(item => {
+      const marcaId = item.marcas?.id
+      const marcaNome = item.marcas?.nome
+      const lojaId = item.promotores?.loja_id
       
-      try {
-        // Parse do JSON (pode ser string ou objeto)
-        const marcasArray = typeof promotor.promotores_marcas === 'string' 
-          ? JSON.parse(promotor.promotores_marcas)
-          : promotor.promotores_marcas
-        
-        if (!Array.isArray(marcasArray)) return
-        
-        marcasArray.forEach((item: any) => {
-          // Extrair a marca do JSON (pode estar em item.marcas ou diretamente)
-          let marcaId = null
-          let marcaNome = null
-          
-          if (item?.marcas) {
-            marcaId = item.marcas?.id
-            marcaNome = item.marcas?.nome
-          } else if (item?.id) {
-            marcaId = item.id
-            marcaNome = item.nome
-          }
-          
-          // Ignorar NULLs e valores inválidos
-          if (marcaId && marcaId !== 'null' && marcaNome && marcaNome !== 'null') {
-            if (!lojasPorMarca.has(marcaId)) {
-              lojasPorMarca.set(marcaId, new Set())
-              nomePorMarca.set(marcaId, marcaNome)
-            }
-            lojasPorMarca.get(marcaId)!.add(promotor.loja_id)
-          }
-        })
-      } catch (err) {
-        console.error('Erro ao processar marcas do promotor:', promotor.id, err)
+      if (marcaId && marcaNome && lojaId) {
+        if (!lojasPorMarca.has(marcaId)) {
+          lojasPorMarca.set(marcaId, new Set())
+          nomePorMarca.set(marcaId, marcaNome)
+        }
+        lojasPorMarca.get(marcaId)!.add(lojaId)
       }
     })
 
