@@ -97,19 +97,10 @@ export async function getCoberturaPorMarcaComLojas(): Promise<MarcaCobertura[]> 
   try {
     console.log('🔍 Buscando cobertura por marca...')
     
-    // Buscar todos os promotores com suas marcas e lojas
+    // Buscar todos os promotores
     const { data: promotores, error } = await supabase
       .from('promotores')
-      .select(`
-        id,
-        loja_id,
-        promotores_marcas (
-          marcas (
-            id,
-            nome
-          )
-        )
-      `)
+      .select('id, loja_id, promotores_marcas')
     
     if (error) {
       console.error('❌ Erro ao buscar dados:', error)
@@ -133,17 +124,41 @@ export async function getCoberturaPorMarcaComLojas(): Promise<MarcaCobertura[]> 
     const nomePorMarca = new Map<string, string>()
 
     promotores.forEach(promotor => {
-      const marcas = promotor.promotores_marcas?.map(pm => pm.marcas).filter(Boolean) || []
+      if (!promotor.promotores_marcas || !promotor.loja_id) return
       
-      marcas.forEach(marca => {
-        if (marca && marca.id && marca.nome_marca && promotor.loja_id) {
-          if (!lojasPorMarca.has(marca.id)) {
-            lojasPorMarca.set(marca.id, new Set())
-            nomePorMarca.set(marca.id, marca.nome_marca)
+      try {
+        // Parse do JSON (pode ser string ou objeto)
+        const marcasArray = typeof promotor.promotores_marcas === 'string' 
+          ? JSON.parse(promotor.promotores_marcas)
+          : promotor.promotores_marcas
+        
+        if (!Array.isArray(marcasArray)) return
+        
+        marcasArray.forEach((item: any) => {
+          // Extrair a marca do JSON (pode estar em item.marcas ou diretamente)
+          let marcaId = null
+          let marcaNome = null
+          
+          if (item?.marcas) {
+            marcaId = item.marcas?.id
+            marcaNome = item.marcas?.nome
+          } else if (item?.id) {
+            marcaId = item.id
+            marcaNome = item.nome
           }
-          lojasPorMarca.get(marca.id)!.add(promotor.loja_id)
-        }
-      })
+          
+          // Ignorar NULLs e valores inválidos
+          if (marcaId && marcaId !== 'null' && marcaNome && marcaNome !== 'null') {
+            if (!lojasPorMarca.has(marcaId)) {
+              lojasPorMarca.set(marcaId, new Set())
+              nomePorMarca.set(marcaId, marcaNome)
+            }
+            lojasPorMarca.get(marcaId)!.add(promotor.loja_id)
+          }
+        })
+      } catch (err) {
+        console.error('Erro ao processar marcas do promotor:', promotor.id, err)
+      }
     })
 
     // Calcular cobertura percentual
@@ -158,7 +173,7 @@ export async function getCoberturaPorMarcaComLojas(): Promise<MarcaCobertura[]> 
       .sort((a, b) => b.total_promotores - a.total_promotores)
       .slice(0, 20)
 
-    console.log(`📊 Top ${top20.length} marcas encontradas`)
+    console.log(`📊 Top ${top20.length} marcas encontradas`, top20)
     
     return top20
 
