@@ -106,7 +106,7 @@ export async function getCoberturaPorMarcaComLojas(): Promise<MarcaCobertura[]> 
         promotores_marcas (
           marcas (
             id,
-            nome_marca
+            nome
           )
         )
       `)
