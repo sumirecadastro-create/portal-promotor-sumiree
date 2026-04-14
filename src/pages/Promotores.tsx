@@ -302,8 +302,8 @@ export default function Promotores() {
       return 'Sem marcas'
     }
     const marcasNomes = promoter.marcas
-      .filter(m => m && m.nome_marca)
-      .map(m => m.nome_marca)
+      .filter(m => m && m.nome)
+      .map(m => m.nome)
     return marcasNomes.length > 0 ? marcasNomes.join(', ') : 'Sem marcas'
   }
 
@@ -316,7 +316,7 @@ export default function Promotores() {
       <div className="flex flex-wrap gap-1 justify-center">
         {promoter.marcas.slice(0, 3).map((marca) => (
           <Badge key={marca.id} variant="secondary" className="text-xs">
-            {marca.nome_marca}
+            {marca.nome}
           </Badge>
         ))}
         {promoter.marcas.length > 3 && (
@@ -354,7 +354,7 @@ export default function Promotores() {
     const safeMarcas = Array.isArray(marcasDisponiveis) ? marcasDisponiveis : []
     
     const filteredMarcas = safeMarcas.filter(marca => 
-      marca?.nome_marca?.toLowerCase().includes(marcaSearch.toLowerCase())
+      marca?.nome?.toLowerCase().includes(marcaSearch.toLowerCase())
     )
 
     const selectedMarcas = safeMarcas.filter(m => safeSelectedIds.includes(m?.id))
@@ -372,7 +372,7 @@ export default function Promotores() {
               {selectedMarcas.length > 0 ? (
                 selectedMarcas.map(marca => (
                   <Badge key={marca.id} variant="secondary" className="text-xs">
-                    {marca.nome_marca}
+                    {marca.nome}
                   </Badge>
                 ))
               ) : (
@@ -402,7 +402,7 @@ export default function Promotores() {
                     checked={safeSelectedIds.includes(marca.id)}
                     onCheckedChange={() => onChange(toggleMarca(marca.id, safeSelectedIds))}
                   />
-                  <Label className="cursor-pointer flex-1">{marca.nome_marca}</Label>
+                  <Label className="cursor-pointer flex-1">{marca.nome}</Label>
                 </div>
               ))
             ) : (
@@ -471,7 +471,7 @@ export default function Promotores() {
                     <SelectValue placeholder="Selecione uma loja" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Nenhuma loja</SelectItem>
+                    <SelectItem value="__none__">Nenhuma loja</SelectItem>
                     {lojas.map((loja) => (
                       <SelectItem key={loja.id} value={loja.id}>
                         {loja.cod_loja} - {loja.nome_loja}
@@ -486,16 +486,16 @@ export default function Promotores() {
                 <Select
                   value={newPromotor.gerente_id}
                   onValueChange={(value) => setNewPromotor({ ...newPromotor, gerente_id: value })}
-                  disabled={!newPromotor.loja_id}
+                  disabled={!newPromotor.loja_id || newPromotor.loja_id === '__none__'}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder={newPromotor.loja_id ? "Selecione um gerente" : "Primeiro selecione uma loja"} />
+                    <SelectValue placeholder={newPromotor.loja_id && newPromotor.loja_id !== '__none__' ? "Selecione um gerente" : "Primeiro selecione uma loja"} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Nenhum gerente</SelectItem>
+                    <SelectItem value="__none__">Nenhum gerente</SelectItem>
                     {gerentes
                       .filter(g => {
-                        if (!newPromotor.loja_id) return false
+                        if (!newPromotor.loja_id || newPromotor.loja_id === '__none__') return false
                         const lojaSelecionada = lojas.find(l => l.id === newPromotor.loja_id)
                         return lojaSelecionada ? g.cod_loja === lojaSelecionada.cod_loja : false
                       })
@@ -571,16 +571,20 @@ export default function Promotores() {
                 <div className="space-y-2">
                   <Label htmlFor="edit_loja_id">Loja Vinculada</Label>
                   <Select
-                    value={editingPromotor.loja_id || ''}
+                    value={editingPromotor.loja_id || '__none__'}
                     onValueChange={(value) => {
-                      setEditingPromotor({ ...editingPromotor, loja_id: value, gerente_id: '' })
+                      setEditingPromotor({ 
+                        ...editingPromotor, 
+                        loja_id: value === '__none__' ? null : value, 
+                        gerente_id: null 
+                      })
                     }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione uma loja" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Nenhuma loja</SelectItem>
+                      <SelectItem value="__none__">Nenhuma loja</SelectItem>
                       {lojas.map((loja) => (
                         <SelectItem key={loja.id} value={loja.id}>
                           {loja.cod_loja} - {loja.nome_loja}
@@ -593,15 +597,15 @@ export default function Promotores() {
                 <div className="space-y-2">
                   <Label htmlFor="edit_gerente_id">Gerente Responsável</Label>
                   <Select
-                    value={editingPromotor.gerente_id || ''}
-                    onValueChange={(value) => setEditingPromotor({ ...editingPromotor, gerente_id: value })}
+                    value={editingPromotor.gerente_id || '__none__'}
+                    onValueChange={(value) => setEditingPromotor({ ...editingPromotor, gerente_id: value === '__none__' ? null : value })}
                     disabled={!editingPromotor.loja_id}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder={editingPromotor.loja_id ? "Selecione um gerente" : "Primeiro selecione uma loja"} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Nenhum gerente</SelectItem>
+                      <SelectItem value="__none__">Nenhum gerente</SelectItem>
                       {gerentes
                         .filter(g => {
                           if (!editingPromotor.loja_id) return false
