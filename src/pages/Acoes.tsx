@@ -20,7 +20,8 @@ import {
   Wrench,
   Truck,
   GraduationCap,
-  ClipboardList
+  ClipboardList,
+  ChevronRight as ChevronRightIcon
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -43,14 +44,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from '@/components/ui/command'
-import {
   Popover,
   PopoverContent,
   PopoverTrigger,
@@ -68,14 +61,14 @@ interface Loja {
 interface Acao {
   id: string
   nome: string
-  loja_ids: string[]  // ← mudou para array de lojas
+  loja_ids: string[]
   data_inicio: string
   data_fim: string
   status: string
   tipo: string
   prioridade: string
   descricao?: string
-  lojas?: Loja[]  // ← lojas relacionadas
+  lojas?: Loja[]
 }
 
 const PRIMARY_COLOR = '#FF1686'
@@ -126,6 +119,21 @@ const getTipoConfig = (tipo: string) => {
   }
 }
 
+// Componente Checkbox
+function Checkbox({ checked, onCheckedChange }: { checked: boolean; onCheckedChange: (checked: boolean) => void }) {
+  return (
+    <div
+      className={cn(
+        "w-4 h-4 border rounded cursor-pointer flex items-center justify-center transition-colors",
+        checked && "bg-pink-500 border-pink-500"
+      )}
+      onClick={() => onCheckedChange(!checked)}
+    >
+      {checked && <Check className="h-3 w-3 text-white" />}
+    </div>
+  )
+}
+
 export default function Acoes() {
   // Estados principais
   const [mesAtual, setMesAtual] = useState(new Date())
@@ -145,10 +153,10 @@ export default function Acoes() {
   const [filtroTipo, setFiltroTipo] = useState<string>('todos')
   const [lojasSelecionadas, setLojasSelecionadas] = useState<string[]>([])
   
-  // Estado da nova ação (sem responsáveis)
+  // Estado da nova ação
   const [novaAcao, setNovaAcao] = useState({
     nome: '',
-    loja_ids: [] as string[],  // ← mudou para array
+    loja_ids: [] as string[],
     data_inicio: '',
     data_fim: '',
     status: 'pendente' as const,
@@ -157,6 +165,11 @@ export default function Acoes() {
     descricao: ''
   })
   const [salvando, setSalvando] = useState(false)
+  
+  // Estados do Popover de Lojas
+  const [lojasPopoverOpen, setLojasPopoverOpen] = useState(false)
+  const [buscaLojasTemp, setBuscaLojasTemp] = useState('')
+  const [lojasSelecionadasTemp, setLojasSelecionadasTemp] = useState<string[]>([])
 
   const ano = mesAtual.getFullYear()
   const mes = mesAtual.getMonth()
@@ -165,6 +178,22 @@ export default function Acoes() {
   const dias = Array.from({ length: diasNoMes }, (_, i) => i + 1)
   const hoje = new Date()
   hoje.setHours(0, 0, 0, 0)
+
+  // Funções do Popover
+  const abrirSelecionarLojas = () => {
+    setLojasSelecionadasTemp([...novaAcao.loja_ids])
+    setBuscaLojasTemp('')
+    setLojasPopoverOpen(true)
+  }
+
+  const aplicarSelecaoLojas = () => {
+    setNovaAcao(prev => ({ ...prev, loja_ids: [...lojasSelecionadasTemp] }))
+    setLojasPopoverOpen(false)
+  }
+
+  const cancelarSelecaoLojas = () => {
+    setLojasPopoverOpen(false)
+  }
 
   // Buscar lojas do Supabase
   async function carregarLojas() {
@@ -281,7 +310,6 @@ export default function Acoes() {
       const fim = new Date(acao.data_fim)
       inicio.setHours(0, 0, 0, 0)
       fim.setHours(23, 59, 59, 999)
-      // Verifica se a loja está na lista de lojas da ação
       return acao.loja_ids?.includes(lojaId) && dataAtual >= inicio && dataAtual <= fim
     })
   }
@@ -309,23 +337,6 @@ export default function Acoes() {
       setLojasSelecionadas([])
     } else {
       setLojasSelecionadas(lojas.map(l => l.id))
-    }
-  }
-
-  function toggleLojaNaAcao(lojaId: string) {
-    setNovaAcao(prev => ({
-      ...prev,
-      loja_ids: prev.loja_ids.includes(lojaId)
-        ? prev.loja_ids.filter(id => id !== lojaId)
-        : [...prev.loja_ids, lojaId]
-    }))
-  }
-
-  function selecionarTodasLojasNaAcao() {
-    if (novaAcao.loja_ids.length === lojas.length) {
-      setNovaAcao(prev => ({ ...prev, loja_ids: [] }))
-    } else {
-      setNovaAcao(prev => ({ ...prev, loja_ids: lojas.map(l => l.id) }))
     }
   }
 
@@ -476,7 +487,6 @@ export default function Acoes() {
             value={lojaFiltroNome}
             onChange={(e) => setLojaFiltroNome(e.target.value)}
             className="border-gray-300 focus:border-pink-500 focus:ring-pink-500"
-            style={{ '--tw-ring-color': PRIMARY_COLOR } as React.CSSProperties}
           />
         </div>
       </div>
@@ -728,53 +738,39 @@ export default function Acoes() {
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-[400px] p-0">
-                  <Command>
-                    <CommandInput placeholder="Buscar loja..." />
-                    <CommandList>
-                      <CommandEmpty>Nenhuma loja encontrada.</CommandEmpty>
-                      <CommandGroup>
-                        {lojas.map((loja) => (
-                          <CommandItem
-                            key={loja.id}
-                            value={loja.id}
-                            onSelect={() => toggleLojaSelecionada(loja.id)}
-                          >
-                            <Check
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                lojasSelecionadas.includes(loja.id) ? "opacity-100" : "opacity-0"
-                              )}
-                            />
-                            {loja.codigo} - {loja.nome_loja}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
+                  <div className="p-2 border-b">
+                    <Input
+                      placeholder="Buscar loja..."
+                      className="h-8"
+                      value={buscaLojasTemp}
+                      onChange={(e) => setBuscaLojasTemp(e.target.value)}
+                    />
+                  </div>
+                  <div className="max-h-64 overflow-y-auto p-2">
+                    {lojas
+                      .filter(loja => {
+                        const busca = buscaLojasTemp.toLowerCase()
+                        return loja.nome_loja.toLowerCase().includes(busca) ||
+                               (loja.codigo && loja.codigo.toLowerCase().includes(busca))
+                      })
+                      .map((loja) => (
+                        <div
+                          key={loja.id}
+                          className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
+                          onClick={() => toggleLojaSelecionada(loja.id)}
+                        >
+                          <Checkbox
+                            checked={lojasSelecionadas.includes(loja.id)}
+                            onCheckedChange={() => toggleLojaSelecionada(loja.id)}
+                          />
+                          <Label className="cursor-pointer flex-1">
+                            <span className="font-mono text-xs">{loja.codigo}</span> - {loja.nome_loja}
+                          </Label>
+                        </div>
+                      ))}
+                  </div>
                 </PopoverContent>
               </Popover>
-              
-              {lojasSelecionadas.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {lojasSelecionadas.slice(0, 5).map(lojaId => {
-                    const loja = lojas.find(l => l.id === lojaId)
-                    return (
-                      <Badge key={lojaId} variant="secondary" className="text-xs">
-                        {loja?.codigo}
-                        <X 
-                          className="ml-1 h-3 w-3 cursor-pointer" 
-                          onClick={() => toggleLojaSelecionada(lojaId)}
-                        />
-                      </Badge>
-                    )
-                  })}
-                  {lojasSelecionadas.length > 5 && (
-                    <Badge variant="secondary" className="text-xs">
-                      +{lojasSelecionadas.length - 5}
-                    </Badge>
-                  )}
-                </div>
-              )}
             </div>
           </div>
           <DialogFooter>
@@ -793,137 +789,244 @@ export default function Acoes() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Nova Ação - SEM RESPONSÁVEIS e COM MÚLTIPLAS LOJAS */}
+      {/* Modal de Nova Ação - COM POPOVER PROFISSIONAL */}
       <Dialog open={showNovaAcaoModal} onOpenChange={setShowNovaAcaoModal}>
-        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
             <DialogTitle>Criar Nova Ação</DialogTitle>
             <DialogDescription>
               Preencha os dados da ação. Os campos com * são obrigatórios.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right">Nome da Ação *</Label>
+          
+          <div className="space-y-4 py-4">
+            {/* Nome da Ação */}
+            <div className="space-y-2">
+              <Label>Nome da Ação *</Label>
               <Input
-                className="col-span-3"
                 value={novaAcao.nome}
                 onChange={(e) => setNovaAcao({ ...novaAcao, nome: e.target.value })}
                 placeholder="Ex: Troca de Display"
               />
             </div>
-            
-            <div className="grid grid-cols-4 items-start gap-4">
-              <Label className="text-right pt-2">Lojas *</Label>
-              <div className="col-span-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={selecionarTodasLojasNaAcao}
-                    className="text-xs"
+
+            {/* Lojas - POPOVER STYLE */}
+            <div className="space-y-2">
+              <Label>Lojas *</Label>
+              <Popover open={lojasPopoverOpen} onOpenChange={setLojasPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    className="w-full justify-between h-auto min-h-[40px]"
+                    onClick={abrirSelecionarLojas}
                   >
-                    {novaAcao.loja_ids.length === lojas.length ? 'Desmarcar todas' : 'Selecionar todas'}
+                    <div className="flex flex-wrap gap-1">
+                      {novaAcao.loja_ids.length === 0 ? (
+                        <span className="text-muted-foreground">Selecione as lojas...</span>
+                      ) : (
+                        <>
+                          <Badge variant="secondary" className="text-xs">
+                            📦 {novaAcao.loja_ids.length} loja(s) selecionada(s)
+                          </Badge>
+                          {novaAcao.loja_ids.slice(0, 3).map(lojaId => {
+                            const loja = lojas.find(l => l.id === lojaId)
+                            return loja ? (
+                              <Badge key={lojaId} variant="outline" className="text-xs">
+                                {loja.codigo}
+                              </Badge>
+                            ) : null
+                          })}
+                          {novaAcao.loja_ids.length > 3 && (
+                            <Badge variant="outline" className="text-xs">
+                              +{novaAcao.loja_ids.length - 3}
+                            </Badge>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
                   </Button>
-                  <span className="text-xs text-gray-500">
-                    {novaAcao.loja_ids.length} loja(s) selecionada(s)
-                  </span>
-                </div>
-                
-                <div className="border rounded-md max-h-[200px] overflow-y-auto p-2 space-y-1">
-                  {lojas.map((loja) => (
-                    <div
-                      key={loja.id}
-                      className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded-md cursor-pointer"
-                      onClick={() => toggleLojaNaAcao(loja.id)}
-                    >
+                </PopoverTrigger>
+                <PopoverContent className="w-[400px] p-0" align="start">
+                  {/* Busca */}
+                  <div className="p-2 border-b">
+                    <Input
+                      placeholder="🔍 Buscar loja por nome ou código..."
+                      value={buscaLojasTemp}
+                      onChange={(e) => setBuscaLojasTemp(e.target.value)}
+                      className="h-8"
+                    />
+                  </div>
+                  
+                  {/* Lista de lojas */}
+                  <div className="max-h-[300px] overflow-y-auto p-2">
+                    {/* Selecionar todas */}
+                    <div className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer border-b pb-2 mb-1">
                       <Checkbox
-                        checked={novaAcao.loja_ids.includes(loja.id)}
-                        onCheckedChange={() => toggleLojaNaAcao(loja.id)}
+                        checked={lojasSelecionadasTemp.length === lojas.length && lojas.length > 0}
+                        onCheckedChange={() => {
+                          if (lojasSelecionadasTemp.length === lojas.length) {
+                            setLojasSelecionadasTemp([])
+                          } else {
+                            setLojasSelecionadasTemp(lojas.map(l => l.id))
+                          }
+                        }}
                       />
-                      <Label className="cursor-pointer flex-1">
-                        <span className="font-mono text-xs">{loja.codigo}</span> - {loja.nome_loja}
+                      <Label className="cursor-pointer font-semibold flex-1">
+                        Selecionar todas as lojas ({lojas.length})
                       </Label>
                     </div>
-                  ))}
-                </div>
+                    
+                    {/* Lojas filtradas */}
+                    {lojas
+                      .filter(loja => {
+                        const busca = buscaLojasTemp.toLowerCase()
+                        return loja.nome_loja.toLowerCase().includes(busca) ||
+                               (loja.codigo && loja.codigo.toLowerCase().includes(busca))
+                      })
+                      .map((loja) => (
+                        <div
+                          key={loja.id}
+                          className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
+                          onClick={() => {
+                            setLojasSelecionadasTemp(prev =>
+                              prev.includes(loja.id)
+                                ? prev.filter(id => id !== loja.id)
+                                : [...prev, loja.id]
+                            )
+                          }}
+                        >
+                          <Checkbox
+                            checked={lojasSelecionadasTemp.includes(loja.id)}
+                            onCheckedChange={() => {}}
+                          />
+                          <Label className="cursor-pointer flex-1">
+                            <span className="font-mono text-xs">{loja.codigo}</span> - {loja.nome_loja}
+                          </Label>
+                        </div>
+                      ))}
+                    
+                    {/* Nenhuma loja encontrada */}
+                    {lojas.filter(loja => {
+                      const busca = buscaLojasTemp.toLowerCase()
+                      return loja.nome_loja.toLowerCase().includes(busca) ||
+                             (loja.codigo && loja.codigo.toLowerCase().includes(busca))
+                    }).length === 0 && (
+                      <div className="text-center py-4 text-muted-foreground text-sm">
+                        Nenhuma loja encontrada
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Footer do Popover */}
+                  <div className="p-2 border-t flex justify-between">
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => setLojasSelecionadasTemp([])}
+                    >
+                      Limpar tudo
+                    </Button>
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm" onClick={cancelarSelecaoLojas}>
+                        Cancelar
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        onClick={aplicarSelecaoLojas} 
+                        style={{ background: PRIMARY_COLOR }}
+                      >
+                        Aplicar ({lojasSelecionadasTemp.length})
+                      </Button>
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+              <p className="text-xs text-muted-foreground">
+                Clique para selecionar uma ou mais lojas
+              </p>
+            </div>
+
+            {/* Datas */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Data Início *</Label>
+                <Input
+                  type="date"
+                  value={novaAcao.data_inicio}
+                  onChange={(e) => setNovaAcao({ ...novaAcao, data_inicio: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Data Fim *</Label>
+                <Input
+                  type="date"
+                  value={novaAcao.data_fim}
+                  onChange={(e) => setNovaAcao({ ...novaAcao, data_fim: e.target.value })}
+                />
               </div>
             </div>
-            
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right">Data Início *</Label>
-              <Input
-                type="date"
-                className="col-span-3"
-                value={novaAcao.data_inicio}
-                onChange={(e) => setNovaAcao({ ...novaAcao, data_inicio: e.target.value })}
-              />
+
+            {/* Tipo, Prioridade, Status */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Tipo</Label>
+                <Select value={novaAcao.tipo} onValueChange={(value) => setNovaAcao({ ...novaAcao, tipo: value })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="manutencao">🔧 Manutenção</SelectItem>
+                    <SelectItem value="logistica">🚚 Logística</SelectItem>
+                    <SelectItem value="treinamento">🎓 Treinamento</SelectItem>
+                    <SelectItem value="controle">📋 Controle</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label>Prioridade</Label>
+                <Select value={novaAcao.prioridade} onValueChange={(value) => setNovaAcao({ ...novaAcao, prioridade: value })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="baixa">🟢 Baixa</SelectItem>
+                    <SelectItem value="media">🟡 Média</SelectItem>
+                    <SelectItem value="alta">🔴 Alta</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <Select value={novaAcao.status} onValueChange={(value: any) => setNovaAcao({ ...novaAcao, status: value })}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pendente">⏳ Pendente</SelectItem>
+                    <SelectItem value="em_andamento">⚡ Em Andamento</SelectItem>
+                    <SelectItem value="agendada">📅 Agendada</SelectItem>
+                    <SelectItem value="concluida">✅ Concluída</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right">Data Fim *</Label>
-              <Input
-                type="date"
-                className="col-span-3"
-                value={novaAcao.data_fim}
-                onChange={(e) => setNovaAcao({ ...novaAcao, data_fim: e.target.value })}
-              />
-            </div>
-            
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right">Tipo</Label>
-              <Select value={novaAcao.tipo} onValueChange={(value) => setNovaAcao({ ...novaAcao, tipo: value })}>
-                <SelectTrigger className="col-span-3">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="manutencao">Manutenção</SelectItem>
-                  <SelectItem value="logistica">Logística</SelectItem>
-                  <SelectItem value="treinamento">Treinamento</SelectItem>
-                  <SelectItem value="controle">Controle</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right">Prioridade</Label>
-              <Select value={novaAcao.prioridade} onValueChange={(value) => setNovaAcao({ ...novaAcao, prioridade: value })}>
-                <SelectTrigger className="col-span-3">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="baixa">🟢 Baixa</SelectItem>
-                  <SelectItem value="media">🟡 Média</SelectItem>
-                  <SelectItem value="alta">🔴 Alta</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right">Status</Label>
-              <Select value={novaAcao.status} onValueChange={(value: any) => setNovaAcao({ ...novaAcao, status: value })}>
-                <SelectTrigger className="col-span-3">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pendente">Pendente</SelectItem>
-                  <SelectItem value="em_andamento">Em Andamento</SelectItem>
-                  <SelectItem value="agendada">Agendada</SelectItem>
-                  <SelectItem value="concluida">Concluída</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="grid grid-cols-4 items-start gap-4">
-              <Label className="text-right pt-2">Descrição</Label>
+
+            {/* Descrição */}
+            <div className="space-y-2">
+              <Label>Descrição</Label>
               <textarea
-                className="col-span-3 min-h-[80px] p-2 border rounded-md text-sm"
+                className="w-full min-h-[80px] p-2 border rounded-md text-sm"
                 value={novaAcao.descricao}
                 onChange={(e) => setNovaAcao({ ...novaAcao, descricao: e.target.value })}
                 placeholder="Descrição detalhada da ação..."
               />
             </div>
           </div>
+          
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowNovaAcaoModal(false)}>
               Cancelar
@@ -935,21 +1038,6 @@ export default function Acoes() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
-  )
-}
-
-// Componente Checkbox simples (adicione no final do arquivo)
-function Checkbox({ checked, onCheckedChange }: { checked: boolean; onCheckedChange: (checked: boolean) => void }) {
-  return (
-    <div
-      className={cn(
-        "w-4 h-4 border rounded cursor-pointer flex items-center justify-center",
-        checked && "bg-pink-500 border-pink-500"
-      )}
-      onClick={() => onCheckedChange(!checked)}
-    >
-      {checked && <Check className="h-3 w-3 text-white" />}
     </div>
   )
 }
