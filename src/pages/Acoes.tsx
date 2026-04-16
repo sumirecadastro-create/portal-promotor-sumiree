@@ -68,14 +68,14 @@ interface Loja {
 interface Acao {
   id: string
   nome: string
-  loja_id: string
+  loja_ids: string[]  // ← mudou para array de lojas
   data_inicio: string
   data_fim: string
-  responsaveis: string[]
   status: string
   tipo: string
   prioridade: string
   descricao?: string
+  lojas?: Loja[]  // ← lojas relacionadas
 }
 
 const PRIMARY_COLOR = '#FF1686'
@@ -145,13 +145,12 @@ export default function Acoes() {
   const [filtroTipo, setFiltroTipo] = useState<string>('todos')
   const [lojasSelecionadas, setLojasSelecionadas] = useState<string[]>([])
   
-  // Estado da nova ação
+  // Estado da nova ação (sem responsáveis)
   const [novaAcao, setNovaAcao] = useState({
     nome: '',
-    loja_id: '',
+    loja_ids: [] as string[],  // ← mudou para array
     data_inicio: '',
     data_fim: '',
-    responsaveis: [''],
     status: 'pendente' as const,
     tipo: 'manutencao',
     prioridade: 'media',
@@ -180,7 +179,7 @@ export default function Acoes() {
       const lojasFormatadas = (data || []).map((loja: any) => ({
         id: loja.id,
         nome_loja: loja.nome_loja,
-        codigo: loja.codigo || loja.nome_loja.substring(0, 8)
+        codigo: loja.cod_loja || loja.nome_loja.substring(0, 8)
       }))
       
       setLojas(lojasFormatadas)
@@ -190,7 +189,7 @@ export default function Acoes() {
     }
   }
 
-  // Buscar ações do Supabase
+  // Buscar ações do Supabase com suas lojas
   async function carregarAcoes() {
     try {
       const startDate = new Date(ano, mes, 1).toISOString()
@@ -218,7 +217,35 @@ export default function Acoes() {
       
       if (error) throw error
       
-      setAcoes(data || [])
+      // Buscar as lojas relacionadas para cada ação
+      const acoesComLojas = await Promise.all((data || []).map(async (acao) => {
+        const { data: relacoes } = await supabase
+          .from('acoes_lojas')
+          .select('loja_id')
+          .eq('acao_id', acao.id)
+        
+        if (relacoes && relacoes.length > 0) {
+          const lojaIds = relacoes.map(r => r.loja_id)
+          const { data: lojasData } = await supabase
+            .from('lojas')
+            .select('id, nome_loja, cod_loja')
+            .in('id', lojaIds)
+          
+          return { 
+            ...acao, 
+            loja_ids: lojaIds,
+            lojas: lojasData || []
+          }
+        }
+        
+        return { 
+          ...acao, 
+          loja_ids: [],
+          lojas: []
+        }
+      }))
+      
+      setAcoes(acoesComLojas)
     } catch (err) {
       console.error('Erro ao carregar ações:', err)
     }
@@ -254,7 +281,8 @@ export default function Acoes() {
       const fim = new Date(acao.data_fim)
       inicio.setHours(0, 0, 0, 0)
       fim.setHours(23, 59, 59, 999)
-      return acao.loja_id === lojaId && dataAtual >= inicio && dataAtual <= fim
+      // Verifica se a loja está na lista de lojas da ação
+      return acao.loja_ids?.includes(lojaId) && dataAtual >= inicio && dataAtual <= fim
     })
   }
 
@@ -284,37 +312,71 @@ export default function Acoes() {
     }
   }
 
+  function toggleLojaNaAcao(lojaId: string) {
+    setNovaAcao(prev => ({
+      ...prev,
+      loja_ids: prev.loja_ids.includes(lojaId)
+        ? prev.loja_ids.filter(id => id !== lojaId)
+        : [...prev.loja_ids, lojaId]
+    }))
+  }
+
+  function selecionarTodasLojasNaAcao() {
+    if (novaAcao.loja_ids.length === lojas.length) {
+      setNovaAcao(prev => ({ ...prev, loja_ids: [] }))
+    } else {
+      setNovaAcao(prev => ({ ...prev, loja_ids: lojas.map(l => l.id) }))
+    }
+  }
+
   async function criarNovaAcao() {
-    if (!novaAcao.nome || !novaAcao.loja_id || !novaAcao.data_inicio || !novaAcao.data_fim) {
+    if (!novaAcao.nome || !novaAcao.data_inicio || !novaAcao.data_fim) {
       alert('Preencha todos os campos obrigatórios')
+      return
+    }
+
+    if (novaAcao.loja_ids.length === 0) {
+      alert('Selecione pelo menos uma loja para a ação')
       return
     }
 
     setSalvando(true)
     try {
-      const { error } = await supabase
+      // 1. Criar a ação
+      const { data: acao, error: acaoError } = await supabase
         .from('acoes')
         .insert([{
           nome: novaAcao.nome,
-          loja_id: novaAcao.loja_id,
           data_inicio: novaAcao.data_inicio,
           data_fim: novaAcao.data_fim,
-          responsaveis: novaAcao.responsaveis.filter(r => r.trim() !== ''),
           status: novaAcao.status,
           tipo: novaAcao.tipo,
           prioridade: novaAcao.prioridade,
           descricao: novaAcao.descricao
         }])
+        .select()
+        .single()
 
-      if (error) throw error
+      if (acaoError) throw acaoError
+
+      // 2. Criar as relações com as lojas
+      const relacoes = novaAcao.loja_ids.map(loja_id => ({
+        acao_id: acao.id,
+        loja_id: loja_id
+      }))
+
+      const { error: relacoesError } = await supabase
+        .from('acoes_lojas')
+        .insert(relacoes)
+
+      if (relacoesError) throw relacoesError
 
       setShowNovaAcaoModal(false)
       setNovaAcao({
         nome: '',
-        loja_id: '',
+        loja_ids: [],
         data_inicio: '',
         data_fim: '',
-        responsaveis: [''],
         status: 'pendente',
         tipo: 'manutencao',
         prioridade: 'media',
@@ -329,26 +391,6 @@ export default function Acoes() {
     } finally {
       setSalvando(false)
     }
-  }
-
-  function adicionarResponsavel() {
-    setNovaAcao({
-      ...novaAcao,
-      responsaveis: [...novaAcao.responsaveis, '']
-    })
-  }
-
-  function removerResponsavel(index: number) {
-    setNovaAcao({
-      ...novaAcao,
-      responsaveis: novaAcao.responsaveis.filter((_, i) => i !== index)
-    })
-  }
-
-  function atualizarResponsavel(index: number, valor: string) {
-    const novosResponsaveis = [...novaAcao.responsaveis]
-    novosResponsaveis[index] = valor
-    setNovaAcao({ ...novaAcao, responsaveis: novosResponsaveis })
   }
 
   const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -563,10 +605,6 @@ export default function Acoes() {
                                   </div>
                                   <StatusIcon className="h-3 w-3" style={{ color: statusConfig.color }} />
                                 </div>
-                                <div className="text-gray-600 truncate text-[10px]">
-                                  {acao.responsaveis?.slice(0, 1).join(', ')}
-                                  {acao.responsaveis?.length > 1 && ` +${acao.responsaveis.length - 1}`}
-                                </div>
                                 <div className="flex items-center justify-between mt-1">
                                   <span className="text-[10px]">{prioridadeConfig.label}</span>
                                   <span className="text-[10px] text-gray-400">
@@ -755,7 +793,7 @@ export default function Acoes() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Nova Ação */}
+      {/* Modal de Nova Ação - SEM RESPONSÁVEIS e COM MÚLTIPLAS LOJAS */}
       <Dialog open={showNovaAcaoModal} onOpenChange={setShowNovaAcaoModal}>
         <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -775,20 +813,41 @@ export default function Acoes() {
               />
             </div>
             
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label className="text-right">Loja *</Label>
-              <Select value={novaAcao.loja_id} onValueChange={(value) => setNovaAcao({ ...novaAcao, loja_id: value })}>
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="Selecione uma loja" />
-                </SelectTrigger>
-                <SelectContent>
+            <div className="grid grid-cols-4 items-start gap-4">
+              <Label className="text-right pt-2">Lojas *</Label>
+              <div className="col-span-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={selecionarTodasLojasNaAcao}
+                    className="text-xs"
+                  >
+                    {novaAcao.loja_ids.length === lojas.length ? 'Desmarcar todas' : 'Selecionar todas'}
+                  </Button>
+                  <span className="text-xs text-gray-500">
+                    {novaAcao.loja_ids.length} loja(s) selecionada(s)
+                  </span>
+                </div>
+                
+                <div className="border rounded-md max-h-[200px] overflow-y-auto p-2 space-y-1">
                   {lojas.map((loja) => (
-                    <SelectItem key={loja.id} value={loja.id}>
-                      {loja.codigo} - {loja.nome_loja}
-                    </SelectItem>
+                    <div
+                      key={loja.id}
+                      className="flex items-center space-x-2 p-2 hover:bg-gray-50 rounded-md cursor-pointer"
+                      onClick={() => toggleLojaNaAcao(loja.id)}
+                    >
+                      <Checkbox
+                        checked={novaAcao.loja_ids.includes(loja.id)}
+                        onCheckedChange={() => toggleLojaNaAcao(loja.id)}
+                      />
+                      <Label className="cursor-pointer flex-1">
+                        <span className="font-mono text-xs">{loja.codigo}</span> - {loja.nome_loja}
+                      </Label>
+                    </div>
                   ))}
-                </SelectContent>
-              </Select>
+                </div>
+              </div>
             </div>
             
             <div className="grid grid-cols-4 items-center gap-4">
@@ -856,42 +915,6 @@ export default function Acoes() {
             </div>
             
             <div className="grid grid-cols-4 items-start gap-4">
-              <Label className="text-right pt-2">Responsáveis</Label>
-              <div className="col-span-3 space-y-2">
-                {novaAcao.responsaveis.map((responsavel, index) => (
-                  <div key={index} className="flex gap-2">
-                    <Input
-                      value={responsavel}
-                      onChange={(e) => atualizarResponsavel(index, e.target.value)}
-                      placeholder={`Responsável ${index + 1}`}
-                      className="flex-1"
-                    />
-                    {novaAcao.responsaveis.length > 1 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removerResponsavel(index)}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                ))}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={adicionarResponsavel}
-                  className="w-full"
-                >
-                  <Users className="h-4 w-4 mr-2" />
-                  Adicionar responsável
-                </Button>
-              </div>
-            </div>
-            
-            <div className="grid grid-cols-4 items-start gap-4">
               <Label className="text-right pt-2">Descrição</Label>
               <textarea
                 className="col-span-3 min-h-[80px] p-2 border rounded-md text-sm"
@@ -912,6 +935,21 @@ export default function Acoes() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+// Componente Checkbox simples (adicione no final do arquivo)
+function Checkbox({ checked, onCheckedChange }: { checked: boolean; onCheckedChange: (checked: boolean) => void }) {
+  return (
+    <div
+      className={cn(
+        "w-4 h-4 border rounded cursor-pointer flex items-center justify-center",
+        checked && "bg-pink-500 border-pink-500"
+      )}
+      onClick={() => onCheckedChange(!checked)}
+    >
+      {checked && <Check className="h-3 w-3 text-white" />}
     </div>
   )
 }
