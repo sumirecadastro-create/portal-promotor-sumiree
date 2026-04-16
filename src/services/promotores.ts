@@ -1,5 +1,17 @@
 import { supabase } from '@/lib/supabase'
 
+export interface PromotorCarta {
+  id: string
+  promotor_id: string
+  arquivo: string
+  nome_original: string
+  data_envio: string
+  data_validade: string | null
+  status: 'pendente' | 'valido' | 'vencido'
+  created_at: string
+  updated_at: string
+}
+
 export interface Promotor {
   id: string
   promotor_nome: string
@@ -22,17 +34,18 @@ export interface Promotor {
     cod_loja: string | null
   } | null
   marcas?: MarcaRelacionada[]
+  carta?: PromotorCarta | null
 }
 
 export interface MarcaRelacionada {
   id: string
-  nome: string  // ← mudou de nome_marca para nome
+  nome: string
   created_at?: string
 }
 
 export interface Marca {
   id: string
-  nome: string  // ← mudou de nome_marca para nome
+  nome: string
   created_at?: string
 }
 
@@ -56,7 +69,7 @@ export interface UpdatePromotorData {
   status?: string
 }
 
-// Buscar todos os promotores com suas marcas, lojas e gerentes
+// Buscar todos os promotores com suas marcas, lojas, gerentes e cartas
 export async function getPromotores(): Promise<Promotor[]> {
   try {
     console.log('🚀 Buscando promotores...')
@@ -117,6 +130,28 @@ export async function getPromotores(): Promise<Promotor[]> {
       }
     })
 
+    // Buscar todas as cartas de uma vez
+    const { data: cartas, error: cartasError } = await supabase
+      .from('promotores_cartas')
+      .select('*')
+      .eq('status', 'valido')
+      .order('created_at', { ascending: false })
+
+    if (cartasError) {
+      console.error('Erro ao buscar cartas:', cartasError)
+    }
+
+    // Mapear cartas por promotor_id (pegar apenas a mais recente)
+    const cartasPorPromotor: Record<string, PromotorCarta> = {}
+    if (cartas && !cartasError) {
+      cartas.forEach(carta => {
+        if (!cartasPorPromotor[carta.promotor_id]) {
+          cartasPorPromotor[carta.promotor_id] = carta
+        }
+      })
+      console.log(`📄 Encontradas ${Object.keys(cartasPorPromotor).length} cartas`)
+    }
+
     // Buscar lojas e gerentes para cada promotor
     const promotoresComDados = await Promise.all(
       promotores.map(async (promotor) => {
@@ -145,12 +180,14 @@ export async function getPromotores(): Promise<Promotor[]> {
           ...promotor,
           lojas: loja,
           gerentes: gerente,
-          marcas: marcasPorPromotor[promotor.id] || []
+          marcas: marcasPorPromotor[promotor.id] || [],
+          carta: cartasPorPromotor[promotor.id] || null
         }
       })
     )
 
     console.log(`✅ ${promotoresComDados.filter(p => p.marcas && p.marcas.length > 0).length} promotores com marcas`)
+    console.log(`✅ ${promotoresComDados.filter(p => p.carta).length} promotores com carta`)
     
     return promotoresComDados
   } catch (error) {
@@ -199,6 +236,20 @@ export async function getPromotorById(id: string): Promise<Promotor | null> {
       }
     }
 
+    // Buscar carta do promotor
+    const { data: carta, error: cartaError } = await supabase
+      .from('promotores_cartas')
+      .select('*')
+      .eq('promotor_id', id)
+      .eq('status', 'valido')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (cartaError && cartaError.code !== 'PGRST116') {
+      console.error('Erro ao buscar carta:', cartaError)
+    }
+
     // Buscar loja e gerente
     let loja = null
     let gerente = null
@@ -225,7 +276,8 @@ export async function getPromotorById(id: string): Promise<Promotor | null> {
       ...promotor,
       lojas: loja,
       gerentes: gerente,
-      marcas
+      marcas,
+      carta: carta || null
     }
   } catch (error) {
     console.error('Erro inesperado em getPromotorById:', error)
@@ -375,12 +427,43 @@ export async function updatePromotor(id: string, data: UpdatePromotorData): Prom
   }
 }
 
-// Deletar um promotor
+// Deletar um promotor (incluindo cartas do storage)
 export async function deletePromotor(id: string): Promise<boolean> {
   try {
     console.log('🗑️ Deletando promotor:', id)
     
-    // Primeiro, deletar as relações com marcas
+    // Buscar cartas do promotor para deletar os arquivos do storage
+    const { data: cartas } = await supabase
+      .from('promotores_cartas')
+      .select('id, arquivo')
+      .eq('promotor_id', id)
+
+    // Deletar arquivos do storage
+    if (cartas && cartas.length > 0) {
+      for (const carta of cartas) {
+        try {
+          const filePath = carta.arquivo.split('/documentos/')[1]
+          if (filePath) {
+            await supabase.storage.from('documentos').remove([filePath])
+            console.log(`🗑️ Arquivo deletado: ${filePath}`)
+          }
+        } catch (storageError) {
+          console.error('Erro ao deletar arquivo do storage:', storageError)
+        }
+      }
+    }
+
+    // Deletar registros de cartas
+    const { error: deleteCartasError } = await supabase
+      .from('promotores_cartas')
+      .delete()
+      .eq('promotor_id', id)
+
+    if (deleteCartasError) {
+      console.error('Erro ao deletar cartas:', deleteCartasError)
+    }
+
+    // Deletar relações com marcas
     const { error: relacoesError } = await supabase
       .from('promotores_marcas')
       .delete()
@@ -391,7 +474,7 @@ export async function deletePromotor(id: string): Promise<boolean> {
       throw relacoesError
     }
 
-    // Depois, deletar o promotor
+    // Deletar o promotor
     const { error: promotorError } = await supabase
       .from('promotores')
       .delete()
@@ -402,6 +485,7 @@ export async function deletePromotor(id: string): Promise<boolean> {
       throw promotorError
     }
 
+    console.log('✅ Promotor deletado com sucesso')
     return true
   } catch (error) {
     console.error('Erro inesperado em deletePromotor:', error)
