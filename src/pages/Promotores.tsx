@@ -4,8 +4,9 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Search, MapPin, Store, Plus, Edit, Trash2, AlertCircle, Phone, Calendar } from 'lucide-react'
+import { Search, MapPin, Store, Plus, Edit, Trash2, AlertCircle, Phone, Calendar, FileText, Upload } from 'lucide-react'
 import { getPromotores, Promotor, createPromotor, updatePromotor, deletePromotor, getMarcasDisponiveis, Marca } from '@/services/promotores'
+import { uploadCartaPromotor, deleteCartaPromotor } from '@/services/uploadCarta'
 import { getLojas } from '@/services/lojas'
 import { getGerentes, Gerente } from '@/services/gerentes'
 import { useToast } from '@/hooks/use-toast'
@@ -72,6 +73,7 @@ export default function Promotores() {
   const [editOpen, setEditOpen] = useState(false)
   const [editingPromotor, setEditingPromotor] = useState<Promotor | null>(null)
   const [saving, setSaving] = useState(false)
+  const [uploadingCarta, setUploadingCarta] = useState(false)
   const { toast } = useToast()
 
   // Formulário de novo promotor
@@ -105,18 +107,6 @@ export default function Promotores() {
         gerentes: gerentesData?.length || 0,
         marcas: marcasData?.length || 0
       })
-      
-      // Verificar se algum promotor tem marcas para debug
-      if (promotoresData && promotoresData.length > 0) {
-        const promotoresComMarcas = promotoresData.filter(p => p.marcas && p.marcas.length > 0)
-        console.log(`📌 Promotores com marcas: ${promotoresComMarcas.length} de ${promotoresData.length}`)
-        if (promotoresComMarcas.length > 0) {
-          console.log('📌 Exemplo de promotor com marcas:', {
-            nome: promotoresComMarcas[0].promotor_nome,
-            marcas: promotoresComMarcas[0].marcas
-          })
-        }
-      }
       
       setPromotores(Array.isArray(promotoresData) ? promotoresData : [])
       setLojas(Array.isArray(lojasData) ? lojasData : [])
@@ -154,8 +144,8 @@ export default function Promotores() {
     try {
       const result = await createPromotor({
         promotor_nome: newPromotor.promotor_nome.trim(),
-        loja_id: newPromotor.loja_id || undefined,
-        gerente_id: newPromotor.gerente_id || undefined,
+        loja_id: newPromotor.loja_id === '__none__' ? undefined : newPromotor.loja_id,
+        gerente_id: newPromotor.gerente_id === '__none__' ? undefined : newPromotor.gerente_id,
         marca_ids: newPromotor.marca_ids,
         dias_semana: newPromotor.dias_semana || undefined,
         contato_responsavel: newPromotor.contato_responsavel || undefined,
@@ -211,8 +201,8 @@ export default function Promotores() {
       
       const result = await updatePromotor(editingPromotor.id, {
         promotor_nome: editingPromotor.promotor_nome.trim(),
-        loja_id: editingPromotor.loja_id || undefined,
-        gerente_id: editingPromotor.gerente_id || undefined,
+        loja_id: editingPromotor.loja_id === '__none__' ? undefined : editingPromotor.loja_id,
+        gerente_id: editingPromotor.gerente_id === '__none__' ? undefined : editingPromotor.gerente_id,
         marca_ids: marcaIds,
         dias_semana: editingPromotor.dias_semana || undefined,
         contato_responsavel: editingPromotor.contato_responsavel || undefined,
@@ -266,6 +256,85 @@ export default function Promotores() {
     }
   }
 
+  const handleUploadCarta = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !editingPromotor) return
+    
+    if (file.type !== 'application/pdf') {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Apenas arquivos PDF são permitidos',
+      })
+      return
+    }
+    
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Arquivo muito grande. Máximo 5MB',
+      })
+      return
+    }
+    
+    setUploadingCarta(true)
+    try {
+      const result = await uploadCartaPromotor(editingPromotor.id, file)
+      if (result.success && result.data) {
+        toast({
+          title: 'Sucesso',
+          description: 'Carta de apresentação enviada com sucesso!',
+        })
+        // Atualizar o promotor com a nova carta
+        setEditingPromotor({ ...editingPromotor, carta: result.data })
+        // Recarregar a lista para atualizar o card
+        await loadData()
+      } else {
+        throw new Error(result.error || 'Erro ao fazer upload')
+      }
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: error.message || 'Erro ao enviar a carta',
+      })
+    } finally {
+      setUploadingCarta(false)
+      // Limpar o input
+      e.target.value = ''
+    }
+  }
+
+  const handleRemoverCarta = async () => {
+    if (!editingPromotor?.carta) return
+    
+    if (!confirm('Deseja realmente remover a carta de apresentação?')) return
+    
+    try {
+      // Extrair o caminho do arquivo da URL
+      const url = editingPromotor.carta.arquivo
+      const filePath = url.split('/documentos/')[1]
+      
+      await deleteCartaPromotor(editingPromotor.carta.id, filePath)
+      
+      toast({
+        title: 'Sucesso',
+        description: 'Carta removida com sucesso!',
+      })
+      
+      // Atualizar o promotor
+      setEditingPromotor({ ...editingPromotor, carta: null })
+      await loadData()
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: error.message || 'Erro ao remover a carta',
+      })
+    }
+  }
+
   const openEditDialog = (promotor: Promotor) => {
     if (!promotor) return
     setEditingPromotor({ ...promotor })
@@ -294,17 +363,6 @@ export default function Promotores() {
   const getGerenteNome = (promoter: Promotor) => {
     if (!promoter) return 'Sem gerente'
     return promoter.gerentes?.nome_gerente || 'Sem gerente'
-  }
-
-  const getMarcasText = (promoter: Promotor) => {
-    if (!promoter) return 'Sem marcas'
-    if (!promoter.marcas || !Array.isArray(promoter.marcas) || promoter.marcas.length === 0) {
-      return 'Sem marcas'
-    }
-    const marcasNomes = promoter.marcas
-      .filter(m => m && m.nome)
-      .map(m => m.nome)
-    return marcasNomes.length > 0 ? marcasNomes.join(', ') : 'Sem marcas'
   }
 
   const getMarcasBadges = (promoter: Promotor) => {
@@ -462,9 +520,9 @@ export default function Promotores() {
               <div className="space-y-2">
                 <Label htmlFor="loja_id">Loja Vinculada</Label>
                 <Select
-                  value={newPromotor.loja_id}
+                  value={newPromotor.loja_id || '__none__'}
                   onValueChange={(value) => {
-                    setNewPromotor({ ...newPromotor, loja_id: value, gerente_id: '' })
+                    setNewPromotor({ ...newPromotor, loja_id: value, gerente_id: '__none__' })
                   }}
                 >
                   <SelectTrigger>
@@ -484,7 +542,7 @@ export default function Promotores() {
               <div className="space-y-2">
                 <Label htmlFor="gerente_id">Gerente Responsável</Label>
                 <Select
-                  value={newPromotor.gerente_id}
+                  value={newPromotor.gerente_id || '__none__'}
                   onValueChange={(value) => setNewPromotor({ ...newPromotor, gerente_id: value })}
                   disabled={!newPromotor.loja_id || newPromotor.loja_id === '__none__'}
                 >
@@ -553,7 +611,7 @@ export default function Promotores() {
             <DialogHeader>
               <DialogTitle>Editar Promotor</DialogTitle>
               <DialogDescription>
-                Altere os dados do promotor.
+                Altere os dados do promotor e gerencie a carta de apresentação.
               </DialogDescription>
             </DialogHeader>
             {editingPromotor && (
@@ -670,6 +728,53 @@ export default function Promotores() {
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* ÁREA DA CARTA DE APRESENTAÇÃO */}
+                <div className="space-y-2 pt-4 border-t">
+                  <Label className="text-base font-semibold">Carta de Apresentação</Label>
+                  
+                  {editingPromotor.carta ? (
+                    <div className="flex items-center gap-2 p-3 border rounded-md bg-muted/50">
+                      <FileText className="h-5 w-5 text-blue-500 flex-shrink-0" />
+                      <a 
+                        href={editingPromotor.carta.arquivo} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-sm text-blue-600 hover:underline flex-1 truncate"
+                      >
+                        {editingPromotor.carta.nome_original}
+                      </a>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleRemoverCarta}
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                        disabled={uploadingCarta}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="file"
+                          accept=".pdf"
+                          onChange={handleUploadCarta}
+                          disabled={uploadingCarta}
+                          className="flex-1"
+                        />
+                        {uploadingCarta && (
+                          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        <Upload className="h-3 w-3 inline mr-1" />
+                        Envie a carta de apresentação em formato PDF (máx. 5MB)
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
             <DialogFooter>
@@ -702,7 +807,20 @@ export default function Promotores() {
                     </Avatar>
 
                     <div className="space-y-2 w-full">
-                      <h3 className="font-semibold text-lg">{promoter.promotor_nome}</h3>
+                      <div className="flex items-center justify-center gap-2">
+                        <h3 className="font-semibold text-lg">{promoter.promotor_nome}</h3>
+                        {promoter.carta && (
+                          <a 
+                            href={promoter.carta.arquivo} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-blue-500 hover:text-blue-700 transition-colors"
+                            title="Ver carta de apresentação"
+                          >
+                            <FileText className="h-4 w-4" />
+                          </a>
+                        )}
+                      </div>
                       {getMarcasBadges(promoter)}
                     </div>
 
