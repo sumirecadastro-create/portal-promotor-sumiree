@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabaseClient'
+import { supabase } from '@/lib/supabase'  // ← mudou de supabaseClient para supabase
 
 export interface PromotorCarta {
   id: string
@@ -18,6 +18,8 @@ export async function uploadCartaPromotor(
   file: File
 ): Promise<{ success: boolean; data?: PromotorCarta; error?: string }> {
   try {
+    console.log('📤 Fazendo upload da carta para o promotor:', promotorId)
+    
     // 1. Upload do PDF para o Storage
     const fileExt = file.name.split('.').pop()
     const fileName = `${promotorId}_${Date.now()}.${fileExt}`
@@ -27,7 +29,10 @@ export async function uploadCartaPromotor(
       .from('documentos')
       .upload(filePath, file)
 
-    if (uploadError) throw uploadError
+    if (uploadError) {
+      console.error('Erro no upload para storage:', uploadError)
+      throw uploadError
+    }
 
     // 2. Pegar URL pública do arquivo
     const { data: urlData } = supabase.storage
@@ -49,8 +54,12 @@ export async function uploadCartaPromotor(
       .select()
       .single()
 
-    if (insertError) throw insertError
+    if (insertError) {
+      console.error('Erro ao inserir registro:', insertError)
+      throw insertError
+    }
 
+    console.log('✅ Carta enviada com sucesso:', data)
     return { success: true, data }
   } catch (error: any) {
     console.error('Erro no upload:', error)
@@ -60,31 +69,58 @@ export async function uploadCartaPromotor(
 
 // Buscar carta de um promotor
 export async function getCartaPromotor(promotorId: string): Promise<PromotorCarta | null> {
-  const { data, error } = await supabase
-    .from('promotores_cartas')
-    .select('*')
-    .eq('promotor_id', promotorId)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .single()
+  try {
+    const { data, error } = await supabase
+      .from('promotores_cartas')
+      .select('*')
+      .eq('promotor_id', promotorId)
+      .eq('status', 'valido')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
 
-  if (error && error.code !== 'PGRST116') { // PGRST116 = not found
-    console.error('Erro ao buscar carta:', error)
+    if (error && error.code !== 'PGRST116') {
+      console.error('Erro ao buscar carta:', error)
+    }
+
+    return data || null
+  } catch (error) {
+    console.error('Erro inesperado em getCartaPromotor:', error)
+    return null
   }
-
-  return data || null
 }
 
 // Deletar carta
-export async function deleteCartaPromotor(cartaId: string, filePath: string) {
-  // Deletar do Storage
-  await supabase.storage.from('documentos').remove([filePath])
-  
-  // Deletar do banco
-  const { error } = await supabase
-    .from('promotores_cartas')
-    .delete()
-    .eq('id', cartaId)
+export async function deleteCartaPromotor(cartaId: string, filePath: string): Promise<boolean> {
+  try {
+    console.log('🗑️ Deletando carta:', cartaId)
+    
+    // Deletar do Storage
+    if (filePath) {
+      const { error: storageError } = await supabase.storage
+        .from('documentos')
+        .remove([filePath])
+      
+      if (storageError) {
+        console.error('Erro ao deletar arquivo do storage:', storageError)
+      }
+    }
+    
+    // Deletar do banco
+    const { error: deleteError } = await supabase
+      .from('promotores_cartas')
+      .delete()
+      .eq('id', cartaId)
 
-  if (error) throw error
+    if (deleteError) {
+      console.error('Erro ao deletar registro:', deleteError)
+      throw deleteError
+    }
+
+    console.log('✅ Carta deletada com sucesso')
+    return true
+  } catch (error) {
+    console.error('Erro ao deletar carta:', error)
+    throw error
+  }
 }
