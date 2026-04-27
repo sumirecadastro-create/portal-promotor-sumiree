@@ -8,7 +8,7 @@ const getTitleFromPath = (path: string) => {
   if (path.startsWith('/lojas')) return 'Gestão de Lojas'
   if (path.startsWith('/promotores')) return 'Equipe de Promotores'
   if (path.startsWith('/check-in')) return 'Operação Check-in'
-  if (path.startsWith('/categorias')) return 'Categorias'
+  if (path.startsWith('/cadastro-promotores')) return 'Cadastro de Promotores'  // ← ALTERADO
   if (path.startsWith('/marcas')) return 'Marcas'
   if (path.startsWith('/relatorios')) return 'Relatórios e Análises'
   return 'Portal Sumirê'
