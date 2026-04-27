@@ -9,7 +9,7 @@ import LojaDetail from './pages/LojaDetail'
 import Promotores from './pages/Promotores'
 import PromotorDetail from './pages/PromotorDetail'
 import CheckIn from './pages/CheckIn'
-import Categorias from './pages/Categorias'
+import CadastroPromotores from './pages/CadastroPromotores'
 import Marcas from './pages/Marcas'
 import Acoes from './pages/Acoes'
 import Relatorios from './pages/Relatorios'
@@ -35,7 +35,7 @@ const App = () => (
               <Route path="/promotores" element={<Promotores />} />
               <Route path="/promotores/:id" element={<PromotorDetail />} />
               <Route path="/check-in" element={<CheckIn />} />
-              <Route path="/categorias" element={<Categorias />} />
+              <Route path="/cadastropromotores" element={<CadastroPromotores />} />
               <Route path="/marcas" element={<Marcas />} />
               <Route path="/acoes" element={<Acoes />} />
               <Route path="/relatorios" element={<Relatorios />} />
