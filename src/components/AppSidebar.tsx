@@ -11,7 +11,7 @@ import {
   LogOut,
   User,
   Calendar,
-  Target,  // ← Mover Target para AQUI (vem do lucide-react)
+  Target,
 } from 'lucide-react'
 import {
   Sidebar,
@@ -24,7 +24,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarFooter,
-  // Target,  // ← REMOVER DAQUI (não existe no sidebar)
 } from '@/components/ui/sidebar'
 import { useAuth } from '@/hooks/use-auth'
 
@@ -35,7 +34,7 @@ const allItems = [
   { title: 'Check-in (Operação)', url: '/check-in', icon: MapPin },
   { title: 'Categorias', url: '/categorias', icon: Tags },
   { title: 'Marcas', url: '/marcas', icon: Bookmark },
-  { title: 'Ações', url: '/acoes', icon: Target },  // ← Agora Target existe
+  { title: 'Ações', url: '/acoes', icon: Target },
   { title: 'Campanhas', url: '/campanhas', icon: Calendar },
   { title: 'Relatórios', url: '/relatorios', icon: BarChart3 },
 ]
@@ -44,13 +43,26 @@ export function AppSidebar() {
   const location = useLocation()
   const { user, signOut } = useAuth()
 
-  const role = 'admin'
+  // Pega o role do usuário logado (do banco de dados)
+  const role = user?.role || 'promotor'
 
+  // Filtro de menu baseado no perfil
   const items = allItems.filter((item) => {
+    // ADMIN: vê tudo
     if (role === 'admin') return true
-    if (role === 'gerente')
+    
+    // GESTOR: vê Dashboard, Lojas, Promotores, Ações, Campanhas, Relatórios
+    if (role === 'gestor')
       return ['Dashboard', 'Lojas', 'Promotores', 'Ações', 'Campanhas', 'Relatórios'].includes(item.title)
-    if (role === 'promotor') return ['Dashboard', 'Check-in (Operação)'].includes(item.title)
+    
+    // GERENTE DE LOJA: vê Dashboard, Check-in, Relatórios
+    if (role === 'gerente')
+      return ['Dashboard', 'Check-in (Operação)', 'Relatórios'].includes(item.title)
+    
+    // PROMOTOR: vê Dashboard e Check-in
+    if (role === 'promotor') 
+      return ['Dashboard', 'Check-in (Operação)'].includes(item.title)
+    
     return false
   })
 
@@ -91,7 +103,7 @@ export function AppSidebar() {
           </div>
           <div className="flex flex-col overflow-hidden">
             <span className="text-sm font-medium truncate">{user?.name || user?.email || 'Usuário'}</span>
-            <span className="text-xs text-muted-foreground capitalize">{user?.role || 'admin'}</span>
+            <span className="text-xs text-muted-foreground capitalize">{role}</span>
           </div>
         </div>
         <SidebarMenu>
