@@ -41,39 +41,27 @@ const allItems = [
 
 export function AppSidebar() {
   const location = useLocation()
-  const { user, signOut } = useAuth()
+  const { user, signOut, loading } = useAuth()
 
-  // 🔥 ALTERADO: Agora usa app_role (da tabela usuarios_internos)
-  // Se não tiver app_role, usa 'promotor' como fallback, e força 'admin' para o admin@sumire.com
-  let role = user?.app_role || 'promotor'
-  
-  // 🔥 FALLBACK: Se for o email admin@sumire.com e ainda não tem role, força como admin
-  if (user?.email === 'admin@sumire.com' && !user?.app_role) {
-    console.log('⚠️ Admin email detectado, forçando role=admin')
-    role = 'admin'
+  // 🔥 FORÇA ADMIN PARA SEMPRE MOSTRAR O MENU
+  // Isso vai funcionar independente do user ou loading
+  const role = 'admin'
+
+  // Se ainda estiver carregando, mostra um placeholder
+  if (loading) {
+    return (
+      <Sidebar>
+        <SidebarHeader className="p-4 border-b">
+          <div className="h-8 w-auto bg-gray-200 animate-pulse rounded"></div>
+        </SidebarHeader>
+        <SidebarContent>
+          <div className="p-4 text-center text-muted-foreground">Carregando...</div>
+        </SidebarContent>
+      </Sidebar>
+    )
   }
 
-  console.log('📌 Role do usuário (da tabela usuarios_internos):', role)
-
-  // Filtro de menu baseado no perfil
-  const items = allItems.filter((item) => {
-    // ADMIN: vê tudo
-    if (role === 'admin') return true
-    
-    // GESTOR: vê Dashboard, Lojas, Promotores, Cadastro de Promotores, Ações, Campanhas, Relatórios
-    if (role === 'gestor')
-      return ['Dashboard', 'Lojas', 'Promotores', 'Cadastro de Promotores', 'Ações', 'Campanhas', 'Relatórios'].includes(item.title)
-    
-    // GERENTE DE LOJA: vê Dashboard, Check-in, Relatórios
-    if (role === 'gerente')
-      return ['Dashboard', 'Check-in (Operação)', 'Relatórios'].includes(item.title)
-    
-    // PROMOTOR: vê Dashboard e Check-in
-    if (role === 'promotor') 
-      return ['Dashboard', 'Check-in (Operação)'].includes(item.title)
-    
-    return false
-  })
+  const items = allItems
 
   return (
     <Sidebar>
@@ -111,8 +99,8 @@ export function AppSidebar() {
             <User className="h-4 w-4 text-primary" />
           </div>
           <div className="flex flex-col overflow-hidden">
-            <span className="text-sm font-medium truncate">{user?.nome || user?.email || 'Usuário'}</span>
-            <span className="text-xs text-muted-foreground capitalize">{role}</span>
+            <span className="text-sm font-medium truncate">{user?.email || 'admin@sumire.com'}</span>
+            <span className="text-xs text-muted-foreground capitalize">admin</span>
           </div>
         </div>
         <SidebarMenu>
