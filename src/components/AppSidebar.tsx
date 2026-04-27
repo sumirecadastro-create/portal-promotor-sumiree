@@ -32,7 +32,7 @@ const allItems = [
   { title: 'Lojas', url: '/lojas', icon: Store },
   { title: 'Promotores', url: '/promotores', icon: Users },
   { title: 'Check-in (Operação)', url: '/check-in', icon: MapPin },
-  { title: 'Cadastro Promotores', url: '/cadastropromotores', icon: Users },
+  { title: 'Cadastro de Promotores', url: '/cadastro-promotores', icon: Tags },
   { title: 'Marcas', url: '/marcas', icon: Bookmark },
   { title: 'Ações', url: '/acoes', icon: Target },
   { title: 'Campanhas', url: '/campanhas', icon: Calendar },
@@ -51,9 +51,9 @@ export function AppSidebar() {
     // ADMIN: vê tudo
     if (role === 'admin') return true
     
-    // GESTOR: vê Dashboard, Lojas, Promotores, Ações, Campanhas, Relatórios
+    // GESTOR: vê Dashboard, Lojas, Promotores, Cadastro de Promotores, Ações, Campanhas, Relatórios
     if (role === 'gestor')
-      return ['Dashboard', 'Lojas', 'Promotores', 'Ações', 'Campanhas', 'Relatórios'].includes(item.title)
+      return ['Dashboard', 'Lojas', 'Promotores', 'Cadastro de Promotores', 'Ações', 'Campanhas', 'Relatórios'].includes(item.title)
     
     // GERENTE DE LOJA: vê Dashboard, Check-in, Relatórios
     if (role === 'gerente')
