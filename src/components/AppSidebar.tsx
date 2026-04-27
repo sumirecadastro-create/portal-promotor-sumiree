@@ -32,7 +32,7 @@ const allItems = [
   { title: 'Lojas', url: '/lojas', icon: Store },
   { title: 'Promotores', url: '/promotores', icon: Users },
   { title: 'Check-in (Operação)', url: '/check-in', icon: MapPin },
-  { title: 'Categorias', url: '/categorias', icon: Tags },
+  { title: 'Cadastro Promotores', url: '/cadastropromotores', icon: Users },
   { title: 'Marcas', url: '/marcas', icon: Bookmark },
   { title: 'Ações', url: '/acoes', icon: Target },
   { title: 'Campanhas', url: '/campanhas', icon: Calendar },
