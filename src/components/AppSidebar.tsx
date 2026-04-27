@@ -43,8 +43,17 @@ export function AppSidebar() {
   const location = useLocation()
   const { user, signOut } = useAuth()
 
-  // Pega o role do usuário logado (do banco de dados)
-  const role = user?.role || 'promotor'
+  // 🔥 ALTERADO: Agora usa app_role (da tabela usuarios_internos)
+  // Se não tiver app_role, usa 'promotor' como fallback, e força 'admin' para o admin@sumire.com
+  let role = user?.app_role || 'promotor'
+  
+  // 🔥 FALLBACK: Se for o email admin@sumire.com e ainda não tem role, força como admin
+  if (user?.email === 'admin@sumire.com' && !user?.app_role) {
+    console.log('⚠️ Admin email detectado, forçando role=admin')
+    role = 'admin'
+  }
+
+  console.log('📌 Role do usuário (da tabela usuarios_internos):', role)
 
   // Filtro de menu baseado no perfil
   const items = allItems.filter((item) => {
@@ -102,7 +111,7 @@ export function AppSidebar() {
             <User className="h-4 w-4 text-primary" />
           </div>
           <div className="flex flex-col overflow-hidden">
-            <span className="text-sm font-medium truncate">{user?.name || user?.email || 'Usuário'}</span>
+            <span className="text-sm font-medium truncate">{user?.nome || user?.email || 'Usuário'}</span>
             <span className="text-xs text-muted-foreground capitalize">{role}</span>
           </div>
         </div>
