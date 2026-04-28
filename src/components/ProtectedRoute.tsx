@@ -1,7 +1,8 @@
+protectedroute.tsx está assim:
 import { Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '@/hooks/use-auth'
 
-function ProtectedRoute() {
+export function ProtectedRoute() {
   const { user, loading } = useAuth()
 
   console.log('ProtectedRoute - loading:', loading, 'user:', user)
@@ -22,4 +23,3 @@ function ProtectedRoute() {
   console.log('Renderizando outlet')
   return <Outlet />
 }
-
