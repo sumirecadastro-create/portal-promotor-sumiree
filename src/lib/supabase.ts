@@ -1,9 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+// 🔥 VALORES FIXOS (funcionaram no teste)
+const supabaseUrl = 'https://yfyxpgksrpnzndjtlobe.supabase.co'
+const supabaseAnonKey = 'sb_publishable_zc64H0edWIVvHxmdZG8Myg_aw-3tP78'
 
-// 🔥 Configuração para evitar lock issues e erros de autenticação
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     autoRefreshToken: true,
