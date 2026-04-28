@@ -9,7 +9,7 @@ import LojaDetail from './pages/LojaDetail'
 import Promotores from './pages/Promotores'
 import PromotorDetail from './pages/PromotorDetail'
 import CheckIn from './pages/CheckIn'
-import CadastroPromotores from './pages/CadastroPromotores'
+import CadastroUsuarios from './pages/CadastroUsuarios'
 import Marcas from './pages/Marcas'
 import Acoes from './pages/Acoes'
 import Relatorios from './pages/Relatorios'
@@ -26,7 +26,6 @@ const App = () => (
         <Sonner />
         <Routes>
           <Route path="/login" element={<Login />} />
-          {/* Rotas SEM proteção - temporário */}
           <Route element={<Layout />}>
             <Route path="/" element={<Index />} />
             <Route path="/lojas" element={<Lojas />} />
@@ -34,7 +33,7 @@ const App = () => (
             <Route path="/promotores" element={<Promotores />} />
             <Route path="/promotores/:id" element={<PromotorDetail />} />
             <Route path="/check-in" element={<CheckIn />} />
-            <Route path="/cadastro-promotores" element={<CadastroPromotores />} />
+            <Route path="/cadastro-usuarios" element={<CadastroUsuarios />} />
             <Route path="/marcas" element={<Marcas />} />
             <Route path="/acoes" element={<Acoes />} />
             <Route path="/relatorios" element={<Relatorios />} />
