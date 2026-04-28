@@ -1,11 +1,8 @@
-
 import { Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '@/hooks/use-auth'
 
-export function ProtectedRoute() {
+export default function ProtectedRoute() {
   const { user, loading } = useAuth()
-
-  console.log('ProtectedRoute - loading:', loading, 'user:', user)
 
   if (loading) {
     return (
@@ -16,10 +13,8 @@ export function ProtectedRoute() {
   }
 
   if (!user) {
-    console.log('Redirecionando para /login')
     return <Navigate to="/login" replace />
   }
 
-  console.log('Renderizando outlet')
   return <Outlet />
 }
