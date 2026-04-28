@@ -16,7 +16,7 @@ import Relatorios from './pages/Relatorios'
 import Campanhas from './pages/Campanhas' 
 import NotFound from './pages/NotFound'
 import Login from './pages/Login'
-import  AuthProvider  from './hooks/use-auth'
+export const AuthProvider = ({ children }) => { ... }
 import  ProtectedRoute  from './components/ProtectedRoute'
 
 const App = () => (
