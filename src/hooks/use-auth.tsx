@@ -60,6 +60,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             
             console.log('✅ Usuário carregado:', customUser.email, '→ Role:', customUser.app_role)
             setUser(customUser)
+            console.log('🔍 setUser chamado com:', customUser.email)
+            console.log('🔍 user estado após setUser:', user)
             setLoading(false)
             return
           }
