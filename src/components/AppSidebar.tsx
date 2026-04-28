@@ -32,7 +32,7 @@ const allItems = [
   { title: 'Lojas', url: '/lojas', icon: Store },
   { title: 'Promotores', url: '/promotores', icon: Users },
   { title: 'Check-in (Operação)', url: '/check-in', icon: MapPin },
-  { title: 'Cadastro de Promotores', url: '/cadastro-promotores', icon: Tags },
+  { title: 'Cadastro de Usuários', url: '/cadastro-usuarios', icon: Users },
   { title: 'Marcas', url: '/marcas', icon: Bookmark },
   { title: 'Ações', url: '/acoes', icon: Target },
   { title: 'Campanhas', url: '/campanhas', icon: Calendar },
@@ -43,9 +43,8 @@ export function AppSidebar() {
   const location = useLocation()
   const { user, signOut, loading } = useAuth()
 
-  // 🔥 FORÇA ADMIN PARA SEMPRE MOSTRAR O MENU
-  // Isso vai funcionar independente do user ou loading
-  const role = 'admin'
+  // 🔥 Pega o role do usuário da tabela usuarios_internos
+  const role = user?.app_role || 'promotor'
 
   // Se ainda estiver carregando, mostra um placeholder
   if (loading) {
@@ -61,7 +60,25 @@ export function AppSidebar() {
     )
   }
 
-  const items = allItems
+  // 🔥 Filtro de menu baseado no perfil
+  const items = allItems.filter((item) => {
+    // ADMIN: vê tudo (incluindo Cadastro de Usuários)
+    if (role === 'admin') return true
+    
+    // GESTOR: NÃO vê Cadastro de Usuários
+    if (role === 'gestor')
+      return ['Dashboard', 'Lojas', 'Promotores', 'Ações', 'Campanhas', 'Relatórios'].includes(item.title)
+    
+    // GERENTE DE LOJA: vê apenas Dashboard, Check-in, Relatórios
+    if (role === 'gerente')
+      return ['Dashboard', 'Check-in (Operação)', 'Relatórios'].includes(item.title)
+    
+    // PROMOTOR: vê apenas Dashboard e Check-in
+    if (role === 'promotor') 
+      return ['Dashboard', 'Check-in (Operação)'].includes(item.title)
+    
+    return false
+  })
 
   return (
     <Sidebar>
@@ -99,8 +116,8 @@ export function AppSidebar() {
             <User className="h-4 w-4 text-primary" />
           </div>
           <div className="flex flex-col overflow-hidden">
-            <span className="text-sm font-medium truncate">{user?.email || 'admin@sumire.com'}</span>
-            <span className="text-xs text-muted-foreground capitalize">admin</span>
+            <span className="text-sm font-medium truncate">{user?.nome || user?.email || 'Usuário'}</span>
+            <span className="text-xs text-muted-foreground capitalize">{role}</span>
           </div>
         </div>
         <SidebarMenu>
