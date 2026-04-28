@@ -17,7 +17,6 @@ import Campanhas from './pages/Campanhas'
 import NotFound from './pages/NotFound'
 import Login from './pages/Login'
 import { AuthProvider } from './hooks/use-auth'
-import  ProtectedRoute  from './components/ProtectedRoute'
 
 const App = () => (
   <BrowserRouter>
@@ -27,20 +26,19 @@ const App = () => (
         <Sonner />
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route element={<ProtectedRoute />}>
-            <Route element={<Layout />}>
-              <Route path="/" element={<Index />} />
-              <Route path="/lojas" element={<Lojas />} />
-              <Route path="/lojas/:id" element={<LojaDetail />} />
-              <Route path="/promotores" element={<Promotores />} />
-              <Route path="/promotores/:id" element={<PromotorDetail />} />
-              <Route path="/check-in" element={<CheckIn />} />
-              <Route path="/cadastro-promotores" element={<CadastroPromotores />} />
-              <Route path="/marcas" element={<Marcas />} />
-              <Route path="/acoes" element={<Acoes />} />
-              <Route path="/relatorios" element={<Relatorios />} />
-              <Route path="/campanhas" element={<Campanhas />} />
-            </Route>
+          {/* Rotas SEM proteção - temporário */}
+          <Route element={<Layout />}>
+            <Route path="/" element={<Index />} />
+            <Route path="/lojas" element={<Lojas />} />
+            <Route path="/lojas/:id" element={<LojaDetail />} />
+            <Route path="/promotores" element={<Promotores />} />
+            <Route path="/promotores/:id" element={<PromotorDetail />} />
+            <Route path="/check-in" element={<CheckIn />} />
+            <Route path="/cadastro-promotores" element={<CadastroPromotores />} />
+            <Route path="/marcas" element={<Marcas />} />
+            <Route path="/acoes" element={<Acoes />} />
+            <Route path="/relatorios" element={<Relatorios />} />
+            <Route path="/campanhas" element={<Campanhas />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
