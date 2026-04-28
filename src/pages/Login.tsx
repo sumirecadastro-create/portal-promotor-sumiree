@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useLocation } from 'react-router-dom'
-import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -17,15 +16,44 @@ export default function Login() {
     setIsLoading(true)
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password
+      // 🔥 Usando fetch direto em vez do supabase.auth
+      const supabaseUrl = 'https://yfyxpgksrpnzndjtlobe.supabase.co'
+      const supabaseKey = 'sb_publishable_zc64H0edWIVvHxmdZG8Myg_aw-3tP78'
+      
+      const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': supabaseKey
+        },
+        body: JSON.stringify({ email, password })
       })
-      if (error) throw error
-      // Força recarregamento completo do navegador
-      window.location.href = from
+      
+      const data = await response.json()
+      
+      if (data.error) {
+        throw new Error(data.error_description || 'Erro no login')
+      }
+      
+      if (data.access_token) {
+        // Salvar sessão manualmente no localStorage
+        const storageKey = `sb-${supabaseUrl.split('//')[1].split('.')[0]}-auth-token`
+        localStorage.setItem(storageKey, JSON.stringify({
+          access_token: data.access_token,
+          refresh_token: data.refresh_token,
+          user: data.user
+        }))
+        
+        console.log('✅ Login realizado com sucesso!')
+        
+        // Força recarregamento completo do navegador
+        window.location.href = from
+      } else {
+        throw new Error('Resposta inválida do servidor')
+      }
     } catch (error: any) {
-      alert(error.message || 'Erro ao fazer login')
+      console.error('Erro detalhado:', error)
+      alert(error.message || 'Erro ao fazer login. Verifique suas credenciais.')
     } finally {
       setIsLoading(false)
     }
