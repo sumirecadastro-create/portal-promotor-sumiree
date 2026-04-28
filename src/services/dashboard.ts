@@ -51,9 +51,25 @@ export async function getDashboardData(): Promise<{
     const lojasComPromotor = new Set(promotores?.map(p => p.loja_id).filter(Boolean))
     const cobertura = totalLojas ? Math.round((lojasComPromotor.size / totalLojas) * 100) : 0
 
-    // Como não temos tabela 'visitas', retornamos array vazio
-    // Você pode criar esta tabela depois
-    const recentVisits: RecentVisit[] = []
+    // Buscar visitas recentes (se a tabela existir)
+    let recentVisits: RecentVisit[] = []
+    
+    const { data: visitas, error: visitasError } = await supabase
+      .from('visitas')
+      .select('*, promotores(promotor_nome), lojas(nome_loja)')
+      .order('check_in', { ascending: false })
+      .limit(5)
+    
+    if (!visitasError && visitas) {
+      recentVisits = visitas.map((v: any) => ({
+        id: v.id,
+        promotor_nome: v.promotores?.promotor_nome || 'Desconhecido',
+        loja_nome: v.lojas?.nome_loja || 'Desconhecida',
+        check_in: v.check_in,
+        check_out: v.check_out,
+        status: v.status || 'pendente'
+      }))
+    }
 
     return {
       stats: {
@@ -62,7 +78,7 @@ export async function getDashboardData(): Promise<{
         cobertura,
         visitasHoje: 0,
       },
-      recentVisits: [],
+      recentVisits,
     }
   } catch (error) {
     console.error('Failed to load dashboard data', error)
@@ -77,18 +93,28 @@ export async function getCoberturaPorMarcaComLojas(): Promise<MarcaCobertura[]> 
   try {
     console.log('🔍 Buscando cobertura por marca...')
     
-    // Buscar todas as marcas
-    const { data: marcas, error: marcasError } = await supabase
-      .from('marcas')
-      .select('id, nome_marca')
+    // Buscar relação promotores-marcas com os dados de loja
+    const { data: promotoresMarcas, error } = await supabase
+      .from('promotores_marcas')
+      .select(`
+        promotor_id,
+        promotores!inner (
+          loja_id,
+          status
+        ),
+        marcas!inner (
+          id,
+          nome
+        )
+      `)
     
-    if (marcasError) {
-      console.error('❌ Erro ao buscar marcas:', marcasError)
+    if (error) {
+      console.error('❌ Erro ao buscar dados:', error)
       return []
     }
 
-    if (!marcas || marcas.length === 0) {
-      console.log('⚠️ Nenhuma marca encontrada')
+    if (!promotoresMarcas || promotoresMarcas.length === 0) {
+      console.log('⚠️ Nenhum relacionamento promotor-marca encontrado')
       return []
     }
 
@@ -97,36 +123,39 @@ export async function getCoberturaPorMarcaComLojas(): Promise<MarcaCobertura[]> 
       .from('lojas')
       .select('*', { count: 'exact', head: true })
 
-    // Para cada marca, contar quantos promotores (via relação)
-    const coberturaMarcas: MarcaCobertura[] = []
-    
-    for (const marca of marcas) {
-      // Buscar promotores associados a esta marca
-      const { data: promotores } = await supabase
-        .from('promotores')
-        .select('loja_id')
-        .eq('marca_produto', marca.nome_marca)  // Usando campo da tabela promotores
-        .eq('status', 'ativo')
+    // Mapa para contar lojas únicas por marca
+    const lojasPorMarca = new Map<string, Set<string>>()
+    const nomePorMarca = new Map<string, string>()
 
-      const lojasUnicas = new Set(promotores?.map(p => p.loja_id).filter(Boolean))
-      const totalLojasMarca = lojasUnicas.size
+    promotoresMarcas.forEach((item: any) => {
+      // Verificar se o promotor está ativo
+      const promotorAtivo = item.promotores?.status === 'ativo'
+      const marcaId = item.marcas?.id
+      const marcaNome = item.marcas?.nome
+      const lojaId = item.promotores?.loja_id
       
-      coberturaMarcas.push({
-        nome_marca: marca.nome_marca,
-        total_promotores: totalLojasMarca,
-        cobertura_percentual: totalLojas ? Math.round((totalLojasMarca / totalLojas) * 100) : 0
-      })
-    }
+      if (marcaId && marcaNome && lojaId && promotorAtivo) {
+        if (!lojasPorMarca.has(marcaId)) {
+          lojasPorMarca.set(marcaId, new Set())
+          nomePorMarca.set(marcaId, marcaNome)
+        }
+        lojasPorMarca.get(marcaId)!.add(lojaId)
+      }
+    })
 
-    // Ordenar por total de lojas (maior para menor) e pegar top 20
-    const top20 = coberturaMarcas
+    // Converter para array e ordenar
+    const coberturaMarcas: MarcaCobertura[] = Array.from(lojasPorMarca.entries())
+      .map(([marcaId, lojasSet]) => ({
+        nome_marca: nomePorMarca.get(marcaId) || 'Desconhecida',
+        total_promotores: lojasSet.size,
+        cobertura_percentual: totalLojas ? Math.round((lojasSet.size / totalLojas) * 100) : 0
+      }))
       .sort((a, b) => b.total_promotores - a.total_promotores)
       .slice(0, 20)
 
-    console.log(`📊 Top ${top20.length} marcas encontradas`, top20)
+    console.log(`📊 Top ${coberturaMarcas.length} marcas encontradas`, coberturaMarcas)
     
-    return top20
-
+    return coberturaMarcas
   } catch (error) {
     console.error('❌ Erro ao buscar cobertura por marca:', error)
     return []
