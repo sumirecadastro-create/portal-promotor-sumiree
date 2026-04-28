@@ -4,8 +4,8 @@ import { User } from '@supabase/supabase-js'
 
 // 🔥 Estendendo o tipo User para incluir nossos campos customizados
 interface CustomUser extends User {
-  app_role?: string  // role da sua tabela usuarios_internos
-  nome?: string      // nome da sua tabela usuarios_internos
+  app_role?: string
+  nome?: string
 }
 
 interface AuthContextType {
@@ -22,54 +22,99 @@ export const useAuth = () => {
   return context
 }
 
-// 🔥 Função para buscar dados adicionais na tabela usuarios_internos
-const fetchCustomUserData = async (authUser: User): Promise<CustomUser> => {
-  try {
-    const { data, error } = await supabase
-      .from('usuarios_internos')
-      .select('role, nome')
-      .eq('email', authUser.email)
-      .single()
-
-    if (error) {
-      console.error('Erro ao buscar role do usuário:', error.message)
-      return authUser as CustomUser
-    }
-
-    // Adiciona os campos customizados ao objeto do usuário
-    const customUser = authUser as CustomUser
-    customUser.app_role = data?.role || 'promotor'
-    customUser.nome = data?.nome
-    
-    console.log('✅ Usuário com role carregada:', customUser.email, '→ Role:', customUser.app_role)
-    
-    return customUser
-  } catch (error) {
-    console.error('Erro ao carregar dados customizados:', error)
-    return authUser as CustomUser
-  }
-}
-
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<CustomUser | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Verificar sessão atual e buscar dados customizados
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    const loadUser = async () => {
+      setLoading(true)
+      
+      // 🔥 Configuração do Supabase
+      const supabaseUrl = 'https://yfyxpgksrpnzndjtlobe.supabase.co'
+      const storageKey = `sb-${supabaseUrl.split('//')[1].split('.')[0]}-auth-token`
+      
+      // Tentar pegar a sessão do localStorage (do login manual)
+      const storedSession = localStorage.getItem(storageKey)
+      
+      if (storedSession) {
+        try {
+          const session = JSON.parse(storedSession)
+          console.log('📦 Sessão encontrada no localStorage:', session?.user?.email)
+          
+          if (session?.user) {
+            // Buscar dados adicionais na tabela usuarios_internos
+            const { data: userData, error } = await supabase
+              .from('usuarios_internos')
+              .select('role, nome')
+              .eq('email', session.user.email)
+              .single()
+            
+            if (error) {
+              console.error('Erro ao buscar role:', error)
+            }
+            
+            const customUser = session.user as CustomUser
+            customUser.app_role = userData?.role || 'admin'
+            customUser.nome = userData?.nome || session.user.email?.split('@')[0]
+            
+            console.log('✅ Usuário carregado:', customUser.email, '→ Role:', customUser.app_role)
+            setUser(customUser)
+            setLoading(false)
+            return
+          }
+        } catch (e) {
+          console.error('Erro ao parsear sessão:', e)
+        }
+      }
+      
+      // Fallback: tentar sessão do Supabase
+      const { data: { session } } = await supabase.auth.getSession()
+      
       if (session?.user) {
-        const customUser = await fetchCustomUserData(session.user)
+        console.log('📦 Sessão encontrada no Supabase:', session.user.email)
+        
+        const { data: userData, error } = await supabase
+          .from('usuarios_internos')
+          .select('role, nome')
+          .eq('email', session.user.email)
+          .single()
+        
+        if (error) {
+          console.error('Erro ao buscar role:', error)
+        }
+        
+        const customUser = session.user as CustomUser
+        customUser.app_role = userData?.role || 'admin'
+        customUser.nome = userData?.nome || session.user.email?.split('@')[0]
+        
+        console.log('✅ Usuário carregado:', customUser.email, '→ Role:', customUser.app_role)
         setUser(customUser)
       } else {
+        console.log('❌ Nenhuma sessão encontrada')
         setUser(null)
       }
+      
       setLoading(false)
-    })
+    }
+
+    loadUser()
 
     // Escutar mudanças de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      console.log('🔄 Auth state changed:', _event, session?.user?.email)
+      
       if (session?.user) {
-        const customUser = await fetchCustomUserData(session.user)
+        const { data: userData } = await supabase
+          .from('usuarios_internos')
+          .select('role, nome')
+          .eq('email', session.user.email)
+          .single()
+        
+        const customUser = session.user as CustomUser
+        customUser.app_role = userData?.role || 'admin'
+        customUser.nome = userData?.nome || session.user.email?.split('@')[0]
+        
         setUser(customUser)
       } else {
         setUser(null)
@@ -81,6 +126,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [])
 
   const signOut = async () => {
+    // Limpar localStorage manualmente
+    const supabaseUrl = 'https://yfyxpgksrpnzndjtlobe.supabase.co'
+    const storageKey = `sb-${supabaseUrl.split('//')[1].split('.')[0]}-auth-token`
+    localStorage.removeItem(storageKey)
+    
     await supabase.auth.signOut()
     setUser(null)
   }
