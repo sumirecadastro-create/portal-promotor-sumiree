@@ -44,26 +44,35 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           
           if (session?.user) {
             // Buscar dados adicionais na tabela usuarios_internos
-            const { data: userData, error } = await supabase
-              .from('usuarios_internos')
-              .select('role, nome')
-              .eq('email', session.user.email)
-              .single()
-            
-            if (error) {
-              console.error('Erro ao buscar role:', error)
+            try {
+              const { data: userData, error } = await supabase
+                .from('usuarios_internos')
+                .select('role, nome')
+                .eq('email', session.user.email)
+                .maybeSingle()  // 🔥 Mudado de .single() para .maybeSingle()
+              
+              if (error) {
+                console.error('Erro ao buscar role:', error)
+              }
+              
+              const customUser = session.user as CustomUser
+              customUser.app_role = userData?.role || 'admin'
+              customUser.nome = userData?.nome || session.user.email?.split('@')[0]
+              
+              console.log('✅ Usuário carregado:', customUser.email, '→ Role:', customUser.app_role)
+              setUser(customUser)
+              setLoading(false)
+              return
+            } catch (err) {
+              console.error('Erro no try/catch da busca:', err)
+              // Fallback: usar apenas dados do auth
+              const customUser = session.user as CustomUser
+              customUser.app_role = 'admin'
+              customUser.nome = session.user.email?.split('@')[0]
+              setUser(customUser)
+              setLoading(false)
+              return
             }
-            
-            const customUser = session.user as CustomUser
-            customUser.app_role = userData?.role || 'admin'
-            customUser.nome = userData?.nome || session.user.email?.split('@')[0]
-            
-            console.log('✅ Usuário carregado:', customUser.email, '→ Role:', customUser.app_role)
-            setUser(customUser)
-            console.log('🔍 setUser chamado com:', customUser.email)
-            console.log('🔍 user estado após setUser:', user)
-            setLoading(false)
-            return
           }
         } catch (e) {
           console.error('Erro ao parsear sessão:', e)
@@ -76,22 +85,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (session?.user) {
         console.log('📦 Sessão encontrada no Supabase:', session.user.email)
         
-        const { data: userData, error } = await supabase
-          .from('usuarios_internos')
-          .select('role, nome')
-          .eq('email', session.user.email)
-          .single()
-        
-        if (error) {
-          console.error('Erro ao buscar role:', error)
+        try {
+          const { data: userData, error } = await supabase
+            .from('usuarios_internos')
+            .select('role, nome')
+            .eq('email', session.user.email)
+            .maybeSingle()  // 🔥 Mudado de .single() para .maybeSingle()
+          
+          if (error) {
+            console.error('Erro ao buscar role:', error)
+          }
+          
+          const customUser = session.user as CustomUser
+          customUser.app_role = userData?.role || 'admin'
+          customUser.nome = userData?.nome || session.user.email?.split('@')[0]
+          
+          console.log('✅ Usuário carregado:', customUser.email, '→ Role:', customUser.app_role)
+          setUser(customUser)
+        } catch (err) {
+          console.error('Erro no try/catch:', err)
+          const customUser = session.user as CustomUser
+          customUser.app_role = 'admin'
+          customUser.nome = session.user.email?.split('@')[0]
+          setUser(customUser)
         }
-        
-        const customUser = session.user as CustomUser
-        customUser.app_role = userData?.role || 'admin'
-        customUser.nome = userData?.nome || session.user.email?.split('@')[0]
-        
-        console.log('✅ Usuário carregado:', customUser.email, '→ Role:', customUser.app_role)
-        setUser(customUser)
       } else {
         console.log('❌ Nenhuma sessão encontrada')
         setUser(null)
@@ -107,17 +124,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.log('🔄 Auth state changed:', _event, session?.user?.email)
       
       if (session?.user) {
-        const { data: userData } = await supabase
-          .from('usuarios_internos')
-          .select('role, nome')
-          .eq('email', session.user.email)
-          .single()
-        
-        const customUser = session.user as CustomUser
-        customUser.app_role = userData?.role || 'admin'
-        customUser.nome = userData?.nome || session.user.email?.split('@')[0]
-        
-        setUser(customUser)
+        try {
+          const { data: userData } = await supabase
+            .from('usuarios_internos')
+            .select('role, nome')
+            .eq('email', session.user.email)
+            .maybeSingle()
+          
+          const customUser = session.user as CustomUser
+          customUser.app_role = userData?.role || 'admin'
+          customUser.nome = userData?.nome || session.user.email?.split('@')[0]
+          
+          setUser(customUser)
+        } catch (err) {
+          const customUser = session.user as CustomUser
+          customUser.app_role = 'admin'
+          customUser.nome = session.user.email?.split('@')[0]
+          setUser(customUser)
+        }
       } else {
         setUser(null)
       }
