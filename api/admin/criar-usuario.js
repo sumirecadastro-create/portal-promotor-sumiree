@@ -9,9 +9,8 @@ export default async function handler(req, res) {
   try {
     const { email, password, nome, role } = req.body
 
-    // Usar variáveis de ambiente (configurar no Vercel)
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    const supabaseUrl = process.env.VITE_SUPABASE_URL
+    const supabaseServiceKey = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY
 
     if (!supabaseUrl || !supabaseServiceKey) {
       return res.status(500).json({ error: 'Configuração do Supabase não encontrada' })
@@ -55,6 +54,7 @@ export default async function handler(req, res) {
     })
 
   } catch (error) {
+    console.error('Erro:', error)
     return res.status(500).json({ error: error.message })
   }
 }
