@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -36,34 +35,25 @@ export default function CadastroUsuarios() {
     }
 
     try {
-      // 1. Criar usuário no Auth do Supabase
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email,
-        password,
-        email_confirm: true,
-        user_metadata: { 
-          nome, 
-          role 
-        }
+      // Chamar a API route do Vercel em vez de usar supabase.auth.admin diretamente
+      const response = await fetch('/api/admin/criar-usuario', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email,
+          password,
+          nome,
+          role
+        })
       })
 
-      if (authError) throw authError
+      const data = await response.json()
 
-      if (!authData.user) throw new Error('Erro ao criar usuário')
-
-      // 2. Inserir na tabela usuarios_internos
-      const { error: dbError } = await supabase
-        .from('usuarios_internos')
-        .insert({
-          id: authData.user.id,
-          nome,
-          email,
-          password_hash: 'auth_managed', // Placeholder, a senha é gerenciada pelo Auth
-          role,
-          created_at: new Date().toISOString()
-        })
-
-      if (dbError) throw dbError
+      if (!response.ok) {
+        throw new Error(data.error || 'Erro ao criar usuário')
+      }
 
       // Sucesso
       setMessage({ type: 'success', text: `✅ Usuário ${nome} criado com sucesso!` })
@@ -79,7 +69,7 @@ export default function CadastroUsuarios() {
       console.error('Erro ao criar usuário:', error)
       
       let errorMessage = error.message
-      if (error.message.includes('duplicate key')) {
+      if (error.message.includes('duplicate key') || error.message.includes('already registered')) {
         errorMessage = 'Este email já está em uso'
       } else if (error.message.includes('password')) {
         errorMessage = 'Senha inválida. Use pelo menos 6 caracteres'
