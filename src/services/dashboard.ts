@@ -22,43 +22,71 @@ export interface MarcaCobertura {
   cobertura_percentual: number
 }
 
-export async function getDashboardData(): Promise<{
+export async function getDashboardData(lojaId: string | null = null, isAdmin: boolean = true): Promise<{
   stats: DashboardStats
   recentVisits: RecentVisit[]
 }> {
   try {
-    // Buscar total de lojas
-    const { count: totalLojas, error: lojasError } = await supabase
-      .from('lojas')
-      .select('*', { count: 'exact', head: true })
-    
+    // 🔹 Total de Lojas (filtrado para gerente)
+    let lojasQuery = supabase.from('lojas').select('*', { count: 'exact', head: true })
+    if (!isAdmin && lojaId) {
+      lojasQuery = lojasQuery.eq('id', lojaId)
+    }
+    const { count: totalLojas, error: lojasError } = await lojasQuery
     if (lojasError) console.error('Erro lojas:', lojasError)
 
-    // Buscar promotores ativos
-    const { count: promotoresAtivos, error: promotoresError } = await supabase
+    // 🔹 Promotores Ativos (filtrado por loja)
+    let promotoresQuery = supabase
       .from('promotores')
       .select('*', { count: 'exact', head: true })
       .eq('status', 'ativo')
     
+    if (!isAdmin && lojaId) {
+      promotoresQuery = promotoresQuery.eq('loja_id', lojaId)
+    }
+    const { count: promotoresAtivos, error: promotoresError } = await promotoresQuery
     if (promotoresError) console.error('Erro promotores:', promotoresError)
 
-    // Buscar lojas com promotor (para cobertura)
-    const { data: promotores } = await supabase
+    // 🔹 Lojas com promotor (para cobertura) - filtrado
+    let promotoresLojasQuery = supabase
       .from('promotores')
       .select('loja_id')
       .eq('status', 'ativo')
+    
+    if (!isAdmin && lojaId) {
+      promotoresLojasQuery = promotoresLojasQuery.eq('loja_id', lojaId)
+    }
+    const { data: promotores } = await promotoresLojasQuery
 
     const lojasComPromotor = new Set(promotores?.map(p => p.loja_id).filter(Boolean))
-    const cobertura = totalLojas ? Math.round((lojasComPromotor.size / totalLojas) * 100) : 0
-
-    // Buscar visitas recentes (se a tabela existir)
-    let recentVisits: RecentVisit[] = []
     
-    const { data: visitas, error: visitasError } = await supabase
+    // Total de lojas para cálculo de cobertura (filtrado)
+    let totalLojasCoberturaQuery = supabase.from('lojas').select('*', { count: 'exact', head: true })
+    if (!isAdmin && lojaId) {
+      totalLojasCoberturaQuery = totalLojasCoberturaQuery.eq('id', lojaId)
+    }
+    const { count: totalLojasCobertura } = await totalLojasCoberturaQuery
+    
+    const cobertura = totalLojasCobertura && totalLojasCobertura > 0
+      ? Math.round((lojasComPromotor.size / totalLojasCobertura) * 100)
+      : 0
+
+    // 🔹 Visitas recentes (filtrado por loja)
+    let recentVisits: RecentVisit[] = []
+    const hoje = new Date().toISOString().split('T')[0]
+    
+    let visitasQuery = supabase
       .from('visitas')
       .select('*, promotores(promotor_nome), lojas(nome_loja)')
+      .gte('check_in', hoje)
       .order('check_in', { ascending: false })
-      .limit(5)
+      .limit(10)
+    
+    if (!isAdmin && lojaId) {
+      visitasQuery = visitasQuery.eq('loja_id', lojaId)
+    }
+    
+    const { data: visitas, error: visitasError } = await visitasQuery
     
     if (!visitasError && visitas) {
       recentVisits = visitas.map((v: any) => ({
@@ -71,12 +99,23 @@ export async function getDashboardData(): Promise<{
       }))
     }
 
+    // 🔹 Contagem de visitas hoje
+    let visitasHojeQuery = supabase
+      .from('visitas')
+      .select('*', { count: 'exact', head: true })
+      .gte('check_in', hoje)
+    
+    if (!isAdmin && lojaId) {
+      visitasHojeQuery = visitasHojeQuery.eq('loja_id', lojaId)
+    }
+    const { count: visitasHoje } = await visitasHojeQuery
+
     return {
       stats: {
         totalLojas: totalLojas || 0,
         promotoresAtivos: promotoresAtivos || 0,
         cobertura,
-        visitasHoje: 0,
+        visitasHoje: visitasHoje || 0,
       },
       recentVisits,
     }
@@ -89,12 +128,12 @@ export async function getDashboardData(): Promise<{
   }
 }
 
-export async function getCoberturaPorMarcaComLojas(): Promise<MarcaCobertura[]> {
+export async function getCoberturaPorMarcaComLojas(lojaId: string | null = null, isAdmin: boolean = true): Promise<MarcaCobertura[]> {
   try {
     console.log('🔍 Buscando cobertura por marca...')
     
     // Buscar relação promotores-marcas com os dados de loja
-    const { data: promotoresMarcas, error } = await supabase
+    let query = supabase
       .from('promotores_marcas')
       .select(`
         promotor_id,
@@ -108,6 +147,8 @@ export async function getCoberturaPorMarcaComLojas(): Promise<MarcaCobertura[]> 
         )
       `)
     
+    const { data: promotoresMarcas, error } = await query
+    
     if (error) {
       console.error('❌ Erro ao buscar dados:', error)
       return []
@@ -118,10 +159,12 @@ export async function getCoberturaPorMarcaComLojas(): Promise<MarcaCobertura[]> 
       return []
     }
 
-    // Buscar total de lojas
-    const { count: totalLojas } = await supabase
-      .from('lojas')
-      .select('*', { count: 'exact', head: true })
+    // Buscar total de lojas (filtrado para gerente)
+    let totalLojasQuery = supabase.from('lojas').select('*', { count: 'exact', head: true })
+    if (!isAdmin && lojaId) {
+      totalLojasQuery = totalLojasQuery.eq('id', lojaId)
+    }
+    const { count: totalLojas } = await totalLojasQuery
 
     // Mapa para contar lojas únicas por marca
     const lojasPorMarca = new Map<string, Set<string>>()
@@ -132,14 +175,19 @@ export async function getCoberturaPorMarcaComLojas(): Promise<MarcaCobertura[]> 
       const promotorAtivo = item.promotores?.status === 'ativo'
       const marcaId = item.marcas?.id
       const marcaNome = item.marcas?.nome
-      const lojaId = item.promotores?.loja_id
+      const lojaIdPromotor = item.promotores?.loja_id
       
-      if (marcaId && marcaNome && lojaId && promotorAtivo) {
+      // Se não for admin, filtrar apenas pela loja do gerente
+      if (!isAdmin && lojaId && lojaIdPromotor !== lojaId) {
+        return
+      }
+      
+      if (marcaId && marcaNome && lojaIdPromotor && promotorAtivo) {
         if (!lojasPorMarca.has(marcaId)) {
           lojasPorMarca.set(marcaId, new Set())
           nomePorMarca.set(marcaId, marcaNome)
         }
-        lojasPorMarca.get(marcaId)!.add(lojaId)
+        lojasPorMarca.get(marcaId)!.add(lojaIdPromotor)
       }
     })
 
