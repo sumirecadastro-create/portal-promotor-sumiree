@@ -7,7 +7,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { email, password, nome, role } = req.body
+    const { email, password, nome, role, lojaId } = req.body
 
     const supabaseUrl = process.env.VITE_SUPABASE_URL
     const supabaseServiceKey = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY
@@ -29,17 +29,27 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: authError.message })
     }
 
+    // Preparar os dados para inserir
+    const insertData = {
+      id: authData.user.id,
+      nome,
+      email,
+      role,
+      created_at: new Date().toISOString()
+    }
+
+    // Se for gerente e tiver lojaId, adicionar o vínculo
+    if (role === 'gerente' && lojaId) {
+      insertData.loja_id = lojaId
+    }
+
     const { error: dbError } = await supabaseAdmin
       .from('usuarios_internos')
-      .insert({
-        id: authData.user.id,
-        nome,
-        email,
-        role,
-        created_at: new Date().toISOString()
-      })
+      .insert(insertData)
 
     if (dbError) {
+      // Se falhar no banco, deletar o usuário do auth
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
       return res.status(400).json({ error: dbError.message })
     }
 
@@ -49,7 +59,8 @@ export default async function handler(req, res) {
         id: authData.user.id,
         email: authData.user.email,
         nome,
-        role
+        role,
+        loja_id: role === 'gerente' ? lojaId : null
       }
     })
 
