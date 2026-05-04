@@ -5,11 +5,15 @@ import { User } from '@supabase/supabase-js'
 interface CustomUser extends User {
   app_role?: string
   nome?: string
+  loja_id?: string | null
 }
 
 interface AuthContextType {
   user: CustomUser | null
   loading: boolean
+  isAdmin: boolean
+  isGerente: boolean
+  userLojaId: string | null
   signOut: () => Promise<void>
 }
 
@@ -24,6 +28,9 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<CustomUser | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [isGerente, setIsGerente] = useState(false)
+  const [userLojaId, setUserLojaId] = useState<string | null>(null)
 
   useEffect(() => {
     const loadUser = async () => {
@@ -41,15 +48,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           if (session?.user) {
             const { data: userData } = await supabase
               .from('usuarios_internos')
-              .select('role, nome')
+              .select('role, nome, loja_id')
               .eq('email', session.user.email)
               .maybeSingle()
             
             const customUser = session.user as CustomUser
             customUser.app_role = userData?.role || 'admin'
             customUser.nome = userData?.nome || session.user.email?.split('@')[0]
+            customUser.loja_id = userData?.loja_id || null
             
-            console.log('✅ Usuário carregado:', customUser.email)
+            // Setar permissões
+            const adminRole = userData?.role === 'admin' || userData?.role === 'gestor'
+            const gerenteRole = userData?.role === 'gerente'
+            
+            setIsAdmin(adminRole)
+            setIsGerente(gerenteRole)
+            setUserLojaId(userData?.loja_id || null)
+            
+            console.log('✅ Usuário carregado:', customUser.email, 'Role:', userData?.role, 'Loja:', userData?.loja_id)
             setUser(customUser)
             setLoading(false)
             return
@@ -60,6 +76,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
       
       setUser(null)
+      setIsAdmin(false)
+      setIsGerente(false)
+      setUserLojaId(null)
       setLoading(false)
     }
 
@@ -71,17 +90,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (session?.user) {
         const { data: userData } = await supabase
           .from('usuarios_internos')
-          .select('role, nome')
+          .select('role, nome, loja_id')
           .eq('email', session.user.email)
           .maybeSingle()
         
         const customUser = session.user as CustomUser
         customUser.app_role = userData?.role || 'admin'
         customUser.nome = userData?.nome || session.user.email?.split('@')[0]
+        customUser.loja_id = userData?.loja_id || null
+        
+        setIsAdmin(userData?.role === 'admin' || userData?.role === 'gestor')
+        setIsGerente(userData?.role === 'gerente')
+        setUserLojaId(userData?.loja_id || null)
         
         setUser(customUser)
       } else {
         setUser(null)
+        setIsAdmin(false)
+        setIsGerente(false)
+        setUserLojaId(null)
       }
       setLoading(false)
     })
@@ -93,7 +120,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       console.log('🔓 Iniciando logout...')
       
-      // Limpar localStorage (todas as chaves possíveis)
       const supabaseUrl = 'https://yfyxpgksrpnzndjtlobe.supabase.co'
       const storageKey = `sb-${supabaseUrl.split('//')[1].split('.')[0]}-auth-token`
       
@@ -101,28 +127,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       localStorage.removeItem('sb-auth-token')
       localStorage.removeItem('supabase.auth.token')
       
-      // Limpar sessionStorage
       sessionStorage.clear()
       
-      // Fazer logout no Supabase
       await supabase.auth.signOut()
       
-      // Limpar o estado do usuário
       setUser(null)
+      setIsAdmin(false)
+      setIsGerente(false)
+      setUserLojaId(null)
       
       console.log('✅ Logout realizado com sucesso')
       
-      // Redirecionar para o login e recarregar a página
       window.location.href = '/login'
     } catch (error) {
       console.error('❌ Erro ao fazer logout:', error)
-      // Mesmo com erro, tentar redirecionar
       window.location.href = '/login'
     }
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, signOut }}>
+    <AuthContext.Provider value={{ user, loading, isAdmin, isGerente, userLojaId, signOut }}>
       {children}
     </AuthContext.Provider>
   )
