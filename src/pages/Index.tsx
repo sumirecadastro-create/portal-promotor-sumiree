@@ -13,7 +13,7 @@ import {
 import { DashboardCards } from '@/components/DashboardCards'
 import { DashboardChart } from '@/components/DashboardChart'
 import { CalendarioCampanhas } from '@/components/CalendarioCampanhas'
-import { getDashboardData, DashboardStats } from '@/services/dashboard'
+import { getDashboardData, getCoberturaPorMarcaComLojas, DashboardStats } from '@/services/dashboard'
 import { RecentVisit } from '@/services/dashboard'
 import { useAuth } from '@/hooks/use-auth'
 
@@ -22,6 +22,7 @@ export default function Index() {
   const { user, isAdmin, userLojaId } = useAuth()
   const [stats, setStats] = useState<DashboardStats | undefined>()
   const [recentVisits, setRecentVisits] = useState<RecentVisit[]>([])
+  const [coberturaMarcas, setCoberturaMarcas] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   const loadData = async () => {
@@ -30,6 +31,11 @@ export default function Index() {
     const data = await getDashboardData(userLojaId, isAdmin)
     setStats(data.stats)
     setRecentVisits(data.recentVisits)
+    
+    // Carregar cobertura por marca filtrada
+    const marcas = await getCoberturaPorMarcaComLojas(userLojaId, isAdmin)
+    setCoberturaMarcas(marcas)
+    
     setLoading(false)
   }
 
@@ -137,6 +143,41 @@ export default function Index() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Cobertura por Marca */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Cobertura por Marca</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {coberturaMarcas.length > 0 ? (
+            <div className="space-y-3">
+              {coberturaMarcas.map((marca) => (
+                <div key={marca.nome_marca} className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex justify-between mb-1">
+                      <span className="text-sm font-medium">{marca.nome_marca}</span>
+                      <span className="text-sm text-muted-foreground">
+                        {marca.total_promotores} loja(s) · {marca.cobertura_percentual}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-primary rounded-full h-2"
+                        style={{ width: `${marca.cobertura_percentual}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-center text-muted-foreground py-6">
+              Nenhuma marca encontrada para sua loja
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Calendário de Campanhas */}
       <CalendarioCampanhas />
