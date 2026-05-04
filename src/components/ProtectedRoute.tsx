@@ -1,5 +1,6 @@
 import { Navigate, Outlet } from 'react-router-dom'
 import { useAuth } from '@/hooks/use-auth'
+import MainLayout from '@/layouts/MainLayout'
 
 export default function ProtectedRoute() {
   const { user, loading } = useAuth()
@@ -19,6 +20,10 @@ export default function ProtectedRoute() {
     return <Navigate to="/login" replace />
   }
 
-  console.log('Renderizando outlet - usuário:', user.email)
-  return <Outlet />
+  console.log('Renderizando layout - usuário:', user.email)
+  return (
+    <MainLayout>
+      <Outlet />
+    </MainLayout>
+  )
 }
