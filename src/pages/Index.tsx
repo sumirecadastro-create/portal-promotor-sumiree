@@ -26,7 +26,7 @@ export default function Index() {
 
   const loadData = async () => {
     setLoading(true)
-    // Passar o userLojaId para filtrar os dados
+    // Passar o userLojaId e isAdmin para filtrar os dados
     const data = await getDashboardData(userLojaId, isAdmin)
     setStats(data.stats)
     setRecentVisits(data.recentVisits)
@@ -46,13 +46,24 @@ export default function Index() {
   const goToCheckIn = () => navigate('/check-in')
   const goToPromotores = () => navigate('/promotores')
 
+  // Verificar se está carregando
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-96">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-2 md:flex-row md:items-center justify-between">
         <p className="text-muted-foreground text-sm">
           Visão geral da operação de promotores na rede Sumirê.
           {!isAdmin && userLojaId && (
-            <span className="ml-2 text-primary">(Filtrado para sua loja)</span>
+            <span className="ml-2 text-primary font-medium">
+              (Filtrado para sua loja)
+            </span>
           )}
         </p>
       </div>
@@ -90,7 +101,7 @@ export default function Index() {
                 </TableHeader>
                 <TableBody>
                   {recentVisits.map((visit) => {
-                    const isEmAndamento = !visit.check_out
+                    const isEmAndamento = visit.status === 'em_andamento' || !visit.check_out
                     return (
                       <TableRow key={visit.id}>
                         <TableCell className="font-medium text-xs truncate max-w-[120px]">
@@ -126,6 +137,9 @@ export default function Index() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Calendário de Campanhas */}
+      <CalendarioCampanhas />
     </div>
   )
 }
