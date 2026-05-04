@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -13,8 +14,30 @@ export default function CadastroUsuarios() {
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [role, setRole] = useState('gerente')
+  const [lojaId, setLojaId] = useState('')
+  const [lojas, setLojas] = useState<{ id: string; nome_loja: string }[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingLojas, setIsLoadingLojas] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+
+  // Buscar lojas ao carregar o componente
+  useEffect(() => {
+    async function carregarLojas() {
+      setIsLoadingLojas(true)
+      const { data, error } = await supabase
+        .from('lojas')
+        .select('id, nome_loja')
+        .order('nome_loja')
+      
+      if (error) {
+        console.error('Erro ao carregar lojas:', error)
+      } else if (data) {
+        setLojas(data)
+      }
+      setIsLoadingLojas(false)
+    }
+    carregarLojas()
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -34,8 +57,15 @@ export default function CadastroUsuarios() {
       return
     }
 
+    // Validar se gerente selecionou uma loja
+    if (role === 'gerente' && !lojaId) {
+      setMessage({ type: 'error', text: 'Selecione uma loja para o gerente' })
+      setIsLoading(false)
+      return
+    }
+
     try {
-      // Chamar a API route do Vercel em vez de usar supabase.auth.admin diretamente
+      // Chamar a API route do Vercel
       const response = await fetch('/api/admin/criar-usuario', {
         method: 'POST',
         headers: {
@@ -45,7 +75,8 @@ export default function CadastroUsuarios() {
           email,
           password,
           nome,
-          role
+          role,
+          lojaId: role === 'gerente' ? lojaId : null
         })
       })
 
@@ -64,6 +95,7 @@ export default function CadastroUsuarios() {
       setPassword('')
       setConfirmPassword('')
       setRole('gerente')
+      setLojaId('')
 
     } catch (error: any) {
       console.error('Erro ao criar usuário:', error)
@@ -165,6 +197,25 @@ export default function CadastroUsuarios() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Campo Loja - só aparece quando perfil é gerente */}
+            {role === 'gerente' && (
+              <div className="space-y-2">
+                <Label htmlFor="loja">Loja *</Label>
+                <Select value={lojaId} onValueChange={setLojaId} disabled={isLoading || isLoadingLojas} required>
+                  <SelectTrigger>
+                    <SelectValue placeholder={isLoadingLojas ? "Carregando lojas..." : "Selecione a loja que este gerente vai gerenciar"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {lojas.map(loja => (
+                      <SelectItem key={loja.id} value={loja.id}>
+                        {loja.nome_loja}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {/* Botão */}
             <Button type="submit" disabled={isLoading} className="w-full">
