@@ -15,15 +15,19 @@ import { DashboardChart } from '@/components/DashboardChart'
 import { CalendarioCampanhas } from '@/components/CalendarioCampanhas'
 import { getDashboardData, DashboardStats } from '@/services/dashboard'
 import { RecentVisit } from '@/services/dashboard'
+import { useAuth } from '@/hooks/use-auth'
 
 export default function Index() {
   const navigate = useNavigate()
+  const { user, isAdmin, userLojaId } = useAuth()
   const [stats, setStats] = useState<DashboardStats | undefined>()
   const [recentVisits, setRecentVisits] = useState<RecentVisit[]>([])
   const [loading, setLoading] = useState(true)
 
   const loadData = async () => {
-    const data = await getDashboardData()
+    setLoading(true)
+    // Passar o userLojaId para filtrar os dados
+    const data = await getDashboardData(userLojaId, isAdmin)
     setStats(data.stats)
     setRecentVisits(data.recentVisits)
     setLoading(false)
@@ -31,7 +35,7 @@ export default function Index() {
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [userLojaId, isAdmin])
 
   const formatTime = (dateString: string) => {
     if (!dateString) return '--:--'
@@ -47,6 +51,9 @@ export default function Index() {
       <div className="flex flex-col gap-2 md:flex-row md:items-center justify-between">
         <p className="text-muted-foreground text-sm">
           Visão geral da operação de promotores na rede Sumirê.
+          {!isAdmin && userLojaId && (
+            <span className="ml-2 text-primary">(Filtrado para sua loja)</span>
+          )}
         </p>
       </div>
 
@@ -119,8 +126,6 @@ export default function Index() {
           </CardContent>
         </Card>
       </div>
-
-     
     </div>
   )
 }
