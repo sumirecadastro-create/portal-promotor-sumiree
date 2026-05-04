@@ -7,7 +7,7 @@ import {
   SidebarTrigger,
   SidebarInset,
 } from '@/components/ui/sidebar'
-import { SidebarMenuItems } from '@/components/SidebarMenuItems'
+import { SidebarMenuItems } from '@/components/SidebarMenu'
 import { useAuth } from '@/hooks/use-auth'
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
