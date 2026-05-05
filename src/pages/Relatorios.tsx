@@ -55,17 +55,18 @@ export default function Relatorios() {
             .map((item, idx) => ({ posicao: idx + 1, ...item }))
 
           if (dados.length === 0) {
-            toast({ title: 'Atenção', description: 'Não há dados para exportar' })
+            toast({ title: 'Atencao', description: 'Nao ha dados para exportar' })
             return
           }
 
-          const csvRows = [['Posição', 'Promotor', 'Total Visitas']]
+          // CABECALHOS SEM ACENTOS
+          const csvRows = [['Posicao', 'Promotor', 'Total_Visitas']]
           dados.forEach(item => {
             csvRows.push([item.posicao, item.promotor, item.total_visitas])
           })
 
           const csvContent = csvRows.map(row => row.join(',')).join('\n')
-          const blob = new Blob([csvContent], { type: 'text/csv' })
+          const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' })
           const link = document.createElement('a')
           link.href = URL.createObjectURL(blob)
           link.download = `ranking_promotores_${new Date().toISOString().split('T')[0]}.csv`
@@ -122,17 +123,18 @@ export default function Relatorios() {
           }).filter(l => l.dias_sem_visita >= 15 || l.ultima_visita === 'Nunca')
 
           if (dados.length === 0) {
-            toast({ title: 'Atenção', description: 'Não há gaps de cobertura' })
+            toast({ title: 'Atencao', description: 'Nao ha gaps de cobertura' })
             return
           }
 
-          const csvRows = [['Código', 'Loja', 'Última Visita', 'Dias sem Visita']]
+          // CABECALHOS SEM ACENTOS
+          const csvRows = [['Codigo', 'Loja', 'Ultima_Visita', 'Dias_Sem_Visita']]
           dados.forEach(item => {
             csvRows.push([item.codigo, item.loja, item.ultima_visita, item.dias_sem_visita])
           })
 
           const csvContent = csvRows.map(row => row.join(',')).join('\n')
-          const blob = new Blob([csvContent], { type: 'text/csv' })
+          const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' })
           const link = document.createElement('a')
           link.href = URL.createObjectURL(blob)
           link.download = `gaps_cobertura_${new Date().toISOString().split('T')[0]}.csv`
@@ -183,24 +185,25 @@ export default function Relatorios() {
           }))
 
           if (dados.length === 0) {
-            toast({ title: 'Atenção', description: 'Não há dados de frequência' })
+            toast({ title: 'Atencao', description: 'Nao ha dados de frequencia' })
             return
           }
 
-          const csvRows = [['Loja', 'Total Visitas', 'Tempo Médio (minutos)']]
+          // CABECALHOS SEM ACENTOS
+          const csvRows = [['Loja', 'Total_Visitas', 'Tempo_Medio_Minutos']]
           dados.forEach(item => {
             csvRows.push([item.loja, item.total_visitas, item.tempo_medio])
           })
 
           const csvContent = csvRows.map(row => row.join(',')).join('\n')
-          const blob = new Blob([csvContent], { type: 'text/csv' })
+          const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' })
           const link = document.createElement('a')
           link.href = URL.createObjectURL(blob)
           link.download = `frequencia_visitas_${new Date().toISOString().split('T')[0]}.csv`
           link.click()
           URL.revokeObjectURL(link.href)
 
-          toast({ title: 'Sucesso', description: 'Frequência exportada com sucesso!' })
+          toast({ title: 'Sucesso', description: 'Frequencia exportada com sucesso!' })
         } catch (error) {
           toast({ variant: 'destructive', title: 'Erro', description: 'Erro ao exportar' })
         } finally {
