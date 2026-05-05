@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Download, TrendingUp, Clock, Store } from 'lucide-react'
-import { BarChart3, FileDown, Store, Users, Calendar, TrendingUp, AlertTriangle, Clock } from 'lucide-react'
+import { TrendingUp, AlertTriangle, Clock, FileDown } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/use-auth'
 import { useToast } from '@/hooks/use-toast'
@@ -44,23 +43,6 @@ interface FrequenciaVisita {
 }
 
 export default function Relatorios() {
-  const reports = [
-    {
-      title: 'Ranking de Atuação',
-      desc: 'Melhores promotores por volume de visitas e check-ins.',
-      icon: TrendingUp,
-    },
-    {
-      title: 'Gaps de Cobertura',
-      desc: 'Lojas sem visitas nos últimos 15 dias para realocação de rotas.',
-      icon: Store,
-    },
-    {
-      title: 'Frequência de Visitas',
-      desc: 'Tempo médio de permanência em loja por categoria.',
-      icon: Clock,
-    },
-  ]
   const { isAdmin, userLojaId } = useAuth()
   const { toast } = useToast()
   const [loading, setLoading] = useState({
@@ -93,7 +75,6 @@ export default function Relatorios() {
 
       if (error) throw error
 
-      // Agrupar por promotor
       const promotorMap = new Map<string, RankingPromotor>()
 
       visitas?.forEach((visita: any) => {
@@ -134,11 +115,10 @@ export default function Relatorios() {
     }
   }
 
-  // Buscar Gaps de Cobertura (lojas sem visita nos últimos 15 dias)
+  // Buscar Gaps de Cobertura
   const loadGaps = async () => {
     setLoading(prev => ({ ...prev, gaps: true }))
     try {
-      // Buscar todas as lojas
       let lojasQuery = supabase.from('lojas').select('id, cod_loja, nome_loja')
       
       if (!isAdmin && userLojaId) {
@@ -148,7 +128,6 @@ export default function Relatorios() {
       const { data: lojas, error: lojasError } = await lojasQuery
       if (lojasError) throw lojasError
 
-      // Buscar última visita por loja
       const { data: ultimasVisitas, error: visitasError } = await supabase
         .from('visitas')
         .select('loja_id, check_in, promotores (promotor_nome)')
@@ -156,7 +135,6 @@ export default function Relatorios() {
 
       if (visitasError) throw visitasError
 
-      // Agrupar última visita por loja
       const ultimaVisitaPorLoja = new Map()
       ultimasVisitas?.forEach((visita: any) => {
         if (!ultimaVisitaPorLoja.has(visita.loja_id)) {
@@ -167,10 +145,7 @@ export default function Relatorios() {
         }
       })
 
-      // Calcular gaps
       const hoje = new Date()
-      const quinzeDiasAtras = new Date()
-      quinzeDiasAtras.setDate(hoje.getDate() - 15)
 
       const gapsArray: GapCobertura[] = lojas?.map(loja => {
         const ultima = ultimaVisitaPorLoja.get(loja.id)
@@ -227,7 +202,6 @@ export default function Relatorios() {
       const { data: visitas, error } = await query
       if (error) throw error
 
-      // Agrupar por loja
       const lojaMap = new Map<string, FrequenciaVisita>()
 
       visitas?.forEach((visita: any) => {
@@ -247,12 +221,10 @@ export default function Relatorios() {
         const item = lojaMap.get(visita.loja_id)!
         item.total_visitas += 1
         
-        // Calcular tempo de permanência se tiver check_out
         if (visita.check_out) {
           const inicio = new Date(visita.check_in)
           const fim = new Date(visita.check_out)
           const tempoMinutos = (fim.getTime() - inicio.getTime()) / (1000 * 60)
-          // Acumular para média (será calculada depois)
           if (!item.tempo_medio_permanencia) {
             item.tempo_medio_permanencia = tempoMinutos
           } else {
@@ -260,7 +232,6 @@ export default function Relatorios() {
           }
         }
 
-        // Atualizar última visita
         if (new Date(visita.check_in) > new Date(item.ultima_visita)) {
           item.ultima_visita = visita.check_in
         }
@@ -299,7 +270,6 @@ export default function Relatorios() {
       return
     }
 
-    // Criar linhas do CSV
     const rows = data.map(item => 
       headers.map(header => {
         let value = item[header.toLowerCase()]
@@ -328,7 +298,6 @@ export default function Relatorios() {
     })
   }
 
-  // Exportar Ranking
   const exportRanking = () => {
     const headers = ['Posição', 'Promotor', 'Loja', 'Total Visitas', 'Total Check-ins', 'Tempo Médio (min)']
     const data = ranking.map((item, index) => ({
@@ -342,7 +311,6 @@ export default function Relatorios() {
     exportToCSV(data, 'ranking_promotores', headers)
   }
 
-  // Exportar Gaps
   const exportGaps = () => {
     const headers = ['Código', 'Loja', 'Última Visita', 'Dias sem Visita', 'Promotor Responsável']
     const data = gaps.map(item => ({
@@ -355,7 +323,6 @@ export default function Relatorios() {
     exportToCSV(data, 'gaps_cobertura', headers)
   }
 
-  // Exportar Frequência
   const exportFrequencia = () => {
     const headers = ['Loja', 'Total Visitas', 'Tempo Médio (min)', 'Última Visita']
     const data = frequencia.map(item => ({
@@ -367,16 +334,10 @@ export default function Relatorios() {
     exportToCSV(data, 'frequencia_visitas', headers)
   }
 
-return (
-<div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h2 className="text-2xl font-bold tracking-tight">Relatórios Analíticos</h2>
-          <p className="text-muted-foreground">Exporte dados para análise profunda da operação.</p>
-        </div>
-      <div className="flex flex-col gap-2">
+  return (
+    <div className="space-y-6">
+      <div>
         <h1 className="text-2xl font-bold flex items-center gap-2">
-          <BarChart3 className="h-6 w-6" />
           Relatórios Analíticos
         </h1>
         <p className="text-muted-foreground">
@@ -385,14 +346,8 @@ return (
             <span className="ml-2 text-primary">(Dados filtrados para sua loja)</span>
           )}
         </p>
-</div>
+      </div>
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-        {reports.map((report, i) => (
-          <Card key={i} className="hover:border-primary transition-colors group cursor-pointer">
-            <CardHeader>
-              <div className="h-10 w-10 bg-primary/10 text-primary rounded-lg flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                <report.icon className="h-5 w-5" />
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="ranking" className="flex items-center gap-2">
@@ -418,20 +373,13 @@ return (
                 <CardDescription>
                   Melhores promotores por volume de visitas e check-ins.
                 </CardDescription>
-</div>
-              <CardTitle>{report.title}</CardTitle>
-              <CardDescription>{report.desc}</CardDescription>
+              </div>
               <Button onClick={exportRanking} className="gap-2">
                 <FileDown className="h-4 w-4" />
                 Exportar CSV
               </Button>
-</CardHeader>
-<CardContent>
-              <Button
-                variant="outline"
-                className="w-full group-hover:bg-primary group-hover:text-primary-foreground"
-              >
-                <Download className="mr-2 h-4 w-4" /> Exportar CSV
+            </CardHeader>
+            <CardContent>
               {loading.ranking ? (
                 <div className="flex justify-center p-8">
                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -490,7 +438,7 @@ return (
               <Button onClick={exportGaps} className="gap-2">
                 <FileDown className="h-4 w-4" />
                 Exportar CSV
-</Button>
+              </Button>
             </CardHeader>
             <CardContent>
               {loading.gaps ? (
@@ -533,10 +481,8 @@ return (
                   </TableBody>
                 </Table>
               )}
-</CardContent>
-</Card>
-        ))}
-      </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Frequência de Visitas */}
@@ -595,6 +541,6 @@ return (
           </Card>
         </TabsContent>
       </Tabs>
-</div>
-)
+    </div>
+  )
 }
