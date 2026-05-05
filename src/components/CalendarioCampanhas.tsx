@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { ChevronLeft, ChevronRight, CalendarDays, Plus, Filter, X, Edit, Trash2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
+import { useAuth } from '@/hooks/use-auth'
 import {
   Dialog,
   DialogContent,
@@ -48,6 +49,7 @@ interface Loja {
 }
 
 export function CalendarioCampanhas() {
+  const { isAdmin, userLojaId } = useAuth()
   const [campanhas, setCampanhas] = useState<Campanha[]>([])
   const [lojas, setLojas] = useState<Loja[]>([])
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -71,6 +73,17 @@ export function CalendarioCampanhas() {
 
   const loadData = async () => {
     try {
+      // Buscar lojas - filtrar se for gerente
+      let lojasQuery = supabase
+        .from('lojas')
+        .select('id, cod_loja, nome_loja')
+        .order('nome_loja')
+      
+      // Se não for admin, mostrar apenas a loja do gerente
+      if (!isAdmin && userLojaId) {
+        lojasQuery = lojasQuery.eq('id', userLojaId)
+      }
+      
       const [campanhasRes, lojasRes] = await Promise.all([
         supabase
           .from('campanhas')
@@ -81,19 +94,34 @@ export function CalendarioCampanhas() {
             )
           `)
           .order('data_inicio'),
-        supabase.from('lojas').select('id, cod_loja, nome_loja').order('nome_loja')
+        lojasQuery
       ])
 
       if (campanhasRes.error) throw campanhasRes.error
       if (lojasRes.error) throw lojasRes.error
 
-      const campanhasFormatadas = campanhasRes.data.map(camp => ({
+      let campanhasData = campanhasRes.data
+
+      // Se for gerente, filtrar apenas campanhas das suas lojas
+      if (!isAdmin && userLojaId) {
+        campanhasData = campanhasData.filter(camp => {
+          const lojasCampanha = camp.lojas_campanhas?.map(lc => lc.lojas).filter(Boolean) || []
+          return lojasCampanha.some(loja => loja.id === userLojaId)
+        })
+      }
+
+      const campanhasFormatadas = campanhasData.map(camp => ({
         ...camp,
         lojas: camp.lojas_campanhas?.map(lc => lc.lojas).filter(Boolean) || []
       }))
 
       setCampanhas(campanhasFormatadas)
       setLojas(lojasRes.data || [])
+      
+      // Se for gerente, limpar filtros e selecionar automaticamente a loja dele
+      if (!isAdmin && userLojaId) {
+        setFilterLojas([userLojaId])
+      }
     } catch (error) {
       console.error('Erro ao carregar dados:', error)
     } finally {
@@ -103,7 +131,7 @@ export function CalendarioCampanhas() {
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [isAdmin, userLojaId])
 
   const handleCreateCampanha = async () => {
     if (!newCampanha.nome || !newCampanha.data_inicio || !newCampanha.data_fim) {
@@ -260,6 +288,7 @@ export function CalendarioCampanhas() {
   }
 
   const openEditDialog = (campanha: Campanha) => {
+    if (!isAdmin) return // Apenas admin pode editar
     setEditingCampanha(campanha)
     setSelectedLojas(campanha.lojas?.map(l => l.id) || [])
     setEditOpen(true)
@@ -317,6 +346,7 @@ export function CalendarioCampanhas() {
       return dateStr >= inicio && dateStr <= fim
     })
 
+    // Aplicar filtro de lojas (se houver)
     if (filterLojas.length > 0) {
       campanhasFiltradas = campanhasFiltradas.filter(camp => {
         return camp.lojas?.some(loja => filterLojas.includes(loja.id))
@@ -350,7 +380,6 @@ export function CalendarioCampanhas() {
     setFilterLojas(lojas.map(loja => loja.id))
   }
 
-  // Função para gerar o texto do tooltip com as lojas da campanha
   const getLojasTooltip = (campanha: Campanha) => {
     if (!campanha.lojas || campanha.lojas.length === 0) {
       return "Nenhuma loja vinculada"
@@ -381,6 +410,11 @@ export function CalendarioCampanhas() {
           <CardTitle className="text-lg flex items-center gap-2">
             <CalendarDays className="h-5 w-5" />
             Calendário de Campanhas
+            {!isAdmin && (
+              <span className="text-sm text-primary font-normal ml-2">
+                (Apenas sua loja)
+              </span>
+            )}
           </CardTitle>
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1">
@@ -395,222 +429,117 @@ export function CalendarioCampanhas() {
               </Button>
             </div>
             
-            <div className="relative">
-              <Button 
-                variant={filterLojas.length > 0 ? "default" : "outline"} 
-                size="sm"
-                onClick={() => setShowFilter(!showFilter)}
-                className="gap-1"
-              >
-                <Filter className="h-4 w-4" />
-                Filtrar Lojas
-                {filterLojas.length > 0 && (
-                  <Badge variant="secondary" className="ml-1 h-5 px-1">
-                    {filterLojas.length}
-                  </Badge>
-                )}
-              </Button>
-              
-              {showFilter && (
-                <div className="absolute right-0 top-full mt-2 w-80 bg-popover border rounded-lg shadow-lg z-10 p-4">
-                  <div className="flex justify-between items-center mb-3">
-                    <h4 className="font-medium">Filtrar por loja</h4>
-                    <div className="flex gap-2">
-                      <Button variant="ghost" size="sm" onClick={selecionarTodasLojas}>
-                        Selecionar todos
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={clearFilters}>
-                        Limpar
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="max-h-60 overflow-y-auto space-y-1">
-                    {lojas.map(loja => (
-                      <label key={loja.id} className="flex items-center gap-2 p-2 hover:bg-muted rounded cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={filterLojas.includes(loja.id)}
-                          onChange={() => toggleFilterLoja(loja.id)}
-                          className="rounded border-gray-300"
-                        />
-                        <span className="text-sm">{loja.cod_loja} - {loja.nome_loja}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <Dialog open={open} onOpenChange={setOpen}>
-              <DialogTrigger asChild>
-                <Button size="sm" className="gap-1">
-                  <Plus className="h-4 w-4" />
-                  Nova Campanha
+            {/* Filtro de Lojas - apenas para admin */}
+            {isAdmin && (
+              <div className="relative">
+                <Button 
+                  variant={filterLojas.length > 0 ? "default" : "outline"} 
+                  size="sm"
+                  onClick={() => setShowFilter(!showFilter)}
+                  className="gap-1"
+                >
+                  <Filter className="h-4 w-4" />
+                  Filtrar Lojas
+                  {filterLojas.length > 0 && (
+                    <Badge variant="secondary" className="ml-1 h-5 px-1">
+                      {filterLojas.length}
+                    </Badge>
+                  )}
                 </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Nova Campanha</DialogTitle>
-                  <DialogDescription>
-                    Cadastre uma nova campanha e selecione as lojas participantes.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4 py-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="nome">Nome da Campanha *</Label>
-                    <Input
-                      id="nome"
-                      placeholder="Ex: Promoção de Verão"
-                      value={newCampanha.nome}
-                      onChange={(e) => setNewCampanha({ ...newCampanha, nome: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="descricao">Descrição</Label>
-                    <Textarea
-                      id="descricao"
-                      placeholder="Detalhes da campanha..."
-                      value={newCampanha.descricao}
-                      onChange={(e) => setNewCampanha({ ...newCampanha, descricao: e.target.value })}
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="data_inicio">Data Início *</Label>
-                      <Input
-                        id="data_inicio"
-                        type="date"
-                        value={newCampanha.data_inicio}
-                        onChange={(e) => setNewCampanha({ ...newCampanha, data_inicio: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="data_fim">Data Fim *</Label>
-                      <Input
-                        id="data_fim"
-                        type="date"
-                        value={newCampanha.data_fim}
-                        onChange={(e) => setNewCampanha({ ...newCampanha, data_fim: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="cor">Cor da Campanha</Label>
-                    <Input
-                      id="cor"
-                      type="color"
-                      value={newCampanha.cor}
-                      onChange={(e) => setNewCampanha({ ...newCampanha, cor: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Lojas Participantes</Label>
-                    <Select
-                      value={selectedLojas[0] || ''}
-                      onValueChange={(value) => {
-                        if (!selectedLojas.includes(value)) {
-                          setSelectedLojas([...selectedLojas, value])
-                        }
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione uma loja" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {lojas.map((loja) => (
-                          <SelectItem key={loja.id} value={loja.id}>
-                            {loja.cod_loja} - {loja.nome_loja}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {selectedLojas.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {selectedLojas.map(lojaId => {
-                          const loja = lojas.find(l => l.id === lojaId)
-                          return (
-                            <span key={lojaId} className="bg-muted px-2 py-1 rounded-md text-sm flex items-center gap-1">
-                              {loja?.cod_loja}
-                              <button
-                                type="button"
-                                className="text-red-500 hover:text-red-700"
-                                onClick={() => setSelectedLojas(selectedLojas.filter(id => id !== lojaId))}
-                              >
-                                ×
-                              </button>
-                            </span>
-                          )
-                        })}
+                
+                {showFilter && (
+                  <div className="absolute right-0 top-full mt-2 w-80 bg-popover border rounded-lg shadow-lg z-10 p-4">
+                    <div className="flex justify-between items-center mb-3">
+                      <h4 className="font-medium">Filtrar por loja</h4>
+                      <div className="flex gap-2">
+                        <Button variant="ghost" size="sm" onClick={selecionarTodasLojas}>
+                          Selecionar todos
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={clearFilters}>
+                          Limpar
+                        </Button>
                       </div>
-                    )}
+                    </div>
+                    <div className="max-h-60 overflow-y-auto space-y-1">
+                      {lojas.map(loja => (
+                        <label key={loja.id} className="flex items-center gap-2 p-2 hover:bg-muted rounded cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={filterLojas.includes(loja.id)}
+                            onChange={() => toggleFilterLoja(loja.id)}
+                            className="rounded border-gray-300"
+                          />
+                          <span className="text-sm">{loja.cod_loja} - {loja.nome_loja}</span>
+                        </label>
+                      ))}
+                    </div>
                   </div>
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setOpen(false)}>
-                    Cancelar
-                  </Button>
-                  <Button onClick={handleCreateCampanha} disabled={saving}>
-                    {saving ? 'Salvando...' : 'Salvar'}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+                )}
+              </div>
+            )}
 
-            <Dialog open={editOpen} onOpenChange={setEditOpen}>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Editar Campanha</DialogTitle>
-                  <DialogDescription>
-                    Altere os dados da campanha e as lojas participantes.
-                  </DialogDescription>
-                </DialogHeader>
-                {editingCampanha && (
+            {/* Botão Nova Campanha - apenas para admin */}
+            {isAdmin && (
+              <Dialog open={open} onOpenChange={setOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm" className="gap-1">
+                    <Plus className="h-4 w-4" />
+                    Nova Campanha
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Nova Campanha</DialogTitle>
+                    <DialogDescription>
+                      Cadastre uma nova campanha e selecione as lojas participantes.
+                    </DialogDescription>
+                  </DialogHeader>
                   <div className="space-y-4 py-4">
                     <div className="space-y-2">
-                      <Label htmlFor="edit_nome">Nome da Campanha *</Label>
+                      <Label htmlFor="nome">Nome da Campanha *</Label>
                       <Input
-                        id="edit_nome"
+                        id="nome"
                         placeholder="Ex: Promoção de Verão"
-                        value={editingCampanha.nome}
-                        onChange={(e) => setEditingCampanha({ ...editingCampanha, nome: e.target.value })}
+                        value={newCampanha.nome}
+                        onChange={(e) => setNewCampanha({ ...newCampanha, nome: e.target.value })}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="edit_descricao">Descrição</Label>
+                      <Label htmlFor="descricao">Descrição</Label>
                       <Textarea
-                        id="edit_descricao"
+                        id="descricao"
                         placeholder="Detalhes da campanha..."
-                        value={editingCampanha.descricao}
-                        onChange={(e) => setEditingCampanha({ ...editingCampanha, descricao: e.target.value })}
+                        value={newCampanha.descricao}
+                        onChange={(e) => setNewCampanha({ ...newCampanha, descricao: e.target.value })}
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="edit_data_inicio">Data Início *</Label>
+                        <Label htmlFor="data_inicio">Data Início *</Label>
                         <Input
-                          id="edit_data_inicio"
+                          id="data_inicio"
                           type="date"
-                          value={editingCampanha.data_inicio}
-                          onChange={(e) => setEditingCampanha({ ...editingCampanha, data_inicio: e.target.value })}
+                          value={newCampanha.data_inicio}
+                          onChange={(e) => setNewCampanha({ ...newCampanha, data_inicio: e.target.value })}
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="edit_data_fim">Data Fim *</Label>
+                        <Label htmlFor="data_fim">Data Fim *</Label>
                         <Input
-                          id="edit_data_fim"
+                          id="data_fim"
                           type="date"
-                          value={editingCampanha.data_fim}
-                          onChange={(e) => setEditingCampanha({ ...editingCampanha, data_fim: e.target.value })}
+                          value={newCampanha.data_fim}
+                          onChange={(e) => setNewCampanha({ ...newCampanha, data_fim: e.target.value })}
                         />
                       </div>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="edit_cor">Cor da Campanha</Label>
+                      <Label htmlFor="cor">Cor da Campanha</Label>
                       <Input
-                        id="edit_cor"
+                        id="cor"
                         type="color"
-                        value={editingCampanha.cor}
-                        onChange={(e) => setEditingCampanha({ ...editingCampanha, cor: e.target.value })}
+                        value={newCampanha.cor}
+                        onChange={(e) => setNewCampanha({ ...newCampanha, cor: e.target.value })}
                       />
                     </div>
                     <div className="space-y-2">
@@ -655,17 +584,131 @@ export function CalendarioCampanhas() {
                       )}
                     </div>
                   </div>
-                )}
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setEditOpen(false)}>
-                    Cancelar
-                  </Button>
-                  <Button onClick={handleEditCampanha} disabled={saving}>
-                    {saving ? 'Salvando...' : 'Salvar'}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setOpen(false)}>
+                      Cancelar
+                    </Button>
+                    <Button onClick={handleCreateCampanha} disabled={saving}>
+                      {saving ? 'Salvando...' : 'Salvar'}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            )}
+
+            {/* Dialog de Edição - apenas para admin */}
+            {isAdmin && (
+              <Dialog open={editOpen} onOpenChange={setEditOpen}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Editar Campanha</DialogTitle>
+                    <DialogDescription>
+                      Altere os dados da campanha e as lojas participantes.
+                    </DialogDescription>
+                  </DialogHeader>
+                  {editingCampanha && (
+                    <div className="space-y-4 py-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="edit_nome">Nome da Campanha *</Label>
+                        <Input
+                          id="edit_nome"
+                          placeholder="Ex: Promoção de Verão"
+                          value={editingCampanha.nome}
+                          onChange={(e) => setEditingCampanha({ ...editingCampanha, nome: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit_descricao">Descrição</Label>
+                        <Textarea
+                          id="edit_descricao"
+                          placeholder="Detalhes da campanha..."
+                          value={editingCampanha.descricao}
+                          onChange={(e) => setEditingCampanha({ ...editingCampanha, descricao: e.target.value })}
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="edit_data_inicio">Data Início *</Label>
+                          <Input
+                            id="edit_data_inicio"
+                            type="date"
+                            value={editingCampanha.data_inicio}
+                            onChange={(e) => setEditingCampanha({ ...editingCampanha, data_inicio: e.target.value })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="edit_data_fim">Data Fim *</Label>
+                          <Input
+                            id="edit_data_fim"
+                            type="date"
+                            value={editingCampanha.data_fim}
+                            onChange={(e) => setEditingCampanha({ ...editingCampanha, data_fim: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="edit_cor">Cor da Campanha</Label>
+                        <Input
+                          id="edit_cor"
+                          type="color"
+                          value={editingCampanha.cor}
+                          onChange={(e) => setEditingCampanha({ ...editingCampanha, cor: e.target.value })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Lojas Participantes</Label>
+                        <Select
+                          value={selectedLojas[0] || ''}
+                          onValueChange={(value) => {
+                            if (!selectedLojas.includes(value)) {
+                              setSelectedLojas([...selectedLojas, value])
+                            }
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Selecione uma loja" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {lojas.map((loja) => (
+                              <SelectItem key={loja.id} value={loja.id}>
+                                {loja.cod_loja} - {loja.nome_loja}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {selectedLojas.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {selectedLojas.map(lojaId => {
+                              const loja = lojas.find(l => l.id === lojaId)
+                              return (
+                                <span key={lojaId} className="bg-muted px-2 py-1 rounded-md text-sm flex items-center gap-1">
+                                  {loja?.cod_loja}
+                                  <button
+                                    type="button"
+                                    className="text-red-500 hover:text-red-700"
+                                    onClick={() => setSelectedLojas(selectedLojas.filter(id => id !== lojaId))}
+                                  >
+                                    ×
+                                  </button>
+                                </span>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setEditOpen(false)}>
+                      Cancelar
+                    </Button>
+                    <Button onClick={handleEditCampanha} disabled={saving}>
+                      {saving ? 'Salvando...' : 'Salvar'}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            )}
           </div>
         </CardHeader>
         
@@ -715,18 +758,20 @@ export function CalendarioCampanhas() {
                           <div
                             className="text-xs rounded px-1 py-0.5 truncate cursor-pointer hover:opacity-80 relative group"
                             style={{ backgroundColor: camp.cor || '#FF1686', color: '#fff' }}
-                            onClick={() => openEditDialog(camp)}
+                            onClick={() => isAdmin && openEditDialog(camp)}
                           >
                             {camp.nome}
-                            <button
-                              className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleDeleteCampanha(camp)
-                              }}
-                            >
-                              <Trash2 className="h-3 w-3 text-white hover:text-red-200" />
-                            </button>
+                            {isAdmin && (
+                              <button
+                                className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleDeleteCampanha(camp)
+                                }}
+                              >
+                                <Trash2 className="h-3 w-3 text-white hover:text-red-200" />
+                              </button>
+                            )}
                           </div>
                         </TooltipTrigger>
                         <TooltipContent 
