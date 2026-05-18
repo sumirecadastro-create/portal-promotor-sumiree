@@ -214,11 +214,13 @@ export default function Campanhas() {
     }
   }
 
-  // Buscar campanhas do Supabase
+  // Buscar campanhas do Supabase - CORRIGIDO
   async function carregarCampanhas() {
     try {
-      const startDate = new Date(ano, mes, 1).toISOString()
-      const endDate = new Date(ano, mes + 1, 0).toISOString()
+      const startDate = new Date(ano, mes, 1).toISOString().split('T')[0]
+      const endDate = new Date(ano, mes + 1, 0).toISOString().split('T')[0]
+      
+      console.log('📅 Buscando campanhas de:', startDate, 'até:', endDate)
       
       let query = supabase
         .from('campanhas')
@@ -230,54 +232,103 @@ export default function Campanhas() {
         query = query.eq('status', filtroStatus)
       }
       
-      const { data, error } = await query
+      const { data: campanhasData, error: campanhasError } = await query
       
-      if (error) throw error
+      if (campanhasError) {
+        console.error('Erro ao buscar campanhas:', campanhasError)
+        throw campanhasError
+      }
       
-      // Buscar lojas e promotores para cada campanha
-      const campanhasComRelacoes = await Promise.all((data || []).map(async (campanha) => {
-        // Buscar lojas da campanha
-        const { data: lojasRel } = await supabase
-          .from('lojas_campanhas')
-          .select('loja_id')
-          .eq('campanha_id', campanha.id)
-        
-        const lojaIds = lojasRel?.map(r => r.loja_id) || []
-        
-        const { data: lojasData } = await supabase
+      console.log('📊 Campanhas encontradas:', campanhasData?.length || 0)
+      
+      if (!campanhasData || campanhasData.length === 0) {
+        setCampanhas([])
+        return
+      }
+      
+      // Buscar todas as relações de uma vez para melhor performance
+      const campanhaIds = campanhasData.map(c => c.id)
+      
+      // Buscar relações com lojas (tabela: lojas_campanhas)
+      const { data: lojasRel, error: lojasRelError } = await supabase
+        .from('lojas_campanhas')
+        .select('campanha_id, loja_id')
+        .in('campanha_id', campanhaIds)
+      
+      if (lojasRelError) {
+        console.error('Erro ao buscar relações com lojas:', lojasRelError)
+      }
+      
+      // Buscar relações com promotores (tabela: promotores_campanhas)
+      const { data: promotoresRel, error: promotoresRelError } = await supabase
+        .from('promotores_campanhas')
+        .select('campanha_id, promotor_id')
+        .in('campanha_id', campanhaIds)
+      
+      if (promotoresRelError) {
+        console.error('Erro ao buscar relações com promotores:', promotoresRelError)
+      }
+      
+      // Organizar IDs por campanha
+      const lojasPorCampanha: Record<string, string[]> = {}
+      lojasRel?.forEach(rel => {
+        if (!lojasPorCampanha[rel.campanha_id]) {
+          lojasPorCampanha[rel.campanha_id] = []
+        }
+        lojasPorCampanha[rel.campanha_id].push(rel.loja_id)
+      })
+      
+      const promotoresPorCampanha: Record<string, string[]> = {}
+      promotoresRel?.forEach(rel => {
+        if (!promotoresPorCampanha[rel.campanha_id]) {
+          promotoresPorCampanha[rel.campanha_id] = []
+        }
+        promotoresPorCampanha[rel.campanha_id].push(rel.promotor_id)
+      })
+      
+      // Buscar dados das lojas
+      const todosLojasIds = new Set(Object.values(lojasPorCampanha).flat())
+      let lojasData: any[] = []
+      if (todosLojasIds.size > 0) {
+        const { data: lojas } = await supabase
           .from('lojas')
           .select('id, nome_loja, cod_loja')
-          .in('id', lojaIds)
-        
-        // Buscar promotores da campanha (OPCIONAL - não vai quebrar se não tiver)
-        const { data: promotoresRel } = await supabase
-          .from('campanhas_promotores')
-          .select('promotor_id')
-          .eq('campanha_id', campanha.id)
-        
-        const promotorIds = promotoresRel?.map(r => r.promotor_id) || []
-        
-        let promotoresData = []
-        if (promotorIds.length > 0) {
-          const { data: tempData } = await supabase
-            .from('promotores')
-            .select('id, promotor_nome')
-            .in('id', promotorIds)
-          promotoresData = tempData || []
-        }
+          .in('id', Array.from(todosLojasIds))
+        lojasData = lojas || []
+      }
+      const lojasMap = new Map(lojasData.map(l => [l.id, l]))
+      
+      // Buscar dados dos promotores
+      const todosPromotoresIds = new Set(Object.values(promotoresPorCampanha).flat())
+      let promotoresData: any[] = []
+      if (todosPromotoresIds.size > 0) {
+        const { data: promotores } = await supabase
+          .from('promotores')
+          .select('id, promotor_nome')
+          .in('id', Array.from(todosPromotoresIds))
+        promotoresData = promotores || []
+      }
+      const promotoresMap = new Map(promotoresData.map(p => [p.id, p]))
+      
+      // Montar campanhas com relações
+      const campanhasComRelacoes = campanhasData.map(campanha => {
+        const lojaIds = lojasPorCampanha[campanha.id] || []
+        const promotorIds = promotoresPorCampanha[campanha.id] || []
         
         return {
           ...campanha,
           loja_ids: lojaIds,
           promotor_ids: promotorIds,
-          lojas: lojasData || [],
-          promotores: promotoresData
+          lojas: lojaIds.map(id => lojasMap.get(id)).filter(Boolean),
+          promotores: promotorIds.map(id => promotoresMap.get(id)).filter(Boolean)
         }
-      }))
+      })
       
+      console.log('✅ Campanhas carregadas:', campanhasComRelacoes.length)
       setCampanhas(campanhasComRelacoes)
     } catch (err) {
       console.error('Erro ao carregar campanhas:', err)
+      setError('Não foi possível carregar as campanhas')
     }
   }
 
@@ -311,7 +362,6 @@ export default function Campanhas() {
       const fim = new Date(campanha.data_fim)
       inicio.setHours(0, 0, 0, 0)
       fim.setHours(23, 59, 59, 999)
-      // Verifica se a loja está na lista de lojas da campanha
       return campanha.loja_ids?.includes(lojaId) && dataAtual >= inicio && dataAtual <= fim
     })
   }
@@ -356,8 +406,6 @@ export default function Campanhas() {
       return
     }
 
-    // ✅ PROMOTORES SÃO OPCIONAIS - sem validação!
-
     setSalvando(true)
     try {
       // 1. Criar a campanha
@@ -375,7 +423,7 @@ export default function Campanhas() {
 
       if (campanhaError) throw campanhaError
 
-      // 2. Inserir relações com lojas (obrigatório)
+      // 2. Inserir relações com lojas (tabela: lojas_campanhas)
       if (novaCampanha.loja_ids.length > 0) {
         const relacoesLojas = novaCampanha.loja_ids.map(loja_id => ({
           campanha_id: campanha.id,
@@ -387,9 +435,10 @@ export default function Campanhas() {
           .insert(relacoesLojas)
 
         if (lojasError) throw lojasError
+        console.log(`✅ Vinculadas ${relacoesLojas.length} lojas à campanha`)
       }
 
-      // 3. Inserir relações com promotores (SOMENTE SE TIVER SELECIONADO - OPCIONAL)
+      // 3. Inserir relações com promotores (tabela: promotores_campanhas) - OPCIONAL
       if (novaCampanha.promotor_ids && novaCampanha.promotor_ids.length > 0) {
         const relacoesPromotores = novaCampanha.promotor_ids.map(promotor_id => ({
           campanha_id: campanha.id,
@@ -397,12 +446,13 @@ export default function Campanhas() {
         }))
 
         const { error: promotoresError } = await supabase
-          .from('campanhas_promotores')
+          .from('promotores_campanhas')
           .insert(relacoesPromotores)
 
         if (promotoresError) {
           console.error('Erro ao vincular promotores (não crítico):', promotoresError)
-          // Não vamos falhar a criação da campanha só porque os promotores não vincularam
+        } else {
+          console.log(`✅ Vinculados ${relacoesPromotores.length} promotores à campanha`)
         }
       }
 
@@ -905,7 +955,7 @@ export default function Campanhas() {
               </Popover>
             </div>
 
-            {/* Promotores - OPCIONAL (sem asterisco) */}
+            {/* Promotores - OPCIONAL */}
             <div className="space-y-2">
               <Label>Promotores <span className="text-gray-400 text-xs">(opcional)</span></Label>
               <Popover open={promotoresPopoverOpen} onOpenChange={setPromotoresPopoverOpen}>
