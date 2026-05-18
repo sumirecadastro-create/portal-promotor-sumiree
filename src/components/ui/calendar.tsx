@@ -430,23 +430,21 @@ export function CalendarioCampanhas() {
     return days
   }
 
-  const getCampanhasForDay = (date: Date) => {
-    // Garantir que a data está no formato correto (YYYY-MM-DD)
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, '0')
-    const day = String(date.getDate()).padStart(2, '0')
-    const dateStr = `${year}-${month}-${day}`
-    
-    // Filtra campanhas pela data
-    let campanhasFiltradas = campanhas.filter(camp => {
-      const inicio = camp.data_inicio
-      const fim = camp.data_fim
-      
-      // Comparação direta de strings no formato YYYY-MM-DD
-      const match = dateStr >= inicio && dateStr <= fim
-      
-      return match
+const getCampanhasForDay = (date: Date) => {
+  const dateStr = date.toISOString().split('T')[0]
+  
+  let campanhasFiltradas = campanhas.filter(camp => {
+    return dateStr >= camp.data_inicio && dateStr <= camp.data_fim
+  })
+
+  if (filterLojas.length > 0) {
+    campanhasFiltradas = campanhasFiltradas.filter(camp => {
+      return camp.lojas?.some(loja => filterLojas.includes(loja.id))
     })
+  }
+
+  return campanhasFiltradas
+}
     
     // Se houver filtro de lojas, aplica
     if (filterLojas.length > 0) {
