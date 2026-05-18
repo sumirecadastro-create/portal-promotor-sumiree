@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ChevronLeft, ChevronRight, CalendarDays, Plus, Filter, X, Edit, Trash2, Loader2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarDays, Plus, Filter, X, Edit, Trash2, Loader2, RefreshCw } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/hooks/use-auth'
@@ -62,6 +62,7 @@ export function CalendarioCampanhas() {
   const [selectedLojas, setSelectedLojas] = useState<string[]>([])
   const [filterLojas, setFilterLojas] = useState<string[]>([])
   const [showFilter, setShowFilter] = useState(false)
+  const [showDiagnostic, setShowDiagnostic] = useState(true) // Estado para mostrar diagnóstico
   const { toast } = useToast()
 
   const [newCampanha, setNewCampanha] = useState({
@@ -78,7 +79,6 @@ export function CalendarioCampanhas() {
       setLoading(true)
       console.log('🚀 Iniciando loadData...')
       
-      // Buscar lojas
       let lojasQuery = supabase
         .from('lojas')
         .select('id, cod_loja, nome_loja')
@@ -98,7 +98,7 @@ export function CalendarioCampanhas() {
       setLojas(lojasData || [])
       console.log(`✅ ${lojasData?.length || 0} lojas carregadas`)
       
-      // Buscar TODAS as campanhas
+      // Buscar TODAS as campanhas (sem filtro de data)
       const { data: campanhasData, error: campanhasError } = await supabase
         .from('campanhas')
         .select('*')
@@ -112,15 +112,12 @@ export function CalendarioCampanhas() {
       console.log(`📊 ${campanhasData?.length || 0} campanhas encontradas no banco`)
       
       if (!campanhasData || campanhasData.length === 0) {
-        console.log('❌ Nenhuma campanha encontrada!')
         setCampanhas([])
         setLoading(false)
         return
       }
       
-      // Buscar relações com lojas para TODAS as campanhas
       const campanhaIds = campanhasData.map(c => c.id)
-      console.log('IDs das campanhas:', campanhaIds)
       
       const { data: lojasRel, error: lojasRelError } = await supabase
         .from('lojas_campanhas')
@@ -129,13 +126,9 @@ export function CalendarioCampanhas() {
       
       if (lojasRelError) {
         console.error('Erro ao buscar lojas_campanhas:', lojasRelError)
-      } else {
-        console.log(`🔗 ${lojasRel?.length || 0} relações encontradas em lojas_campanhas`)
       }
       
-      // Buscar dados completos das lojas relacionadas
       const todosLojasIds = [...new Set(lojasRel?.map(r => r.loja_id) || [])]
-      console.log('IDs das lojas relacionadas:', todosLojasIds)
       
       let lojasCompletas: any[] = []
       if (todosLojasIds.length > 0) {
@@ -144,12 +137,10 @@ export function CalendarioCampanhas() {
           .select('id, cod_loja, nome_loja')
           .in('id', todosLojasIds)
         lojasCompletas = lojasTemp || []
-        console.log(`🏪 ${lojasCompletas.length} lojas completas carregadas`)
       }
       
       const lojasMap = new Map(lojasCompletas.map(l => [l.id, l]))
       
-      // Organizar lojas por campanha
       const lojasPorCampanha: Record<string, any[]> = {}
       lojasRel?.forEach(rel => {
         if (!lojasPorCampanha[rel.campanha_id]) {
@@ -161,7 +152,6 @@ export function CalendarioCampanhas() {
         }
       })
       
-      // Formatar campanhas
       const campanhasFormatadas = campanhasData.map(camp => ({
         ...camp,
         lojas: lojasPorCampanha[camp.id] || []
@@ -170,7 +160,7 @@ export function CalendarioCampanhas() {
       console.log('✅ Campanhas formatadas:', campanhasFormatadas.length)
       campanhasFormatadas.forEach(camp => {
         console.log(`📌 ${camp.nome}: ${camp.lojas?.length || 0} lojas, datas: ${camp.data_inicio} a ${camp.data_fim}`)
-        if (camp.lojas && camp.lojas.length > 0) {
+        if (camp.lojas && camp.lojas.length > 0 && camp.lojas.length <= 5) {
           console.log(`   Lojas: ${camp.lojas.map(l => l.cod_loja).join(', ')}`)
         }
       })
@@ -214,7 +204,6 @@ export function CalendarioCampanhas() {
 
     setSaving(true)
     try {
-      // Criar a campanha
       const { data: campanha, error: campanhaError } = await supabase
         .from('campanhas')
         .insert({
@@ -230,7 +219,6 @@ export function CalendarioCampanhas() {
 
       if (campanhaError) throw campanhaError
 
-      // Vincular lojas
       const lojasCampanhas = selectedLojas.map(lojaId => ({
         loja_id: lojaId,
         campanha_id: campanha.id
@@ -274,7 +262,6 @@ export function CalendarioCampanhas() {
 
     setSaving(true)
     try {
-      // Atualizar campanha
       const { error: campanhaError } = await supabase
         .from('campanhas')
         .update({
@@ -289,7 +276,6 @@ export function CalendarioCampanhas() {
 
       if (campanhaError) throw campanhaError
 
-      // Remover relações antigas
       const { error: deleteError } = await supabase
         .from('lojas_campanhas')
         .delete()
@@ -297,7 +283,6 @@ export function CalendarioCampanhas() {
 
       if (deleteError) throw deleteError
 
-      // Inserir novas relações
       if (selectedLojas.length > 0) {
         const lojasCampanhas = selectedLojas.map(lojaId => ({
           loja_id: lojaId,
@@ -335,7 +320,6 @@ export function CalendarioCampanhas() {
     if (!confirm(`Deseja realmente excluir a campanha "${campanha.nome}"?`)) return
 
     try {
-      // Remover relações
       const { error: relError } = await supabase
         .from('lojas_campanhas')
         .delete()
@@ -343,7 +327,6 @@ export function CalendarioCampanhas() {
 
       if (relError) throw relError
 
-      // Remover campanha
       const { error: campanhaError } = await supabase
         .from('campanhas')
         .delete()
@@ -385,6 +368,11 @@ export function CalendarioCampanhas() {
     setSelectedLojas([])
   }
 
+  const forceRefresh = () => {
+    console.log('🔄 Forçando atualização manual...')
+    loadData()
+  }
+
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear()
     const month = date.getMonth()
@@ -417,21 +405,30 @@ export function CalendarioCampanhas() {
     return days
   }
 
+  // FUNÇÃO CORRIGIDA - getCampanhasForDay
   const getCampanhasForDay = (date: Date) => {
-    const dateStr = date.toISOString().split('T')[0]
+    // Formatar a data corretamente (YYYY-MM-DD)
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    const dateStr = `${year}-${month}-${day}`
     
-    // Filtra campanhas pela data
+    // Filtrar campanhas que cobrem esta data E têm lojas vinculadas
     let campanhasFiltradas = campanhas.filter(camp => {
+      // Verificar se a campanha tem lojas
+      if (!camp.lojas || camp.lojas.length === 0) return false
+      
+      // Verificar se a data está dentro do período da campanha
       return dateStr >= camp.data_inicio && dateStr <= camp.data_fim
     })
-    
-    // Se houver filtro de lojas, aplica
+
+    // Aplicar filtro de lojas se houver
     if (filterLojas.length > 0) {
       campanhasFiltradas = campanhasFiltradas.filter(camp => {
         return camp.lojas?.some(loja => filterLojas.includes(loja.id))
       })
     }
-    
+
     return campanhasFiltradas
   }
 
@@ -472,6 +469,77 @@ export function CalendarioCampanhas() {
   const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
   const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 
+  const lojasFiltradas = filterLojas.length > 0 
+    ? lojas.filter(loja => filterLojas.includes(loja.id))
+    : lojas
+
+  // Painel de diagnóstico
+  const DiagnosticPanel = () => {
+    const hoje = new Date().toISOString().split('T')[0]
+    const mesAtual = currentDate.getMonth() + 1
+    const anoAtual = currentDate.getFullYear()
+    
+    const campanhasComLojas = campanhas.filter(c => c.lojas && c.lojas.length > 0)
+    const campanhasNoMesAtual = campanhasComLojas.filter(c => {
+      const mesInicio = parseInt(c.data_inicio.split('-')[1])
+      const mesFim = parseInt(c.data_fim.split('-')[1])
+      return (mesInicio <= mesAtual && mesFim >= mesAtual) || 
+             (c.data_inicio <= `${anoAtual}-${String(mesAtual).padStart(2, '0')}-31` && 
+              c.data_fim >= `${anoAtual}-${String(mesAtual).padStart(2, '0')}-01`)
+    })
+    
+    return (
+      <div className="mx-6 mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <div className="flex justify-between items-center mb-2">
+          <h3 className="font-bold text-blue-800">🔍 PAINEL DE DIAGNÓSTICO</h3>
+          <Button variant="ghost" size="sm" onClick={() => setShowDiagnostic(false)} className="h-6 w-6 p-0">
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+          <div>
+            <span className="text-blue-600">Total campanhas:</span>
+            <span className="ml-2 font-bold">{campanhas.length}</span>
+          </div>
+          <div>
+            <span className="text-blue-600">Campanhas com lojas:</span>
+            <span className="ml-2 font-bold">{campanhasComLojas.length}</span>
+          </div>
+          <div>
+            <span className="text-blue-600">Campanhas no mês atual:</span>
+            <span className="ml-2 font-bold">{campanhasNoMesAtual.length}</span>
+          </div>
+          <div>
+            <span className="text-blue-600">Data atual:</span>
+            <span className="ml-2 font-bold">{hoje}</span>
+          </div>
+        </div>
+        {campanhasComLojas.length > 0 && (
+          <div className="mt-3 text-sm">
+            <span className="text-blue-600">Campanhas ativas:</span>
+            <ul className="ml-4 mt-1 space-y-1">
+              {campanhasComLojas.slice(0, 5).map(camp => (
+                <li key={camp.id} className="text-gray-700">
+                  • <strong>{camp.nome}</strong>: {camp.data_inicio} a {camp.data_fim} 
+                  <span className="text-green-600 ml-2">({camp.lojas?.length} lojas)</span>
+                </li>
+              ))}
+              {campanhasComLojas.length > 5 && (
+                <li className="text-gray-500">... e mais {campanhasComLojas.length - 5} campanhas</li>
+              )}
+            </ul>
+          </div>
+        )}
+        {campanhasNoMesAtual.length === 0 && campanhasComLojas.length > 0 && (
+          <div className="mt-3 p-2 bg-yellow-100 rounded text-yellow-800 text-sm">
+            ⚠️ Nenhuma campanha com lojas no mês de {monthNames[mesAtual - 1]} {anoAtual}. 
+            Navegue para outro mês usando os botões de navegação.
+          </div>
+        )}
+      </div>
+    )
+  }
+
   if (loading) {
     return (
       <Card>
@@ -507,6 +575,10 @@ export function CalendarioCampanhas() {
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
+            
+            <Button variant="outline" size="sm" onClick={forceRefresh} className="gap-1">
+              <RefreshCw className="h-4 w-4" />
+            </Button>
             
             {isAdmin && (
               <div className="relative">
@@ -810,6 +882,9 @@ export function CalendarioCampanhas() {
           </div>
         </CardHeader>
         
+        {/* PAINEL DE DIAGNÓSTICO */}
+        {showDiagnostic && <DiagnosticPanel />}
+        
         {filterLojas.length > 0 && (
           <div className="px-6 pb-2 flex flex-wrap gap-2">
             <span className="text-sm text-muted-foreground">Filtrando por:</span>
@@ -827,6 +902,12 @@ export function CalendarioCampanhas() {
             })}
           </div>
         )}
+        
+        <div className="px-6 pb-2 text-sm text-muted-foreground">
+          Exibindo: {lojasFiltradas.length} de {lojas.length} lojas
+          {campanhas.filter(c => c.lojas && c.lojas.length > 0).length > 0 && 
+            ` • ${campanhas.filter(c => c.lojas && c.lojas.length > 0).length} campanha(s) com lojas vinculadas`}
+        </div>
         
         <CardContent>
           <div className="grid grid-cols-7 gap-1">
