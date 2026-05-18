@@ -79,6 +79,7 @@ export function CalendarioCampanhas() {
       setLoading(true)
       console.log('🚀 Iniciando loadData...')
       
+      // Buscar lojas
       let lojasQuery = supabase
         .from('lojas')
         .select('id, cod_loja, nome_loja')
@@ -98,10 +99,10 @@ export function CalendarioCampanhas() {
       setLojas(lojasData || [])
       console.log(`✅ ${lojasData?.length || 0} lojas carregadas`)
       
+      // Buscar TODAS as campanhas
       const { data: campanhasData, error: campanhasError } = await supabase
         .from('campanhas')
         .select('*')
-        .order('data_inicio')
       
       if (campanhasError) {
         console.error('Erro ao buscar campanhas:', campanhasError)
@@ -116,6 +117,7 @@ export function CalendarioCampanhas() {
         return
       }
       
+      // Buscar relações lojas_campanhas
       const campanhaIds = campanhasData.map(c => c.id)
       
       const { data: lojasRel, error: lojasRelError } = await supabase
@@ -127,6 +129,7 @@ export function CalendarioCampanhas() {
         console.error('Erro ao buscar lojas_campanhas:', lojasRelError)
       }
       
+      // Buscar dados completos das lojas
       const todosLojasIds = [...new Set(lojasRel?.map(r => r.loja_id) || [])]
       
       let lojasCompletas: any[] = []
@@ -140,6 +143,7 @@ export function CalendarioCampanhas() {
       
       const lojasMap = new Map(lojasCompletas.map(l => [l.id, l]))
       
+      // Organizar lojas por campanha
       const lojasPorCampanha: Record<string, any[]> = {}
       lojasRel?.forEach(rel => {
         if (!lojasPorCampanha[rel.campanha_id]) {
@@ -151,6 +155,7 @@ export function CalendarioCampanhas() {
         }
       })
       
+      // Formatar campanhas (incluindo campanhas sem lojas)
       const campanhasFormatadas = campanhasData.map(camp => ({
         ...camp,
         lojas: lojasPorCampanha[camp.id] || []
@@ -158,9 +163,8 @@ export function CalendarioCampanhas() {
       
       console.log('✅ Campanhas formatadas:', campanhasFormatadas.length)
       campanhasFormatadas.forEach(camp => {
-        console.log(`📌 ${camp.nome}: ${camp.lojas?.length || 0} lojas, datas: ${camp.data_inicio} a ${camp.data_fim}`)
-        if (camp.lojas && camp.lojas.length > 0 && camp.lojas.length <= 5) {
-          console.log(`   Lojas: ${camp.lojas.map(l => l.cod_loja).join(', ')}`)
+        if (camp.lojas && camp.lojas.length > 0) {
+          console.log(`📌 ${camp.nome}: ${camp.lojas.length} lojas, ${camp.data_inicio} a ${camp.data_fim}`)
         }
       })
       
@@ -404,58 +408,26 @@ export function CalendarioCampanhas() {
     return days
   }
 
-  // FUNÇÃO CORRIGIDA COM LOGS DE DIAGNÓSTICO
+  // FUNÇÃO CORRIGIDA - Versão SIMPLIFICADA E GARANTIDA
   const getCampanhasForDay = (date: Date) => {
+    // Formatar data no formato YYYY-MM-DD
     const year = date.getFullYear()
     const month = String(date.getMonth() + 1).padStart(2, '0')
     const day = String(date.getDate()).padStart(2, '0')
     const dateStr = `${year}-${month}-${day}`
     
-    // LOG DE DIAGNÓSTICO - Mostrar apenas para alguns dias para não poluir
-    if (date.getDate() === 1 || date.getDate() === 15) {
-      console.log(`=== VERIFICANDO DIA ${dateStr} ===`)
-      console.log(`Total de campanhas: ${campanhas.length}`)
-      console.log(`Filtro de lojas ativo:`, filterLojas)
-    }
-    
-    let campanhasFiltradas = campanhas.filter(camp => {
-      if (!camp.lojas || camp.lojas.length === 0) return false
+    // Filtrar campanhas pela data
+    const campanhasNoDia = campanhas.filter(campanha => {
+      // Campanha sem lojas não exibe
+      if (!campanha.lojas || campanha.lojas.length === 0) return false
       
-      const match = dateStr >= camp.data_inicio && dateStr <= camp.data_fim
+      // Verificar se a data está dentro do período
+      const dentroPeriodo = dateStr >= campanha.data_inicio && dateStr <= campanha.data_fim
       
-      // Log específico para a campanha Corridinha Marchetti
-      if (camp.nome === 'Corridinha Marchetti' && (date.getDate() === 1 || date.getDate() === 15)) {
-        console.log(`🔍 Campanha "${camp.nome}":`)
-        console.log(`   Data verificada: ${dateStr}`)
-        console.log(`   Período: ${camp.data_inicio} a ${camp.data_fim}`)
-        console.log(`   Match: ${match ? '✅ SIM' : '❌ NÃO'}`)
-        console.log(`   Lojas vinculadas: ${camp.lojas.map(l => l.cod_loja).join(', ')}`)
-      }
-      
-      return match
+      return dentroPeriodo
     })
-
-    if (filterLojas.length > 0) {
-      const antes = campanhasFiltradas.length
-      campanhasFiltradas = campanhasFiltradas.filter(camp => {
-        return camp.lojas?.some(loja => filterLojas.includes(loja.id))
-      })
-      if (date.getDate() === 1 || date.getDate() === 15) {
-        console.log(`🎯 Após filtro de lojas: ${antes} -> ${campanhasFiltradas.length}`)
-      }
-    }
     
-    if (date.getDate() === 1 || date.getDate() === 15) {
-      console.log(`📊 Campanhas para ${dateStr}: ${campanhasFiltradas.length}`)
-      if (campanhasFiltradas.length > 0) {
-        campanhasFiltradas.forEach(camp => {
-          console.log(`   - ${camp.nome}`)
-        })
-      }
-      console.log(`=== FIM VERIFICAÇÃO ===`)
-    }
-    
-    return campanhasFiltradas
+    return campanhasNoDia
   }
 
   const changeMonth = (increment: number) => {
@@ -495,6 +467,7 @@ export function CalendarioCampanhas() {
   const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
   const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 
+  // Filtrar lojas para exibir no calendário
   const lojasFiltradas = filterLojas.length > 0 
     ? lojas.filter(loja => filterLojas.includes(loja.id))
     : lojas
@@ -505,13 +478,6 @@ export function CalendarioCampanhas() {
     const anoAtual = currentDate.getFullYear()
     
     const campanhasComLojas = campanhas.filter(c => c.lojas && c.lojas.length > 0)
-    const campanhasNoMesAtual = campanhasComLojas.filter(c => {
-      const mesInicio = parseInt(c.data_inicio.split('-')[1])
-      const mesFim = parseInt(c.data_fim.split('-')[1])
-      return (mesInicio <= mesAtual && mesFim >= mesAtual) || 
-             (c.data_inicio <= `${anoAtual}-${String(mesAtual).padStart(2, '0')}-31` && 
-              c.data_fim >= `${anoAtual}-${String(mesAtual).padStart(2, '0')}-01`)
-    })
     
     return (
       <div className="mx-6 mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
@@ -521,7 +487,7 @@ export function CalendarioCampanhas() {
             <X className="h-4 w-4" />
           </Button>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
           <div>
             <span className="text-blue-600">Total campanhas:</span>
             <span className="ml-2 font-bold">{campanhas.length}</span>
@@ -531,35 +497,24 @@ export function CalendarioCampanhas() {
             <span className="ml-2 font-bold">{campanhasComLojas.length}</span>
           </div>
           <div>
-            <span className="text-blue-600">Campanhas no mês atual:</span>
-            <span className="ml-2 font-bold">{campanhasNoMesAtual.length}</span>
-          </div>
-          <div>
-            <span className="text-blue-600">Data atual:</span>
-            <span className="ml-2 font-bold">{hoje}</span>
+            <span className="text-blue-600">Mês atual:</span>
+            <span className="ml-2 font-bold">{monthNames[mesAtual - 1]} {anoAtual}</span>
           </div>
         </div>
         {campanhasComLojas.length > 0 && (
           <div className="mt-3 text-sm">
-            <span className="text-blue-600">Campanhas ativas:</span>
+            <span className="text-blue-600">Campanhas:</span>
             <ul className="ml-4 mt-1 space-y-1">
-              {campanhasComLojas.slice(0, 5).map(camp => (
+              {campanhasComLojas.map(camp => (
                 <li key={camp.id} className="text-gray-700">
-                  • <strong>{camp.nome}</strong>: {camp.data_inicio} a {camp.data_fim} 
+                  • <strong>{camp.nome}</strong>: {camp.data_inicio} a {camp.data_fim}
                   <span className="text-green-600 ml-2">({camp.lojas?.length} lojas)</span>
-                  <span className="text-gray-500 ml-2">Lojas: {camp.lojas?.slice(0, 3).map(l => l.cod_loja).join(', ')}{camp.lojas && camp.lojas.length > 3 ? '...' : ''}</span>
+                  <span className="text-gray-500 ml-2">
+                    Lojas: {camp.lojas?.map(l => l.cod_loja).join(', ')}
+                  </span>
                 </li>
               ))}
-              {campanhasComLojas.length > 5 && (
-                <li className="text-gray-500">... e mais {campanhasComLojas.length - 5} campanhas</li>
-              )}
             </ul>
-          </div>
-        )}
-        {campanhasNoMesAtual.length === 0 && campanhasComLojas.length > 0 && (
-          <div className="mt-3 p-2 bg-yellow-100 rounded text-yellow-800 text-sm">
-            ⚠️ Nenhuma campanha com lojas no mês de {monthNames[mesAtual - 1]} {anoAtual}. 
-            Navegue para outro mês usando os botões de navegação.
           </div>
         )}
       </div>
@@ -732,31 +687,34 @@ export function CalendarioCampanhas() {
                     </div>
                     <div className="space-y-2">
                       <Label>Lojas Participantes *</Label>
-                      <Select
-                        value={selectedLojas[0] || ''}
-                        onValueChange={(value) => {
-                          if (!selectedLojas.includes(value)) {
-                            setSelectedLojas([...selectedLojas, value])
-                          }
-                        }}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione uma loja" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {lojas.map((loja) => (
-                            <SelectItem key={loja.id} value={loja.id}>
+                      <div className="border rounded-md p-2 max-h-40 overflow-y-auto">
+                        {lojas.map((loja) => (
+                          <div key={loja.id} className="flex items-center space-x-2 py-1">
+                            <input
+                              type="checkbox"
+                              id={`loja_${loja.id}`}
+                              checked={selectedLojas.includes(loja.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedLojas([...selectedLojas, loja.id])
+                                } else {
+                                  setSelectedLojas(selectedLojas.filter(id => id !== loja.id))
+                                }
+                              }}
+                              className="rounded border-gray-300"
+                            />
+                            <Label htmlFor={`loja_${loja.id}`} className="cursor-pointer text-sm">
                               {loja.cod_loja} - {loja.nome_loja}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
                       {selectedLojas.length > 0 && (
-                        <div className="flex flex-wrap gap-2 mt-2">
+                        <div className="flex flex-wrap gap-1 mt-2">
                           {selectedLojas.map(lojaId => {
                             const loja = lojas.find(l => l.id === lojaId)
                             return (
-                              <Badge key={lojaId} variant="secondary" className="gap-1">
+                              <Badge key={lojaId} variant="secondary" className="gap-1 text-xs">
                                 {loja?.cod_loja}
                                 <X
                                   className="h-3 w-3 cursor-pointer hover:text-red-500"
@@ -797,7 +755,6 @@ export function CalendarioCampanhas() {
                         <Label htmlFor="edit_nome">Nome da Campanha *</Label>
                         <Input
                           id="edit_nome"
-                          placeholder="Ex: Promoção de Verão"
                           value={editingCampanha.nome}
                           onChange={(e) => setEditingCampanha({ ...editingCampanha, nome: e.target.value })}
                         />
@@ -806,8 +763,7 @@ export function CalendarioCampanhas() {
                         <Label htmlFor="edit_descricao">Descrição</Label>
                         <Textarea
                           id="edit_descricao"
-                          placeholder="Detalhes da campanha..."
-                          value={editingCampanha.descricao}
+                          value={editingCampanha.descricao || ''}
                           onChange={(e) => setEditingCampanha({ ...editingCampanha, descricao: e.target.value })}
                         />
                       </div>
@@ -855,31 +811,34 @@ export function CalendarioCampanhas() {
                       </div>
                       <div className="space-y-2">
                         <Label>Lojas Participantes</Label>
-                        <Select
-                          value={selectedLojas[0] || ''}
-                          onValueChange={(value) => {
-                            if (!selectedLojas.includes(value)) {
-                              setSelectedLojas([...selectedLojas, value])
-                            }
-                          }}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione uma loja" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {lojas.map((loja) => (
-                              <SelectItem key={loja.id} value={loja.id}>
+                        <div className="border rounded-md p-2 max-h-40 overflow-y-auto">
+                          {lojas.map((loja) => (
+                            <div key={loja.id} className="flex items-center space-x-2 py-1">
+                              <input
+                                type="checkbox"
+                                id={`edit_loja_${loja.id}`}
+                                checked={selectedLojas.includes(loja.id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedLojas([...selectedLojas, loja.id])
+                                  } else {
+                                    setSelectedLojas(selectedLojas.filter(id => id !== loja.id))
+                                  }
+                                }}
+                                className="rounded border-gray-300"
+                              />
+                              <Label htmlFor={`edit_loja_${loja.id}`} className="cursor-pointer text-sm">
                                 {loja.cod_loja} - {loja.nome_loja}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                              </Label>
+                            </div>
+                          ))}
+                        </div>
                         {selectedLojas.length > 0 && (
-                          <div className="flex flex-wrap gap-2 mt-2">
+                          <div className="flex flex-wrap gap-1 mt-2">
                             {selectedLojas.map(lojaId => {
                               const loja = lojas.find(l => l.id === lojaId)
                               return (
-                                <Badge key={lojaId} variant="secondary" className="gap-1">
+                                <Badge key={lojaId} variant="secondary" className="gap-1 text-xs">
                                   {loja?.cod_loja}
                                   <X
                                     className="h-3 w-3 cursor-pointer hover:text-red-500"
@@ -930,8 +889,6 @@ export function CalendarioCampanhas() {
         
         <div className="px-6 pb-2 text-sm text-muted-foreground">
           Exibindo: {lojasFiltradas.length} de {lojas.length} lojas
-          {campanhas.filter(c => c.lojas && c.lojas.length > 0).length > 0 && 
-            ` • ${campanhas.filter(c => c.lojas && c.lojas.length > 0).length} campanha(s) com lojas vinculadas`}
         </div>
         
         <CardContent>
@@ -960,22 +917,11 @@ export function CalendarioCampanhas() {
                       <Tooltip key={camp.id}>
                         <TooltipTrigger asChild>
                           <div
-                            className="text-xs rounded px-1 py-0.5 truncate cursor-pointer hover:opacity-80 relative group"
+                            className="text-xs rounded px-1 py-0.5 truncate cursor-pointer hover:opacity-80"
                             style={{ backgroundColor: camp.cor || '#FF1686', color: '#fff' }}
                             onClick={() => isAdmin && openEditDialog(camp)}
                           >
                             {camp.nome}
-                            {isAdmin && (
-                              <button
-                                className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleDeleteCampanha(camp)
-                                }}
-                              >
-                                <Trash2 className="h-3 w-3 text-white hover:text-red-200" />
-                              </button>
-                            )}
                           </div>
                         </TooltipTrigger>
                         <TooltipContent 
