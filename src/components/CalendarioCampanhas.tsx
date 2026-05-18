@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ChevronLeft, ChevronRight, CalendarDays, Plus, Filter, X, Edit, Trash2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarDays, Plus, Filter, X, Edit, Trash2, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/hooks/use-auth'
@@ -38,6 +38,7 @@ interface Campanha {
   descricao: string
   data_inicio: string
   data_fim: string
+  status: string
   cor: string
   lojas?: { id: string; nome_loja: string; cod_loja: string }[]
 }
@@ -68,62 +69,114 @@ export function CalendarioCampanhas() {
     descricao: '',
     data_inicio: '',
     data_fim: '',
+    status: 'pendente',
     cor: '#FF1686'
   })
 
   const loadData = async () => {
     try {
+      setLoading(true)
+      console.log('🚀 Carregando dados do calendário...')
+      
       // Buscar lojas - filtrar se for gerente
       let lojasQuery = supabase
         .from('lojas')
         .select('id, cod_loja, nome_loja')
         .order('nome_loja')
       
-      // Se não for admin, mostrar apenas a loja do gerente
       if (!isAdmin && userLojaId) {
         lojasQuery = lojasQuery.eq('id', userLojaId)
       }
       
-      const [campanhasRes, lojasRes] = await Promise.all([
-        supabase
-          .from('campanhas')
-          .select(`
-            *,
-            lojas_campanhas (
-              lojas (id, cod_loja, nome_loja)
-            )
-          `)
-          .order('data_inicio'),
-        lojasQuery
-      ])
-
-      if (campanhasRes.error) throw campanhasRes.error
-      if (lojasRes.error) throw lojasRes.error
-
-      let campanhasData = campanhasRes.data
-
+      const { data: lojasData, error: lojasError } = await lojasQuery
+      
+      if (lojasError) {
+        console.error('Erro ao buscar lojas:', lojasError)
+        throw lojasError
+      }
+      
+      setLojas(lojasData || [])
+      console.log(`🏪 ${lojasData?.length || 0} lojas carregadas`)
+      
+      // Buscar todas as campanhas
+      const { data: campanhasData, error: campanhasError } = await supabase
+        .from('campanhas')
+        .select('*')
+        .order('data_inicio')
+      
+      if (campanhasError) {
+        console.error('Erro ao buscar campanhas:', campanhasError)
+        throw campanhasError
+      }
+      
+      console.log(`📊 ${campanhasData?.length || 0} campanhas encontradas`)
+      
+      if (!campanhasData || campanhasData.length === 0) {
+        setCampanhas([])
+        setLoading(false)
+        return
+      }
+      
+      // Buscar relações com lojas
+      const campanhaIds = campanhasData.map(c => c.id)
+      
+      const { data: lojasRel, error: lojasRelError } = await supabase
+        .from('lojas_campanhas')
+        .select('campanha_id, loja_id')
+        .in('campanha_id', campanhaIds)
+      
+      if (lojasRelError) {
+        console.error('Erro ao buscar relações lojas_campanhas:', lojasRelError)
+      }
+      
+      // Buscar dados completos das lojas relacionadas
+      const todosLojasIds = new Set(lojasRel?.map(r => r.loja_id) || [])
+      let lojasCompletas: any[] = []
+      if (todosLojasIds.size > 0) {
+        const { data: lojasTemp } = await supabase
+          .from('lojas')
+          .select('id, cod_loja, nome_loja')
+          .in('id', Array.from(todosLojasIds))
+        lojasCompletas = lojasTemp || []
+      }
+      
+      const lojasMap = new Map(lojasCompletas.map(l => [l.id, l]))
+      
+      // Organizar lojas por campanha
+      const lojasPorCampanha: Record<string, any[]> = {}
+      lojasRel?.forEach(rel => {
+        if (!lojasPorCampanha[rel.campanha_id]) {
+          lojasPorCampanha[rel.campanha_id] = []
+        }
+        const loja = lojasMap.get(rel.loja_id)
+        if (loja) {
+          lojasPorCampanha[rel.campanha_id].push(loja)
+        }
+      })
+      
+      // Formatar campanhas
+      let campanhasFormatadas = campanhasData.map(camp => ({
+        ...camp,
+        lojas: lojasPorCampanha[camp.id] || []
+      }))
+      
       // Se for gerente, filtrar apenas campanhas das suas lojas
       if (!isAdmin && userLojaId) {
-        campanhasData = campanhasData.filter(camp => {
-          const lojasCampanha = camp.lojas_campanhas?.map(lc => lc.lojas).filter(Boolean) || []
-          return lojasCampanha.some(loja => loja.id === userLojaId)
+        campanhasFormatadas = campanhasFormatadas.filter(camp => {
+          return camp.lojas?.some(loja => loja.id === userLojaId)
         })
       }
-
-      const campanhasFormatadas = campanhasData.map(camp => ({
-        ...camp,
-        lojas: camp.lojas_campanhas?.map(lc => lc.lojas).filter(Boolean) || []
-      }))
-
-      setCampanhas(campanhasFormatadas)
-      setLojas(lojasRes.data || [])
       
-      // Se for gerente, limpar filtros e selecionar automaticamente a loja dele
-      if (!isAdmin && userLojaId) {
-        setFilterLojas([userLojaId])
-      }
+      console.log(`✅ ${campanhasFormatadas.length} campanhas formatadas`)
+      setCampanhas(campanhasFormatadas)
+      
     } catch (error) {
       console.error('Erro ao carregar dados:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Não foi possível carregar os dados',
+      })
     } finally {
       setLoading(false)
     }
@@ -145,6 +198,7 @@ export function CalendarioCampanhas() {
 
     setSaving(true)
     try {
+      // Criar a campanha
       const { data: campanha, error: campanhaError } = await supabase
         .from('campanhas')
         .insert({
@@ -152,6 +206,7 @@ export function CalendarioCampanhas() {
           descricao: newCampanha.descricao,
           data_inicio: newCampanha.data_inicio,
           data_fim: newCampanha.data_fim,
+          status: newCampanha.status,
           cor: newCampanha.cor
         })
         .select()
@@ -159,6 +214,7 @@ export function CalendarioCampanhas() {
 
       if (campanhaError) throw campanhaError
 
+      // Vincular lojas
       if (selectedLojas.length > 0) {
         const lojasCampanhas = selectedLojas.map(lojaId => ({
           loja_id: lojaId,
@@ -180,6 +236,7 @@ export function CalendarioCampanhas() {
       resetForm()
       await loadData()
     } catch (error: any) {
+      console.error('Erro ao criar campanha:', error)
       toast({
         variant: 'destructive',
         title: 'Erro',
@@ -203,6 +260,7 @@ export function CalendarioCampanhas() {
 
     setSaving(true)
     try {
+      // Atualizar campanha
       const { error: campanhaError } = await supabase
         .from('campanhas')
         .update({
@@ -210,12 +268,14 @@ export function CalendarioCampanhas() {
           descricao: editingCampanha.descricao,
           data_inicio: editingCampanha.data_inicio,
           data_fim: editingCampanha.data_fim,
+          status: editingCampanha.status,
           cor: editingCampanha.cor
         })
         .eq('id', editingCampanha.id)
 
       if (campanhaError) throw campanhaError
 
+      // Remover relações antigas
       const { error: deleteError } = await supabase
         .from('lojas_campanhas')
         .delete()
@@ -223,6 +283,7 @@ export function CalendarioCampanhas() {
 
       if (deleteError) throw deleteError
 
+      // Inserir novas relações
       if (selectedLojas.length > 0) {
         const lojasCampanhas = selectedLojas.map(lojaId => ({
           loja_id: lojaId,
@@ -245,6 +306,7 @@ export function CalendarioCampanhas() {
       resetForm()
       await loadData()
     } catch (error: any) {
+      console.error('Erro ao atualizar campanha:', error)
       toast({
         variant: 'destructive',
         title: 'Erro',
@@ -259,6 +321,7 @@ export function CalendarioCampanhas() {
     if (!confirm(`Deseja realmente excluir a campanha "${campanha.nome}"?`)) return
 
     try {
+      // Remover relações
       const { error: relError } = await supabase
         .from('lojas_campanhas')
         .delete()
@@ -266,6 +329,7 @@ export function CalendarioCampanhas() {
 
       if (relError) throw relError
 
+      // Remover campanha
       const { error: campanhaError } = await supabase
         .from('campanhas')
         .delete()
@@ -279,6 +343,7 @@ export function CalendarioCampanhas() {
       })
       await loadData()
     } catch (error: any) {
+      console.error('Erro ao excluir campanha:', error)
       toast({
         variant: 'destructive',
         title: 'Erro',
@@ -288,7 +353,7 @@ export function CalendarioCampanhas() {
   }
 
   const openEditDialog = (campanha: Campanha) => {
-    if (!isAdmin) return // Apenas admin pode editar
+    if (!isAdmin) return
     setEditingCampanha(campanha)
     setSelectedLojas(campanha.lojas?.map(l => l.id) || [])
     setEditOpen(true)
@@ -300,6 +365,7 @@ export function CalendarioCampanhas() {
       descricao: '',
       data_inicio: '',
       data_fim: '',
+      status: 'pendente',
       cor: '#FF1686'
     })
     setSelectedLojas([])
@@ -341,12 +407,9 @@ export function CalendarioCampanhas() {
     const dateStr = date.toISOString().split('T')[0]
     
     let campanhasFiltradas = campanhas.filter(camp => {
-      const inicio = camp.data_inicio
-      const fim = camp.data_fim
-      return dateStr >= inicio && dateStr <= fim
+      return dateStr >= camp.data_inicio && dateStr <= camp.data_fim
     })
 
-    // Aplicar filtro de lojas (se houver)
     if (filterLojas.length > 0) {
       campanhasFiltradas = campanhasFiltradas.filter(camp => {
         return camp.lojas?.some(loja => filterLojas.includes(loja.id))
@@ -397,7 +460,7 @@ export function CalendarioCampanhas() {
     return (
       <Card>
         <CardContent className="p-8 flex justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </CardContent>
       </Card>
     )
@@ -429,7 +492,6 @@ export function CalendarioCampanhas() {
               </Button>
             </div>
             
-            {/* Filtro de Lojas - apenas para admin */}
             {isAdmin && (
               <div className="relative">
                 <Button 
@@ -478,7 +540,6 @@ export function CalendarioCampanhas() {
               </div>
             )}
 
-            {/* Botão Nova Campanha - apenas para admin */}
             {isAdmin && (
               <Dialog open={open} onOpenChange={setOpen}>
                 <DialogTrigger asChild>
@@ -487,14 +548,14 @@ export function CalendarioCampanhas() {
                     Nova Campanha
                   </Button>
                 </DialogTrigger>
-                <DialogContent>
+                <DialogContent className="max-w-2xl">
                   <DialogHeader>
                     <DialogTitle>Nova Campanha</DialogTitle>
                     <DialogDescription>
                       Cadastre uma nova campanha e selecione as lojas participantes.
                     </DialogDescription>
                   </DialogHeader>
-                  <div className="space-y-4 py-4">
+                  <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
                     <div className="space-y-2">
                       <Label htmlFor="nome">Nome da Campanha *</Label>
                       <Input
@@ -534,6 +595,19 @@ export function CalendarioCampanhas() {
                       </div>
                     </div>
                     <div className="space-y-2">
+                      <Label htmlFor="status">Status</Label>
+                      <Select value={newCampanha.status} onValueChange={(value) => setNewCampanha({ ...newCampanha, status: value })}>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pendente">⏳ Pendente</SelectItem>
+                          <SelectItem value="ativa">⚡ Ativa</SelectItem>
+                          <SelectItem value="concluida">✅ Concluída</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
                       <Label htmlFor="cor">Cor da Campanha</Label>
                       <Input
                         id="cor"
@@ -568,16 +642,13 @@ export function CalendarioCampanhas() {
                           {selectedLojas.map(lojaId => {
                             const loja = lojas.find(l => l.id === lojaId)
                             return (
-                              <span key={lojaId} className="bg-muted px-2 py-1 rounded-md text-sm flex items-center gap-1">
+                              <Badge key={lojaId} variant="secondary" className="gap-1">
                                 {loja?.cod_loja}
-                                <button
-                                  type="button"
-                                  className="text-red-500 hover:text-red-700"
+                                <X
+                                  className="h-3 w-3 cursor-pointer hover:text-red-500"
                                   onClick={() => setSelectedLojas(selectedLojas.filter(id => id !== lojaId))}
-                                >
-                                  ×
-                                </button>
-                              </span>
+                                />
+                              </Badge>
                             )
                           })}
                         </div>
@@ -589,6 +660,7 @@ export function CalendarioCampanhas() {
                       Cancelar
                     </Button>
                     <Button onClick={handleCreateCampanha} disabled={saving}>
+                      {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                       {saving ? 'Salvando...' : 'Salvar'}
                     </Button>
                   </DialogFooter>
@@ -596,10 +668,9 @@ export function CalendarioCampanhas() {
               </Dialog>
             )}
 
-            {/* Dialog de Edição - apenas para admin */}
             {isAdmin && (
               <Dialog open={editOpen} onOpenChange={setEditOpen}>
-                <DialogContent>
+                <DialogContent className="max-w-2xl">
                   <DialogHeader>
                     <DialogTitle>Editar Campanha</DialogTitle>
                     <DialogDescription>
@@ -607,7 +678,7 @@ export function CalendarioCampanhas() {
                     </DialogDescription>
                   </DialogHeader>
                   {editingCampanha && (
-                    <div className="space-y-4 py-4">
+                    <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
                       <div className="space-y-2">
                         <Label htmlFor="edit_nome">Nome da Campanha *</Label>
                         <Input
@@ -647,6 +718,19 @@ export function CalendarioCampanhas() {
                         </div>
                       </div>
                       <div className="space-y-2">
+                        <Label htmlFor="edit_status">Status</Label>
+                        <Select value={editingCampanha.status} onValueChange={(value) => setEditingCampanha({ ...editingCampanha, status: value })}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="pendente">⏳ Pendente</SelectItem>
+                            <SelectItem value="ativa">⚡ Ativa</SelectItem>
+                            <SelectItem value="concluida">✅ Concluída</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
                         <Label htmlFor="edit_cor">Cor da Campanha</Label>
                         <Input
                           id="edit_cor"
@@ -681,16 +765,13 @@ export function CalendarioCampanhas() {
                             {selectedLojas.map(lojaId => {
                               const loja = lojas.find(l => l.id === lojaId)
                               return (
-                                <span key={lojaId} className="bg-muted px-2 py-1 rounded-md text-sm flex items-center gap-1">
+                                <Badge key={lojaId} variant="secondary" className="gap-1">
                                   {loja?.cod_loja}
-                                  <button
-                                    type="button"
-                                    className="text-red-500 hover:text-red-700"
+                                  <X
+                                    className="h-3 w-3 cursor-pointer hover:text-red-500"
                                     onClick={() => setSelectedLojas(selectedLojas.filter(id => id !== lojaId))}
-                                  >
-                                    ×
-                                  </button>
-                                </span>
+                                  />
+                                </Badge>
                               )
                             })}
                           </div>
@@ -703,6 +784,7 @@ export function CalendarioCampanhas() {
                       Cancelar
                     </Button>
                     <Button onClick={handleEditCampanha} disabled={saving}>
+                      {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                       {saving ? 'Salvando...' : 'Salvar'}
                     </Button>
                   </DialogFooter>
