@@ -78,7 +78,6 @@ export function CalendarioCampanhas() {
       setLoading(true)
       console.log('🚀 Iniciando loadData...')
       
-      // Buscar lojas
       let lojasQuery = supabase
         .from('lojas')
         .select('id, cod_loja, nome_loja')
@@ -98,7 +97,6 @@ export function CalendarioCampanhas() {
       setLojas(lojasData || [])
       console.log(`✅ ${lojasData?.length || 0} lojas carregadas`)
       
-      // Buscar TODAS as campanhas
       const { data: campanhasData, error: campanhasError } = await supabase
         .from('campanhas')
         .select('*')
@@ -112,15 +110,12 @@ export function CalendarioCampanhas() {
       console.log(`📊 ${campanhasData?.length || 0} campanhas encontradas no banco`)
       
       if (!campanhasData || campanhasData.length === 0) {
-        console.log('❌ Nenhuma campanha encontrada!')
         setCampanhas([])
         setLoading(false)
         return
       }
       
-      // Buscar relações com lojas para TODAS as campanhas
       const campanhaIds = campanhasData.map(c => c.id)
-      console.log('IDs das campanhas:', campanhaIds)
       
       const { data: lojasRel, error: lojasRelError } = await supabase
         .from('lojas_campanhas')
@@ -129,13 +124,9 @@ export function CalendarioCampanhas() {
       
       if (lojasRelError) {
         console.error('Erro ao buscar lojas_campanhas:', lojasRelError)
-      } else {
-        console.log(`🔗 ${lojasRel?.length || 0} relações encontradas em lojas_campanhas`)
       }
       
-      // Buscar dados completos das lojas relacionadas
       const todosLojasIds = [...new Set(lojasRel?.map(r => r.loja_id) || [])]
-      console.log('IDs das lojas relacionadas:', todosLojasIds)
       
       let lojasCompletas: any[] = []
       if (todosLojasIds.length > 0) {
@@ -144,12 +135,10 @@ export function CalendarioCampanhas() {
           .select('id, cod_loja, nome_loja')
           .in('id', todosLojasIds)
         lojasCompletas = lojasTemp || []
-        console.log(`🏪 ${lojasCompletas.length} lojas completas carregadas`)
       }
       
       const lojasMap = new Map(lojasCompletas.map(l => [l.id, l]))
       
-      // Organizar lojas por campanha
       const lojasPorCampanha: Record<string, any[]> = {}
       lojasRel?.forEach(rel => {
         if (!lojasPorCampanha[rel.campanha_id]) {
@@ -161,7 +150,6 @@ export function CalendarioCampanhas() {
         }
       })
       
-      // Formatar campanhas
       const campanhasFormatadas = campanhasData.map(camp => ({
         ...camp,
         lojas: lojasPorCampanha[camp.id] || []
@@ -169,11 +157,8 @@ export function CalendarioCampanhas() {
       
       console.log('✅ Campanhas formatadas:', campanhasFormatadas.length)
       campanhasFormatadas.forEach(camp => {
-        console.log(`📌 ${camp.nome}: ${camp.lojas?.length || 0} lojas, datas: ${camp.data_inicio} a ${camp.data_fim}`)
-        if (camp.lojas && camp.lojas.length > 0 && camp.lojas.length <= 10) {
-          console.log(`   Lojas: ${camp.lojas.map(l => l.cod_loja).join(', ')}`)
-        } else if (camp.lojas && camp.lojas.length > 10) {
-          console.log(`   Lojas: ${camp.lojas.slice(0, 10).map(l => l.cod_loja).join(', ')}... +${camp.lojas.length - 10} lojas`)
+        if (camp.lojas && camp.lojas.length > 0) {
+          console.log(`📌 ${camp.nome}: ${camp.lojas.length} lojas, datas: ${camp.data_inicio} a ${camp.data_fim}`)
         }
       })
       
@@ -194,12 +179,6 @@ export function CalendarioCampanhas() {
   useEffect(() => {
     loadData()
   }, [isAdmin, userLojaId])
-
-  // Log do mês atual para debug
-  useEffect(() => {
-    console.log('📅 Mês atual no calendário:', currentDate.getMonth() + 1, '/', currentDate.getFullYear())
-    console.log('📅 Data atual do sistema:', new Date().toISOString().split('T')[0])
-  }, [currentDate])
 
   const handleCreateCampanha = async () => {
     if (!newCampanha.nome || !newCampanha.data_inicio || !newCampanha.data_fim) {
@@ -222,7 +201,6 @@ export function CalendarioCampanhas() {
 
     setSaving(true)
     try {
-      // Criar a campanha
       const { data: campanha, error: campanhaError } = await supabase
         .from('campanhas')
         .insert({
@@ -238,7 +216,6 @@ export function CalendarioCampanhas() {
 
       if (campanhaError) throw campanhaError
 
-      // Vincular lojas
       const lojasCampanhas = selectedLojas.map(lojaId => ({
         loja_id: lojaId,
         campanha_id: campanha.id
@@ -282,7 +259,6 @@ export function CalendarioCampanhas() {
 
     setSaving(true)
     try {
-      // Atualizar campanha
       const { error: campanhaError } = await supabase
         .from('campanhas')
         .update({
@@ -297,7 +273,6 @@ export function CalendarioCampanhas() {
 
       if (campanhaError) throw campanhaError
 
-      // Remover relações antigas
       const { error: deleteError } = await supabase
         .from('lojas_campanhas')
         .delete()
@@ -305,7 +280,6 @@ export function CalendarioCampanhas() {
 
       if (deleteError) throw deleteError
 
-      // Inserir novas relações
       if (selectedLojas.length > 0) {
         const lojasCampanhas = selectedLojas.map(lojaId => ({
           loja_id: lojaId,
@@ -343,7 +317,6 @@ export function CalendarioCampanhas() {
     if (!confirm(`Deseja realmente excluir a campanha "${campanha.nome}"?`)) return
 
     try {
-      // Remover relações
       const { error: relError } = await supabase
         .from('lojas_campanhas')
         .delete()
@@ -351,7 +324,6 @@ export function CalendarioCampanhas() {
 
       if (relError) throw relError
 
-      // Remover campanha
       const { error: campanhaError } = await supabase
         .from('campanhas')
         .delete()
@@ -430,29 +402,30 @@ export function CalendarioCampanhas() {
     return days
   }
 
-const getCampanhasForDay = (date: Date) => {
-  const dateStr = date.toISOString().split('T')[0]
-  
-  let campanhasFiltradas = campanhas.filter(camp => {
-    return dateStr >= camp.data_inicio && dateStr <= camp.data_fim
-  })
-
-  if (filterLojas.length > 0) {
-    campanhasFiltradas = campanhasFiltradas.filter(camp => {
-      return camp.lojas?.some(loja => filterLojas.includes(loja.id))
-    })
-  }
-
-  return campanhasFiltradas
-}
+  // FUNÇÃO CORRIGIDA - getCampanhasForDay
+  const getCampanhasForDay = (date: Date) => {
+    // Formatar a data corretamente (YYYY-MM-DD)
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    const dateStr = `${year}-${month}-${day}`
     
-    // Se houver filtro de lojas, aplica
+    // Filtrar campanhas que estão ativas nesta data E têm lojas vinculadas
+    let campanhasFiltradas = campanhas.filter(camp => {
+      // Verificar se a campanha tem lojas
+      if (!camp.lojas || camp.lojas.length === 0) return false
+      
+      // Verificar se a data está dentro do período da campanha
+      return dateStr >= camp.data_inicio && dateStr <= camp.data_fim
+    })
+
+    // Aplicar filtro de lojas se houver
     if (filterLojas.length > 0) {
       campanhasFiltradas = campanhasFiltradas.filter(camp => {
         return camp.lojas?.some(loja => filterLojas.includes(loja.id))
       })
     }
-    
+
     return campanhasFiltradas
   }
 
@@ -493,7 +466,6 @@ const getCampanhasForDay = (date: Date) => {
   const weekDays = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
   const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 
-  // Filtrar lojas para exibir no calendário
   const lojasFiltradas = filterLojas.length > 0 
     ? lojas.filter(loja => filterLojas.includes(loja.id))
     : lojas
