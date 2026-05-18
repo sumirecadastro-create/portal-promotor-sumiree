@@ -5,7 +5,6 @@ import {
   ChevronRight, 
   Filter, 
   Plus, 
-  TrendingUp, 
   CheckCircle2, 
   Clock,
   Store,
@@ -250,7 +249,7 @@ export default function Campanhas() {
           .select('id, nome_loja, cod_loja')
           .in('id', lojaIds)
         
-        // Buscar promotores da campanha
+        // Buscar promotores da campanha (OPCIONAL - não vai quebrar se não tiver)
         const { data: promotoresRel } = await supabase
           .from('campanhas_promotores')
           .select('promotor_id')
@@ -258,17 +257,21 @@ export default function Campanhas() {
         
         const promotorIds = promotoresRel?.map(r => r.promotor_id) || []
         
-        const { data: promotoresData } = await supabase
-          .from('promotores')
-          .select('id, promotor_nome')
-          .in('id', promotorIds)
+        let promotoresData = []
+        if (promotorIds.length > 0) {
+          const { data: tempData } = await supabase
+            .from('promotores')
+            .select('id, promotor_nome')
+            .in('id', promotorIds)
+          promotoresData = tempData || []
+        }
         
         return {
           ...campanha,
           loja_ids: lojaIds,
           promotor_ids: promotorIds,
           lojas: lojasData || [],
-          promotores: promotoresData || []
+          promotores: promotoresData
         }
       }))
       
@@ -341,15 +344,19 @@ export default function Campanhas() {
   }
 
   async function criarNovaCampanha() {
+    // VALIDAÇÃO: apenas nome e datas são obrigatórios
     if (!novaCampanha.nome || !novaCampanha.data_inicio || !novaCampanha.data_fim) {
-      alert('Preencha todos os campos obrigatórios')
+      alert('Preencha os campos obrigatórios: Nome, Data Início e Data Fim')
       return
     }
 
+    // VALIDAÇÃO: pelo menos uma loja é obrigatória
     if (novaCampanha.loja_ids.length === 0) {
       alert('Selecione pelo menos uma loja para a campanha')
       return
     }
+
+    // ✅ PROMOTORES SÃO OPCIONAIS - sem validação!
 
     setSalvando(true)
     try {
@@ -368,7 +375,7 @@ export default function Campanhas() {
 
       if (campanhaError) throw campanhaError
 
-      // 2. Inserir relações com lojas
+      // 2. Inserir relações com lojas (obrigatório)
       if (novaCampanha.loja_ids.length > 0) {
         const relacoesLojas = novaCampanha.loja_ids.map(loja_id => ({
           campanha_id: campanha.id,
@@ -382,8 +389,8 @@ export default function Campanhas() {
         if (lojasError) throw lojasError
       }
 
-      // 3. Inserir relações com promotores
-      if (novaCampanha.promotor_ids.length > 0) {
+      // 3. Inserir relações com promotores (SOMENTE SE TIVER SELECIONADO - OPCIONAL)
+      if (novaCampanha.promotor_ids && novaCampanha.promotor_ids.length > 0) {
         const relacoesPromotores = novaCampanha.promotor_ids.map(promotor_id => ({
           campanha_id: campanha.id,
           promotor_id: promotor_id
@@ -393,7 +400,10 @@ export default function Campanhas() {
           .from('campanhas_promotores')
           .insert(relacoesPromotores)
 
-        if (promotoresError) throw promotoresError
+        if (promotoresError) {
+          console.error('Erro ao vincular promotores (não crítico):', promotoresError)
+          // Não vamos falhar a criação da campanha só porque os promotores não vincularam
+        }
       }
 
       setShowNovaCampanhaModal(false)
@@ -752,20 +762,21 @@ export default function Campanhas() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal de Nova Campanha - COM POPOVER */}
+      {/* Modal de Nova Campanha */}
       <Dialog open={showNovaCampanhaModal} onOpenChange={setShowNovaCampanhaModal}>
         <DialogContent className="sm:max-w-[550px]">
           <DialogHeader>
             <DialogTitle>Criar Nova Campanha</DialogTitle>
             <DialogDescription>
-              Preencha os dados da campanha. Os campos com * são obrigatórios.
+              Preencha os dados da campanha. <span className="text-red-500">*</span> Campos obrigatórios.
+              Promotores são opcionais.
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4 py-4">
             {/* Nome da Campanha */}
             <div className="space-y-2">
-              <Label>Nome da Campanha *</Label>
+              <Label>Nome da Campanha <span className="text-red-500">*</span></Label>
               <Input
                 value={novaCampanha.nome}
                 onChange={(e) => setNovaCampanha({ ...novaCampanha, nome: e.target.value })}
@@ -773,9 +784,9 @@ export default function Campanhas() {
               />
             </div>
 
-            {/* Lojas - POPOVER */}
+            {/* Lojas - OBRIGATÓRIO */}
             <div className="space-y-2">
-              <Label>Lojas *</Label>
+              <Label>Lojas <span className="text-red-500">*</span></Label>
               <Popover open={lojasPopoverOpen} onOpenChange={setLojasPopoverOpen}>
                 <PopoverTrigger asChild>
                   <Button
@@ -894,9 +905,9 @@ export default function Campanhas() {
               </Popover>
             </div>
 
-            {/* Promotores - POPOVER */}
+            {/* Promotores - OPCIONAL (sem asterisco) */}
             <div className="space-y-2">
-              <Label>Promotores</Label>
+              <Label>Promotores <span className="text-gray-400 text-xs">(opcional)</span></Label>
               <Popover open={promotoresPopoverOpen} onOpenChange={setPromotoresPopoverOpen}>
                 <PopoverTrigger asChild>
                   <Button
@@ -907,7 +918,7 @@ export default function Campanhas() {
                   >
                     <div className="flex flex-wrap gap-1">
                       {novaCampanha.promotor_ids.length === 0 ? (
-                        <span className="text-muted-foreground">Selecione os promotores...</span>
+                        <span className="text-muted-foreground">Nenhum promotor selecionado</span>
                       ) : (
                         <>
                           <Badge variant="secondary" className="text-xs">
@@ -1016,7 +1027,7 @@ export default function Campanhas() {
             {/* Datas */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Data Início *</Label>
+                <Label>Data Início <span className="text-red-500">*</span></Label>
                 <Input
                   type="date"
                   value={novaCampanha.data_inicio}
@@ -1024,7 +1035,7 @@ export default function Campanhas() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Data Fim *</Label>
+                <Label>Data Fim <span className="text-red-500">*</span></Label>
                 <Input
                   type="date"
                   value={novaCampanha.data_fim}
