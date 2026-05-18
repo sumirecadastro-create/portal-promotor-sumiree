@@ -62,7 +62,7 @@ export function CalendarioCampanhas() {
   const [selectedLojas, setSelectedLojas] = useState<string[]>([])
   const [filterLojas, setFilterLojas] = useState<string[]>([])
   const [showFilter, setShowFilter] = useState(false)
-  const [showDiagnostic, setShowDiagnostic] = useState(true) // Estado para mostrar diagnóstico
+  const [showDiagnostic, setShowDiagnostic] = useState(true)
   const { toast } = useToast()
 
   const [newCampanha, setNewCampanha] = useState({
@@ -98,7 +98,6 @@ export function CalendarioCampanhas() {
       setLojas(lojasData || [])
       console.log(`✅ ${lojasData?.length || 0} lojas carregadas`)
       
-      // Buscar TODAS as campanhas (sem filtro de data)
       const { data: campanhasData, error: campanhasError } = await supabase
         .from('campanhas')
         .select('*')
@@ -405,30 +404,57 @@ export function CalendarioCampanhas() {
     return days
   }
 
-  // FUNÇÃO CORRIGIDA - getCampanhasForDay
+  // FUNÇÃO CORRIGIDA COM LOGS DE DIAGNÓSTICO
   const getCampanhasForDay = (date: Date) => {
-    // Formatar a data corretamente (YYYY-MM-DD)
     const year = date.getFullYear()
     const month = String(date.getMonth() + 1).padStart(2, '0')
     const day = String(date.getDate()).padStart(2, '0')
     const dateStr = `${year}-${month}-${day}`
     
-    // Filtrar campanhas que cobrem esta data E têm lojas vinculadas
+    // LOG DE DIAGNÓSTICO - Mostrar apenas para alguns dias para não poluir
+    if (date.getDate() === 1 || date.getDate() === 15) {
+      console.log(`=== VERIFICANDO DIA ${dateStr} ===`)
+      console.log(`Total de campanhas: ${campanhas.length}`)
+      console.log(`Filtro de lojas ativo:`, filterLojas)
+    }
+    
     let campanhasFiltradas = campanhas.filter(camp => {
-      // Verificar se a campanha tem lojas
       if (!camp.lojas || camp.lojas.length === 0) return false
       
-      // Verificar se a data está dentro do período da campanha
-      return dateStr >= camp.data_inicio && dateStr <= camp.data_fim
+      const match = dateStr >= camp.data_inicio && dateStr <= camp.data_fim
+      
+      // Log específico para a campanha Corridinha Marchetti
+      if (camp.nome === 'Corridinha Marchetti' && (date.getDate() === 1 || date.getDate() === 15)) {
+        console.log(`🔍 Campanha "${camp.nome}":`)
+        console.log(`   Data verificada: ${dateStr}`)
+        console.log(`   Período: ${camp.data_inicio} a ${camp.data_fim}`)
+        console.log(`   Match: ${match ? '✅ SIM' : '❌ NÃO'}`)
+        console.log(`   Lojas vinculadas: ${camp.lojas.map(l => l.cod_loja).join(', ')}`)
+      }
+      
+      return match
     })
 
-    // Aplicar filtro de lojas se houver
     if (filterLojas.length > 0) {
+      const antes = campanhasFiltradas.length
       campanhasFiltradas = campanhasFiltradas.filter(camp => {
         return camp.lojas?.some(loja => filterLojas.includes(loja.id))
       })
+      if (date.getDate() === 1 || date.getDate() === 15) {
+        console.log(`🎯 Após filtro de lojas: ${antes} -> ${campanhasFiltradas.length}`)
+      }
     }
-
+    
+    if (date.getDate() === 1 || date.getDate() === 15) {
+      console.log(`📊 Campanhas para ${dateStr}: ${campanhasFiltradas.length}`)
+      if (campanhasFiltradas.length > 0) {
+        campanhasFiltradas.forEach(camp => {
+          console.log(`   - ${camp.nome}`)
+        })
+      }
+      console.log(`=== FIM VERIFICAÇÃO ===`)
+    }
+    
     return campanhasFiltradas
   }
 
@@ -473,7 +499,6 @@ export function CalendarioCampanhas() {
     ? lojas.filter(loja => filterLojas.includes(loja.id))
     : lojas
 
-  // Painel de diagnóstico
   const DiagnosticPanel = () => {
     const hoje = new Date().toISOString().split('T')[0]
     const mesAtual = currentDate.getMonth() + 1
@@ -522,6 +547,7 @@ export function CalendarioCampanhas() {
                 <li key={camp.id} className="text-gray-700">
                   • <strong>{camp.nome}</strong>: {camp.data_inicio} a {camp.data_fim} 
                   <span className="text-green-600 ml-2">({camp.lojas?.length} lojas)</span>
+                  <span className="text-gray-500 ml-2">Lojas: {camp.lojas?.slice(0, 3).map(l => l.cod_loja).join(', ')}{camp.lojas && camp.lojas.length > 3 ? '...' : ''}</span>
                 </li>
               ))}
               {campanhasComLojas.length > 5 && (
@@ -882,7 +908,6 @@ export function CalendarioCampanhas() {
           </div>
         </CardHeader>
         
-        {/* PAINEL DE DIAGNÓSTICO */}
         {showDiagnostic && <DiagnosticPanel />}
         
         {filterLojas.length > 0 && (
