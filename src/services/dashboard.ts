@@ -77,7 +77,14 @@ export async function getDashboardData(lojaId: string | null = null, isAdmin: bo
     
     let visitasQuery = supabase
       .from('visitas')
-      .select('*, promotores(promotor_nome), lojas(nome_loja)')
+      .select(`
+        id,
+        check_in,
+        check_out,
+        status,
+        promotores (promotor_nome),
+        lojas (nome_loja)
+      `)
       .gte('check_in', hoje)
       .order('check_in', { ascending: false })
       .limit(10)
@@ -133,7 +140,7 @@ export async function getCoberturaPorMarcaComLojas(lojaId: string | null = null,
     console.log('🔍 Buscando cobertura por marca...')
     
     // Buscar relação promotores-marcas com os dados de loja
-    let query = supabase
+    const { data: promotoresMarcas, error } = await supabase
       .from('promotores_marcas')
       .select(`
         promotor_id,
@@ -146,8 +153,6 @@ export async function getCoberturaPorMarcaComLojas(lojaId: string | null = null,
           nome
         )
       `)
-    
-    const { data: promotoresMarcas, error } = await query
     
     if (error) {
       console.error('❌ Erro ao buscar dados:', error)
@@ -196,7 +201,7 @@ export async function getCoberturaPorMarcaComLojas(lojaId: string | null = null,
       .map(([marcaId, lojasSet]) => ({
         nome_marca: nomePorMarca.get(marcaId) || 'Desconhecida',
         total_promotores: lojasSet.size,
-        cobertura_percentual: totalLojas ? Math.round((lojasSet.size / totalLojas) * 100) : 0
+        cobertura_percentual: totalLojas && totalLojas > 0 ? Math.round((lojasSet.size / totalLojas) * 100) : 0
       }))
       .sort((a, b) => b.total_promotores - a.total_promotores)
       .slice(0, 20)
