@@ -238,7 +238,7 @@ export default function Campanhas() {
       const campanhasComRelacoes = await Promise.all((data || []).map(async (campanha) => {
         // Buscar lojas da campanha
         const { data: lojasRel } = await supabase
-          .from('campanhas_lojas')
+          .from('lojas_campanhas')
           .select('loja_id')
           .eq('campanha_id', campanha.id)
         
@@ -383,7 +383,7 @@ export default function Campanhas() {
         }))
 
         const { error: lojasError } = await supabase
-          .from('campanhas_lojas')
+          .from('lojas_campanhas')
           .insert(relacoesLojas)
 
         if (lojasError) throw lojasError
