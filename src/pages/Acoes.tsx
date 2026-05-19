@@ -21,7 +21,13 @@ import {
   Truck,
   GraduationCap,
   ClipboardList,
-  ChevronRight as ChevronRightIcon
+  ChevronRight as ChevronRightIcon,
+  Info,
+  Calendar as CalendarIcon,
+  Tag,
+  MapPin,
+  FileText,
+  Flag
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -48,6 +54,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 
@@ -107,15 +119,15 @@ const getPrioridadeConfig = (prioridade: string) => {
 const getTipoConfig = (tipo: string) => {
   switch (tipo) {
     case 'manutencao':
-      return { icon: Wrench, label: 'Manutenção' }
+      return { icon: Wrench, label: 'Manutenção', description: 'Ações de manutenção e reparo' }
     case 'logistica':
-      return { icon: Truck, label: 'Logística' }
+      return { icon: Truck, label: 'Logística', description: 'Ações de logística e transporte' }
     case 'treinamento':
-      return { icon: GraduationCap, label: 'Treinamento' }
+      return { icon: GraduationCap, label: 'Treinamento', description: 'Treinamentos e capacitações' }
     case 'controle':
-      return { icon: ClipboardList, label: 'Controle' }
+      return { icon: ClipboardList, label: 'Controle', description: 'Ações de controle e auditoria' }
     default:
-      return { icon: Target, label: 'Outra' }
+      return { icon: Target, label: 'Outra', description: 'Outros tipos de ação' }
   }
 }
 
@@ -134,6 +146,215 @@ function Checkbox({ checked, onCheckedChange }: { checked: boolean; onCheckedCha
   )
 }
 
+// Componente de Detalhes da Ação
+function DetalhesAcao({ 
+  acao, 
+  open, 
+  onOpenChange 
+}: { 
+  acao: Acao | null; 
+  open: boolean; 
+  onOpenChange: (open: boolean) => void;
+}) {
+  if (!acao) return null
+
+  const statusConfig = getStatusConfig(acao.status)
+  const prioridadeConfig = getPrioridadeConfig(acao.prioridade)
+  const tipoConfig = getTipoConfig(acao.tipo)
+  const StatusIcon = statusConfig.icon
+
+  const calcularDias = () => {
+    const inicio = new Date(acao.data_inicio)
+    const fim = new Date(acao.data_fim)
+    const diffTime = Math.abs(fim.getTime() - inicio.getTime())
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    return diffDays
+  }
+
+  const getStatusBadgeColor = () => {
+    switch (acao.status) {
+      case 'em_andamento': return 'text-pink-600 bg-pink-100'
+      case 'concluida': return 'text-green-600 bg-green-100'
+      case 'pendente': return 'text-yellow-600 bg-yellow-100'
+      case 'agendada': return 'text-blue-600 bg-blue-100'
+      default: return 'text-gray-600 bg-gray-100'
+    }
+  }
+
+  const getPrioridadeBadgeColor = () => {
+    switch (acao.prioridade) {
+      case 'alta': return 'text-red-600 bg-red-100'
+      case 'media': return 'text-yellow-600 bg-yellow-100'
+      case 'baixa': return 'text-green-600 bg-green-100'
+      default: return 'text-gray-600 bg-gray-100'
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[550px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <tipoConfig.icon className="h-5 w-5" style={{ color: PRIMARY_COLOR }} />
+            {acao.nome}
+          </DialogTitle>
+          <DialogDescription>
+            Detalhes completos da ação
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
+          {/* Status e Prioridade */}
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <Flag className="h-4 w-4 text-gray-500" />
+                <span className="text-sm font-medium text-gray-500">Status</span>
+              </div>
+              <Badge className={cn(getStatusBadgeColor(), "text-sm")}>
+                <StatusIcon className="h-3 w-3 mr-1" />
+                {statusConfig.label}
+              </Badge>
+            </div>
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <AlertCircle className="h-4 w-4 text-gray-500" />
+                <span className="text-sm font-medium text-gray-500">Prioridade</span>
+              </div>
+              <Badge className={cn(getPrioridadeBadgeColor(), "text-sm")}>
+                {prioridadeConfig.label}
+              </Badge>
+            </div>
+          </div>
+
+          {/* Tipo */}
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <Tag className="h-4 w-4 text-gray-500" />
+              <span className="text-sm font-medium text-gray-500">Tipo</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <tipoConfig.icon className="h-4 w-4" style={{ color: PRIMARY_COLOR }} />
+              <span className="text-sm">{tipoConfig.label}</span>
+              <span className="text-xs text-gray-400">- {tipoConfig.description}</span>
+            </div>
+          </div>
+
+          {/* Período */}
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <CalendarIcon className="h-4 w-4 text-gray-500" />
+              <span className="text-sm font-medium text-gray-500">Período</span>
+            </div>
+            <div className="bg-gray-50 rounded-lg p-3">
+              <div className="flex justify-between items-center">
+                <div>
+                  <div className="text-xs text-gray-500">Data Início</div>
+                  <div className="font-medium">
+                    {new Date(acao.data_inicio).toLocaleDateString('pt-BR')}
+                  </div>
+                </div>
+                <div className="text-gray-400">→</div>
+                <div>
+                  <div className="text-xs text-gray-500">Data Fim</div>
+                  <div className="font-medium">
+                    {new Date(acao.data_fim).toLocaleDateString('pt-BR')}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500">Duração</div>
+                  <div className="font-medium text-right">{calcularDias()} dias</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Lojas Participantes */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Store className="h-4 w-4 text-gray-500" />
+              <span className="text-sm font-medium text-gray-500">Lojas Participantes</span>
+              <Badge variant="secondary" className="text-xs">
+                {acao.lojas?.length || 0} loja(s)
+              </Badge>
+            </div>
+            {acao.lojas && acao.lojas.length > 0 ? (
+              <div className="max-h-32 overflow-y-auto border rounded-md p-2 space-y-1">
+                {acao.lojas.map(loja => (
+                  <div key={loja.id} className="text-sm flex items-center gap-2 p-1 hover:bg-gray-50 rounded">
+                    <MapPin className="h-3 w-3 text-gray-400" />
+                    <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">{loja.codigo}</span>
+                    <span className="text-gray-600">-</span>
+                    <span className="text-gray-600">{loja.nome_loja}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400">Nenhuma loja vinculada</p>
+            )}
+          </div>
+
+          {/* Descrição */}
+          {acao.descricao && (
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <FileText className="h-4 w-4 text-gray-500" />
+                <span className="text-sm font-medium text-gray-500">Descrição</span>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-700">
+                {acao.descricao}
+              </div>
+            </div>
+          )}
+        </div>
+        
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Fechar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// Componente de Tooltip da Ação
+function AcaoTooltip({ acao, children }: { acao: Acao; children: React.ReactNode }) {
+  const statusConfig = getStatusConfig(acao.status)
+  const prioridadeConfig = getPrioridadeConfig(acao.prioridade)
+  const tipoConfig = getTipoConfig(acao.tipo)
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {children}
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs p-3 bg-gray-900 text-white">
+        <div className="space-y-2">
+          <p className="font-semibold text-sm flex items-center gap-2">
+            <tipoConfig.icon className="h-3 w-3" />
+            {acao.nome}
+          </p>
+          <div className="text-xs space-y-1">
+            <p className="flex items-center gap-2">
+              <span className="opacity-70">Status:</span>
+              <span style={{ color: statusConfig.color }}>{statusConfig.label}</span>
+              <span className="opacity-70 ml-2">Prioridade:</span>
+              <span>{prioridadeConfig.label}</span>
+            </p>
+            <p>📅 {new Date(acao.data_inicio).toLocaleDateString('pt-BR')} até {new Date(acao.data_fim).toLocaleDateString('pt-BR')}</p>
+            <p>🏪 {acao.lojas?.length || 0} lojas participantes</p>
+            {acao.descricao && (
+              <p className="text-gray-300 text-xs truncate max-w-[200px]">📝 {acao.descricao.substring(0, 50)}...</p>
+            )}
+            <p className="text-gray-400 text-[10px] mt-1">Clique para ver mais detalhes</p>
+          </div>
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
 export default function Acoes() {
   // Estados principais
   const [mesAtual, setMesAtual] = useState(new Date())
@@ -146,6 +367,8 @@ export default function Acoes() {
   // Estados dos modais
   const [showFilterModal, setShowFilterModal] = useState(false)
   const [showNovaAcaoModal, setShowNovaAcaoModal] = useState(false)
+  const [showDetalhesModal, setShowDetalhesModal] = useState(false)
+  const [acaoSelecionada, setAcaoSelecionada] = useState<Acao | null>(null)
   
   // Estado dos filtros
   const [filtroStatus, setFiltroStatus] = useState<string>('todos')
@@ -178,6 +401,12 @@ export default function Acoes() {
   const dias = Array.from({ length: diasNoMes }, (_, i) => i + 1)
   const hoje = new Date()
   hoje.setHours(0, 0, 0, 0)
+
+  // Abrir modal de detalhes
+  const abrirDetalhes = (acao: Acao) => {
+    setAcaoSelecionada(acao)
+    setShowDetalhesModal(true)
+  }
 
   // Funções do Popover
   const abrirSelecionarLojas = () => {
@@ -353,7 +582,6 @@ export default function Acoes() {
 
     setSalvando(true)
     try {
-      // 1. Criar a ação
       const { data: acao, error: acaoError } = await supabase
         .from('acoes')
         .insert([{
@@ -370,7 +598,6 @@ export default function Acoes() {
 
       if (acaoError) throw acaoError
 
-      // 2. Criar as relações com as lojas
       const relacoes = novaAcao.loja_ids.map(loja_id => ({
         acao_id: acao.id,
         loja_id: loja_id
@@ -423,621 +650,605 @@ export default function Acoes() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Cabeçalho */}
-      <div className="rounded-lg p-6 text-white" style={{ background: `linear-gradient(135deg, ${PRIMARY_COLOR} 0%, #cc1168 100%)` }}>
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Target className="h-7 w-7" />
-              Calendário de Ações
-            </h1>
-            <p className="text-pink-100 text-sm mt-1">
-              {lojas.length} lojas cadastradas • {acoes.length} ações no período
-            </p>
-          </div>
-          
-          <div className="flex gap-2">
-            <Button 
-              variant="secondary" 
-              size="sm" 
-              className="bg-white/20 hover:bg-white/30 text-white"
-              onClick={() => setShowFilterModal(true)}
-            >
-              <Filter className="h-4 w-4 mr-2" />
-              Filtrar
-              {filtrosAtivos > 0 && (
-                <Badge className="ml-2 bg-white text-pink-600" variant="secondary">
-                  {filtrosAtivos}
-                </Badge>
-              )}
-            </Button>
-            <Button 
-              variant="default" 
-              size="sm" 
-              style={{ background: 'white', color: PRIMARY_COLOR }} 
-              className="hover:bg-gray-100"
-              onClick={() => setShowNovaAcaoModal(true)}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Nova Ação
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Controles do mês */}
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => mudarMes(-1)}>
-            <ChevronLeft className="h-4 w-4" />
-            Mês anterior
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => mudarMes(1)}>
-            Próximo mês
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-        <h2 className="text-xl font-bold text-gray-800">
-          {mesAtual.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}
-        </h2>
-        <div className="w-64">
-          <Input
-            placeholder="🔍 Buscar loja por nome..."
-            value={lojaFiltroNome}
-            onChange={(e) => setLojaFiltroNome(e.target.value)}
-            className="border-gray-300 focus:border-pink-500 focus:ring-pink-500"
-          />
-        </div>
-      </div>
-
-      {/* Legenda */}
-      <div className="flex flex-wrap gap-4 text-sm bg-gray-50 p-3 rounded-lg">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full" style={{ background: PRIMARY_COLOR }}></div>
-          <span>Em Andamento</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 bg-emerald-500 rounded-full"></div>
-          <span>Concluída</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
-          <span>Pendente</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-          <span>Agendada</span>
-        </div>
-        <div className="flex items-center gap-2 ml-4">
-          <span>🔴 Alta</span>
-          <span>🟡 Média</span>
-          <span>🟢 Baixa</span>
-        </div>
-        {filtroStatus !== 'todos' && (
-          <Badge variant="outline" className="text-xs">
-            Status: {filtroStatus === 'em_andamento' ? 'Em Andamento' : 
-                     filtroStatus === 'concluida' ? 'Concluída' : 
-                     filtroStatus === 'pendente' ? 'Pendente' : 'Agendada'}
-          </Badge>
-        )}
-        {filtroPrioridade !== 'todas' && (
-          <Badge variant="outline" className="text-xs">
-            Prioridade: {filtroPrioridade === 'alta' ? '🔴 Alta' : 
-                         filtroPrioridade === 'media' ? '🟡 Média' : '🟢 Baixa'}
-          </Badge>
-        )}
-        {lojasSelecionadas.length > 0 && (
-          <Badge variant="outline" className="text-xs">
-            {lojasSelecionadas.length} loja(s) selecionada(s)
-          </Badge>
-        )}
-        <div className="flex items-center gap-2 ml-auto text-gray-500 text-xs">
-          <span>Exibindo: {lojasFiltradas.length} de {lojas.length} lojas</span>
-        </div>
-      </div>
-
-      {/* Calendário */}
-      <Card className="overflow-hidden shadow-lg border-0">
-        <CardContent className="p-0 overflow-x-auto">
-          <div className="min-w-[1200px]">
-            {/* Cabeçalho com dias */}
-            <div className="grid border-b sticky top-0 z-20" 
-              style={{ gridTemplateColumns: `250px repeat(${dias.length}, 80px)` }}>
-              <div className="p-3 font-bold text-gray-700 sticky left-0 z-10 border-r" style={{ background: '#f9fafb' }}>
-                <div className="flex items-center gap-2">
-                  <Store className="h-4 w-4" style={{ color: PRIMARY_COLOR }} />
-                  Loja / Dia
-                </div>
-              </div>
-              {dias.map((dia) => {
-                const data = new Date(ano, mes, dia)
-                const nomeDia = diasSemana[data.getDay()]
-                const isDiaHoje = isHoje(dia)
-                return (
-                  <div key={dia} className={cn(
-                    "p-2 text-center font-semibold border-r",
-                    isDiaHoje && "bg-yellow-50"
-                  )}>
-                    <div className="text-lg font-bold">{dia}</div>
-                    <div className="text-xs text-gray-500">{nomeDia}</div>
-                  </div>
-                )
-              })}
+    <TooltipProvider>
+      <div className="space-y-6">
+        {/* Cabeçalho */}
+        <div className="rounded-lg p-6 text-white" style={{ background: `linear-gradient(135deg, ${PRIMARY_COLOR} 0%, #cc1168 100%)` }}>
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <h1 className="text-2xl font-bold flex items-center gap-2">
+                <Target className="h-7 w-7" />
+                Calendário de Ações
+              </h1>
+              <p className="text-pink-100 text-sm mt-1">
+                {lojas.length} lojas cadastradas • {acoes.length} ações no período
+              </p>
             </div>
+            
+            <div className="flex gap-2">
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                className="bg-white/20 hover:bg-white/30 text-white"
+                onClick={() => setShowFilterModal(true)}
+              >
+                <Filter className="h-4 w-4 mr-2" />
+                Filtrar
+                {filtrosAtivos > 0 && (
+                  <Badge className="ml-2 bg-white text-pink-600" variant="secondary">
+                    {filtrosAtivos}
+                  </Badge>
+                )}
+              </Button>
+              <Button 
+                variant="default" 
+                size="sm" 
+                style={{ background: 'white', color: PRIMARY_COLOR }} 
+                className="hover:bg-gray-100"
+                onClick={() => setShowNovaAcaoModal(true)}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Nova Ação
+              </Button>
+            </div>
+          </div>
+        </div>
 
-            {/* Linhas das lojas */}
-            {lojasFiltradas.map((loja) => (
-              <div key={loja.id} className="grid border-b hover:bg-gray-50 transition-colors"
+        {/* Controles do mês */}
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => mudarMes(-1)}>
+              <ChevronLeft className="h-4 w-4" />
+              Mês anterior
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => mudarMes(1)}>
+              Próximo mês
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+          <h2 className="text-xl font-bold text-gray-800">
+            {mesAtual.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}
+          </h2>
+          <div className="w-64">
+            <Input
+              placeholder="🔍 Buscar loja por nome..."
+              value={lojaFiltroNome}
+              onChange={(e) => setLojaFiltroNome(e.target.value)}
+              className="border-gray-300 focus:border-pink-500 focus:ring-pink-500"
+            />
+          </div>
+        </div>
+
+        {/* Legenda */}
+        <div className="flex flex-wrap gap-4 text-sm bg-gray-50 p-3 rounded-lg">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full" style={{ background: PRIMARY_COLOR }}></div>
+            <span>Em Andamento</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-emerald-500 rounded-full"></div>
+            <span>Concluída</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
+            <span>Pendente</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+            <span>Agendada</span>
+          </div>
+          <div className="flex items-center gap-2 ml-4">
+            <span>🔴 Alta</span>
+            <span>🟡 Média</span>
+            <span>🟢 Baixa</span>
+          </div>
+          {filtroStatus !== 'todos' && (
+            <Badge variant="outline" className="text-xs">
+              Status: {filtroStatus === 'em_andamento' ? 'Em Andamento' : 
+                       filtroStatus === 'concluida' ? 'Concluída' : 
+                       filtroStatus === 'pendente' ? 'Pendente' : 'Agendada'}
+            </Badge>
+          )}
+          {filtroPrioridade !== 'todas' && (
+            <Badge variant="outline" className="text-xs">
+              Prioridade: {filtroPrioridade === 'alta' ? '🔴 Alta' : 
+                           filtroPrioridade === 'media' ? '🟡 Média' : '🟢 Baixa'}
+            </Badge>
+          )}
+          {lojasSelecionadas.length > 0 && (
+            <Badge variant="outline" className="text-xs">
+              {lojasSelecionadas.length} loja(s) selecionada(s)
+            </Badge>
+          )}
+          <div className="flex items-center gap-2 ml-auto text-gray-500 text-xs">
+            <span>Exibindo: {lojasFiltradas.length} de {lojas.length} lojas</span>
+          </div>
+        </div>
+
+        {/* Calendário */}
+        <Card className="overflow-hidden shadow-lg border-0">
+          <CardContent className="p-0 overflow-x-auto">
+            <div className="min-w-[1200px]">
+              {/* Cabeçalho com dias */}
+              <div className="grid border-b sticky top-0 z-20" 
                 style={{ gridTemplateColumns: `250px repeat(${dias.length}, 80px)` }}>
-                
-                <div className="p-3 font-medium sticky left-0 bg-white z-10 border-r">
-                  <div className="font-bold text-gray-800">
-                    {loja.codigo || loja.id.substring(0, 6)}
-                  </div>
-                  <div className="text-xs text-gray-500 truncate" title={loja.nome_loja}>
-                    {loja.nome_loja}
+                <div className="p-3 font-bold text-gray-700 sticky left-0 z-10 border-r" style={{ background: '#f9fafb' }}>
+                  <div className="flex items-center gap-2">
+                    <Store className="h-4 w-4" style={{ color: PRIMARY_COLOR }} />
+                    Loja / Dia
                   </div>
                 </div>
-
-                {/* Dias */}
                 {dias.map((dia) => {
-                  const acoesDoDia = getAcoesDoDia(loja.id, dia)
+                  const data = new Date(ano, mes, dia)
+                  const nomeDia = diasSemana[data.getDay()]
                   const isDiaHoje = isHoje(dia)
-                  
                   return (
                     <div key={dia} className={cn(
-                      "p-1 border-r min-h-[100px] align-top",
+                      "p-2 text-center font-semibold border-r",
                       isDiaHoje && "bg-yellow-50"
                     )}>
-                      {acoesDoDia.length > 0 ? (
-                        <div className="space-y-1.5">
-                          {acoesDoDia.map((acao) => {
-                            const statusConfig = getStatusConfig(acao.status)
-                            const prioridadeConfig = getPrioridadeConfig(acao.prioridade)
-                            const tipoConfig = getTipoConfig(acao.tipo)
-                            const StatusIcon = statusConfig.icon
-                            const TipoIcon = tipoConfig.icon
-                            
-                            return (
-                              <div 
-                                key={acao.id} 
-                                className="p-1.5 rounded-md text-xs cursor-pointer transition-all hover:scale-105"
-                                style={{ 
-                                  background: statusConfig.bg,
-                                  borderLeft: `3px solid ${statusConfig.color}`
-                                }}
-                              >
-                                <div className="flex items-center justify-between mb-0.5">
-                                  <div className="flex items-center gap-1">
-                                    <TipoIcon className="h-3 w-3" style={{ color: PRIMARY_COLOR }} />
-                                    <span className="font-semibold truncate">{acao.nome}</span>
-                                  </div>
-                                  <StatusIcon className="h-3 w-3" style={{ color: statusConfig.color }} />
-                                </div>
-                                <div className="flex items-center justify-between mt-1">
-                                  <span className="text-[10px]">{prioridadeConfig.label}</span>
-                                  <span className="text-[10px] text-gray-400">
-                                    {new Date(acao.data_inicio).getDate() === dia ? 
-                                      (new Date(acao.data_fim).getDate() === dia ? 'Único' : 'Início') :
-                                      (new Date(acao.data_fim).getDate() === dia ? 'Fim' : '')
-                                    }
-                                  </span>
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      ) : (
-                        <div className="text-center text-gray-300 text-xs h-full flex items-center justify-center min-h-[80px]">
-                          —
-                        </div>
-                      )}
+                      <div className="text-lg font-bold">{dia}</div>
+                      <div className="text-xs text-gray-500">{nomeDia}</div>
                     </div>
                   )
                 })}
               </div>
-            ))}
 
-            {lojasFiltradas.length === 0 && (
-              <div className="text-center py-20 text-gray-500">
-                <Store className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-                <p>Nenhuma loja encontrada</p>
-                <p className="text-sm">Tente ajustar os filtros ou a busca</p>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Modal de Filtro */}
-      <Dialog open={showFilterModal} onOpenChange={setShowFilterModal}>
-        <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Filtrar Ações</DialogTitle>
-            <DialogDescription>
-              Selecione os filtros para visualizar as ações desejadas.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-6 py-4">
-            {/* Filtro por Status */}
-            <div className="space-y-2">
-              <Label>Status da Ação</Label>
-              <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione um status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos os status</SelectItem>
-                  <SelectItem value="em_andamento">Em Andamento</SelectItem>
-                  <SelectItem value="pendente">Pendente</SelectItem>
-                  <SelectItem value="concluida">Concluída</SelectItem>
-                  <SelectItem value="agendada">Agendada</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Filtro por Prioridade */}
-            <div className="space-y-2">
-              <Label>Prioridade</Label>
-              <Select value={filtroPrioridade} onValueChange={setFiltroPrioridade}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione uma prioridade" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todas">Todas</SelectItem>
-                  <SelectItem value="alta">🔴 Alta</SelectItem>
-                  <SelectItem value="media">🟡 Média</SelectItem>
-                  <SelectItem value="baixa">🟢 Baixa</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Filtro por Tipo */}
-            <div className="space-y-2">
-              <Label>Tipo de Ação</Label>
-              <Select value={filtroTipo} onValueChange={setFiltroTipo}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione um tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
-                  <SelectItem value="manutencao">Manutenção</SelectItem>
-                  <SelectItem value="logistica">Logística</SelectItem>
-                  <SelectItem value="treinamento">Treinamento</SelectItem>
-                  <SelectItem value="controle">Controle</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Filtro por Lojas */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Lojas para exibir</Label>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={selecionarTodasLojas}
-                  className="text-xs"
-                >
-                  {lojasSelecionadas.length === lojas.length ? 'Desmarcar todas' : 'Selecionar todas'}
-                </Button>
-              </div>
-              
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    className="w-full justify-between"
-                  >
-                    {lojasSelecionadas.length === 0
-                      ? "Todas as lojas"
-                      : `${lojasSelecionadas.length} loja(s) selecionada(s)`}
-                    <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[400px] p-0">
-                  <div className="p-2 border-b">
-                    <Input
-                      placeholder="Buscar loja..."
-                      className="h-8"
-                      value={buscaLojasTemp}
-                      onChange={(e) => setBuscaLojasTemp(e.target.value)}
-                    />
-                  </div>
-                  <div className="max-h-64 overflow-y-auto p-2">
-                    {lojas
-                      .filter(loja => {
-                        const busca = buscaLojasTemp.toLowerCase()
-                        return loja.nome_loja.toLowerCase().includes(busca) ||
-                               (loja.codigo && loja.codigo.toLowerCase().includes(busca))
-                      })
-                      .map((loja) => (
-                        <div
-                          key={loja.id}
-                          className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
-                          onClick={() => toggleLojaSelecionada(loja.id)}
-                        >
-                          <Checkbox
-                            checked={lojasSelecionadas.includes(loja.id)}
-                            onCheckedChange={() => toggleLojaSelecionada(loja.id)}
-                          />
-                          <Label className="cursor-pointer flex-1">
-                            <span className="font-mono text-xs">{loja.codigo}</span> - {loja.nome_loja}
-                          </Label>
-                        </div>
-                      ))}
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setFiltroStatus('todos')
-              setFiltroPrioridade('todas')
-              setFiltroTipo('todos')
-              setLojasSelecionadas([])
-            }}>
-              Limpar todos os filtros
-            </Button>
-            <Button onClick={() => setShowFilterModal(false)} style={{ background: PRIMARY_COLOR }}>
-              Aplicar filtros
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal de Nova Ação - COM POPOVER PROFISSIONAL */}
-      <Dialog open={showNovaAcaoModal} onOpenChange={setShowNovaAcaoModal}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Criar Nova Ação</DialogTitle>
-            <DialogDescription>
-              Preencha os dados da ação. Os campos com * são obrigatórios.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            {/* Nome da Ação */}
-            <div className="space-y-2">
-              <Label>Nome da Ação *</Label>
-              <Input
-                value={novaAcao.nome}
-                onChange={(e) => setNovaAcao({ ...novaAcao, nome: e.target.value })}
-                placeholder="Ex: Troca de Display"
-              />
-            </div>
-
-            {/* Lojas - POPOVER STYLE */}
-            <div className="space-y-2">
-              <Label>Lojas *</Label>
-              <Popover open={lojasPopoverOpen} onOpenChange={setLojasPopoverOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    className="w-full justify-between h-auto min-h-[40px]"
-                    onClick={abrirSelecionarLojas}
-                  >
-                    <div className="flex flex-wrap gap-1">
-                      {novaAcao.loja_ids.length === 0 ? (
-                        <span className="text-muted-foreground">Selecione as lojas...</span>
-                      ) : (
-                        <>
-                          <Badge variant="secondary" className="text-xs">
-                            📦 {novaAcao.loja_ids.length} loja(s) selecionada(s)
-                          </Badge>
-                          {novaAcao.loja_ids.slice(0, 3).map(lojaId => {
-                            const loja = lojas.find(l => l.id === lojaId)
-                            return loja ? (
-                              <Badge key={lojaId} variant="outline" className="text-xs">
-                                {loja.codigo}
-                              </Badge>
-                            ) : null
-                          })}
-                          {novaAcao.loja_ids.length > 3 && (
-                            <Badge variant="outline" className="text-xs">
-                              +{novaAcao.loja_ids.length - 3}
-                            </Badge>
-                          )}
-                        </>
-                      )}
-                    </div>
-                    <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[400px] p-0" align="start">
-                  {/* Busca */}
-                  <div className="p-2 border-b">
-                    <Input
-                      placeholder="🔍 Buscar loja por nome ou código..."
-                      value={buscaLojasTemp}
-                      onChange={(e) => setBuscaLojasTemp(e.target.value)}
-                      className="h-8"
-                    />
-                  </div>
+              {/* Linhas das lojas */}
+              {lojasFiltradas.map((loja) => (
+                <div key={loja.id} className="grid border-b hover:bg-gray-50 transition-colors"
+                  style={{ gridTemplateColumns: `250px repeat(${dias.length}, 80px)` }}>
                   
-                  {/* Lista de lojas */}
-                  <div className="max-h-[300px] overflow-y-auto p-2">
-                    {/* Selecionar todas */}
-                    <div className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer border-b pb-2 mb-1">
-                      <Checkbox
-                        checked={lojasSelecionadasTemp.length === lojas.length && lojas.length > 0}
-                        onCheckedChange={() => {
-                          if (lojasSelecionadasTemp.length === lojas.length) {
-                            setLojasSelecionadasTemp([])
-                          } else {
-                            setLojasSelecionadasTemp(lojas.map(l => l.id))
-                          }
-                        }}
-                      />
-                      <Label className="cursor-pointer font-semibold flex-1">
-                        Selecionar todas as lojas ({lojas.length})
-                      </Label>
+                  <div className="p-3 font-medium sticky left-0 bg-white z-10 border-r">
+                    <div className="font-bold text-gray-800">
+                      {loja.codigo || loja.id.substring(0, 6)}
                     </div>
+                    <div className="text-xs text-gray-500 truncate" title={loja.nome_loja}>
+                      {loja.nome_loja}
+                    </div>
+                  </div>
+
+                  {/* Dias */}
+                  {dias.map((dia) => {
+                    const acoesDoDia = getAcoesDoDia(loja.id, dia)
+                    const isDiaHoje = isHoje(dia)
                     
-                    {/* Lojas filtradas */}
-                    {lojas
-                      .filter(loja => {
-                        const busca = buscaLojasTemp.toLowerCase()
-                        return loja.nome_loja.toLowerCase().includes(busca) ||
-                               (loja.codigo && loja.codigo.toLowerCase().includes(busca))
-                      })
-                      .map((loja) => (
-                        <div
-                          key={loja.id}
-                          className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
-                          onClick={() => {
-                            setLojasSelecionadasTemp(prev =>
-                              prev.includes(loja.id)
-                                ? prev.filter(id => id !== loja.id)
-                                : [...prev, loja.id]
-                            )
-                          }}
-                        >
-                          <Checkbox
-                            checked={lojasSelecionadasTemp.includes(loja.id)}
-                            onCheckedChange={() => {}}
-                          />
-                          <Label className="cursor-pointer flex-1">
-                            <span className="font-mono text-xs">{loja.codigo}</span> - {loja.nome_loja}
-                          </Label>
-                        </div>
-                      ))}
-                    
-                    {/* Nenhuma loja encontrada */}
-                    {lojas.filter(loja => {
-                      const busca = buscaLojasTemp.toLowerCase()
-                      return loja.nome_loja.toLowerCase().includes(busca) ||
-                             (loja.codigo && loja.codigo.toLowerCase().includes(busca))
-                    }).length === 0 && (
-                      <div className="text-center py-4 text-muted-foreground text-sm">
-                        Nenhuma loja encontrada
+                    return (
+                      <div key={dia} className={cn(
+                        "p-1 border-r min-h-[100px] align-top",
+                        isDiaHoje && "bg-yellow-50"
+                      )}>
+                        {acoesDoDia.length > 0 ? (
+                          <div className="space-y-1.5">
+                            {acoesDoDia.map((acao) => {
+                              const statusConfig = getStatusConfig(acao.status)
+                              const prioridadeConfig = getPrioridadeConfig(acao.prioridade)
+                              const tipoConfig = getTipoConfig(acao.tipo)
+                              const StatusIcon = statusConfig.icon
+                              const TipoIcon = tipoConfig.icon
+                              
+                              return (
+                                <AcaoTooltip key={acao.id} acao={acao}>
+                                  <div 
+                                    className="p-1.5 rounded-md text-xs cursor-pointer transition-all hover:scale-105"
+                                    style={{ 
+                                      background: statusConfig.bg,
+                                      borderLeft: `3px solid ${statusConfig.color}`
+                                    }}
+                                    onClick={() => abrirDetalhes(acao)}
+                                  >
+                                    <div className="flex items-center justify-between mb-0.5">
+                                      <div className="flex items-center gap-1">
+                                        <TipoIcon className="h-3 w-3" style={{ color: PRIMARY_COLOR }} />
+                                        <span className="font-semibold truncate">{acao.nome}</span>
+                                      </div>
+                                      <div className="flex items-center gap-1">
+                                        <StatusIcon className="h-3 w-3" style={{ color: statusConfig.color }} />
+                                        <Info className="h-2.5 w-2.5 opacity-50" />
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center justify-between mt-1">
+                                      <span className="text-[10px]">{prioridadeConfig.label}</span>
+                                      <span className="text-[10px] text-gray-400">
+                                        {new Date(acao.data_inicio).getDate() === dia ? 
+                                          (new Date(acao.data_fim).getDate() === dia ? 'Único' : 'Início') :
+                                          (new Date(acao.data_fim).getDate() === dia ? 'Fim' : '')
+                                        }
+                                      </span>
+                                    </div>
+                                  </div>
+                                </AcaoTooltip>
+                              )
+                            })}
+                          </div>
+                        ) : (
+                          <div className="text-center text-gray-300 text-xs h-full flex items-center justify-center min-h-[80px]">
+                            —
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  
-                  {/* Footer do Popover */}
-                  <div className="p-2 border-t flex justify-between">
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      onClick={() => setLojasSelecionadasTemp([])}
-                    >
-                      Limpar tudo
-                    </Button>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={cancelarSelecaoLojas}>
-                        Cancelar
-                      </Button>
-                      <Button 
-                        size="sm" 
-                        onClick={aplicarSelecaoLojas} 
-                        style={{ background: PRIMARY_COLOR }}
-                      >
-                        Aplicar ({lojasSelecionadasTemp.length})
-                      </Button>
-                    </div>
-                  </div>
-                </PopoverContent>
-              </Popover>
-              <p className="text-xs text-muted-foreground">
-                Clique para selecionar uma ou mais lojas
-              </p>
-            </div>
+                    )
+                  })}
+                </div>
+              ))}
 
-            {/* Datas */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Data Início *</Label>
-                <Input
-                  type="date"
-                  value={novaAcao.data_inicio}
-                  onChange={(e) => setNovaAcao({ ...novaAcao, data_inicio: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Data Fim *</Label>
-                <Input
-                  type="date"
-                  value={novaAcao.data_fim}
-                  onChange={(e) => setNovaAcao({ ...novaAcao, data_fim: e.target.value })}
-                />
-              </div>
+              {lojasFiltradas.length === 0 && (
+                <div className="text-center py-20 text-gray-500">
+                  <Store className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                  <p>Nenhuma loja encontrada</p>
+                  <p className="text-sm">Tente ajustar os filtros ou a busca</p>
+                </div>
+              )}
             </div>
+          </CardContent>
+        </Card>
 
-            {/* Tipo, Prioridade, Status */}
-            <div className="grid grid-cols-3 gap-4">
+        {/* Modal de Detalhes da Ação */}
+        <DetalhesAcao 
+          acao={acaoSelecionada}
+          open={showDetalhesModal}
+          onOpenChange={setShowDetalhesModal}
+        />
+
+        {/* Modal de Filtro */}
+        <Dialog open={showFilterModal} onOpenChange={setShowFilterModal}>
+          <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Filtrar Ações</DialogTitle>
+              <DialogDescription>
+                Selecione os filtros para visualizar as ações desejadas.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-6 py-4">
+              {/* Filtro por Status */}
               <div className="space-y-2">
-                <Label>Tipo</Label>
-                <Select value={novaAcao.tipo} onValueChange={(value) => setNovaAcao({ ...novaAcao, tipo: value })}>
+                <Label>Status da Ação</Label>
+                <Select value={filtroStatus} onValueChange={setFiltroStatus}>
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Selecione um status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="manutencao">🔧 Manutenção</SelectItem>
-                    <SelectItem value="logistica">🚚 Logística</SelectItem>
-                    <SelectItem value="treinamento">🎓 Treinamento</SelectItem>
-                    <SelectItem value="controle">📋 Controle</SelectItem>
+                    <SelectItem value="todos">Todos os status</SelectItem>
+                    <SelectItem value="em_andamento">Em Andamento</SelectItem>
+                    <SelectItem value="pendente">Pendente</SelectItem>
+                    <SelectItem value="concluida">Concluída</SelectItem>
+                    <SelectItem value="agendada">Agendada</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              
+
+              {/* Filtro por Prioridade */}
               <div className="space-y-2">
                 <Label>Prioridade</Label>
-                <Select value={novaAcao.prioridade} onValueChange={(value) => setNovaAcao({ ...novaAcao, prioridade: value })}>
+                <Select value={filtroPrioridade} onValueChange={setFiltroPrioridade}>
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Selecione uma prioridade" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="baixa">🟢 Baixa</SelectItem>
-                    <SelectItem value="media">🟡 Média</SelectItem>
+                    <SelectItem value="todas">Todas</SelectItem>
                     <SelectItem value="alta">🔴 Alta</SelectItem>
+                    <SelectItem value="media">🟡 Média</SelectItem>
+                    <SelectItem value="baixa">🟢 Baixa</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              
+
+              {/* Filtro por Tipo */}
               <div className="space-y-2">
-                <Label>Status</Label>
-                <Select value={novaAcao.status} onValueChange={(value: any) => setNovaAcao({ ...novaAcao, status: value })}>
+                <Label>Tipo de Ação</Label>
+                <Select value={filtroTipo} onValueChange={setFiltroTipo}>
                   <SelectTrigger>
-                    <SelectValue />
+                    <SelectValue placeholder="Selecione um tipo" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="pendente">⏳ Pendente</SelectItem>
-                    <SelectItem value="em_andamento">⚡ Em Andamento</SelectItem>
-                    <SelectItem value="agendada">📅 Agendada</SelectItem>
-                    <SelectItem value="concluida">✅ Concluída</SelectItem>
+                    <SelectItem value="todos">Todos</SelectItem>
+                    <SelectItem value="manutencao">Manutenção</SelectItem>
+                    <SelectItem value="logistica">Logística</SelectItem>
+                    <SelectItem value="treinamento">Treinamento</SelectItem>
+                    <SelectItem value="controle">Controle</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-            </div>
 
-            {/* Descrição */}
-            <div className="space-y-2">
-              <Label>Descrição</Label>
-              <textarea
-                className="w-full min-h-[80px] p-2 border rounded-md text-sm"
-                value={novaAcao.descricao}
-                onChange={(e) => setNovaAcao({ ...novaAcao, descricao: e.target.value })}
-                placeholder="Descrição detalhada da ação..."
-              />
+              {/* Filtro por Lojas */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Lojas para exibir</Label>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={selecionarTodasLojas}
+                    className="text-xs"
+                  >
+                    {lojasSelecionadas.length === lojas.length ? 'Desmarcar todas' : 'Selecionar todas'}
+                  </Button>
+                </div>
+                
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" role="combobox" className="w-full justify-between">
+                      {lojasSelecionadas.length === 0 ? "Todas as lojas" : `${lojasSelecionadas.length} loja(s) selecionada(s)`}
+                      <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[400px] p-0">
+                    <div className="p-2 border-b">
+                      <Input
+                        placeholder="Buscar loja..."
+                        className="h-8"
+                        value={buscaLojasTemp}
+                        onChange={(e) => setBuscaLojasTemp(e.target.value)}
+                      />
+                    </div>
+                    <div className="max-h-64 overflow-y-auto p-2">
+                      {lojas
+                        .filter(loja => {
+                          const busca = buscaLojasTemp.toLowerCase()
+                          return loja.nome_loja.toLowerCase().includes(busca) ||
+                                 (loja.codigo && loja.codigo.toLowerCase().includes(busca))
+                        })
+                        .map((loja) => (
+                          <div
+                            key={loja.id}
+                            className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
+                            onClick={() => toggleLojaSelecionada(loja.id)}
+                          >
+                            <Checkbox
+                              checked={lojasSelecionadas.includes(loja.id)}
+                              onCheckedChange={() => toggleLojaSelecionada(loja.id)}
+                            />
+                            <Label className="cursor-pointer flex-1">
+                              <span className="font-mono text-xs">{loja.codigo}</span> - {loja.nome_loja}
+                            </Label>
+                          </div>
+                        ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
             </div>
-          </div>
-          
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowNovaAcaoModal(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={criarNovaAcao} disabled={salvando} style={{ background: PRIMARY_COLOR }}>
-              {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-              Salvar ação
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => {
+                setFiltroStatus('todos')
+                setFiltroPrioridade('todas')
+                setFiltroTipo('todos')
+                setLojasSelecionadas([])
+              }}>
+                Limpar todos os filtros
+              </Button>
+              <Button onClick={() => setShowFilterModal(false)} style={{ background: PRIMARY_COLOR }}>
+                Aplicar filtros
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de Nova Ação */}
+        <Dialog open={showNovaAcaoModal} onOpenChange={setShowNovaAcaoModal}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Criar Nova Ação</DialogTitle>
+              <DialogDescription>
+                Preencha os dados da ação. Os campos com * são obrigatórios.
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4 py-4">
+              {/* Nome da Ação */}
+              <div className="space-y-2">
+                <Label>Nome da Ação *</Label>
+                <Input
+                  value={novaAcao.nome}
+                  onChange={(e) => setNovaAcao({ ...novaAcao, nome: e.target.value })}
+                  placeholder="Ex: Troca de Display"
+                />
+              </div>
+
+              {/* Lojas */}
+              <div className="space-y-2">
+                <Label>Lojas *</Label>
+                <Popover open={lojasPopoverOpen} onOpenChange={setLojasPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      className="w-full justify-between h-auto min-h-[40px]"
+                      onClick={abrirSelecionarLojas}
+                    >
+                      <div className="flex flex-wrap gap-1">
+                        {novaAcao.loja_ids.length === 0 ? (
+                          <span className="text-muted-foreground">Selecione as lojas...</span>
+                        ) : (
+                          <>
+                            <Badge variant="secondary" className="text-xs">
+                              📦 {novaAcao.loja_ids.length} loja(s) selecionada(s)
+                            </Badge>
+                            {novaAcao.loja_ids.slice(0, 3).map(lojaId => {
+                              const loja = lojas.find(l => l.id === lojaId)
+                              return loja ? (
+                                <Badge key={lojaId} variant="outline" className="text-xs">
+                                  {loja.codigo}
+                                </Badge>
+                              ) : null
+                            })}
+                            {novaAcao.loja_ids.length > 3 && (
+                              <Badge variant="outline" className="text-xs">
+                                +{novaAcao.loja_ids.length - 3}
+                              </Badge>
+                            )}
+                          </>
+                        )}
+                      </div>
+                      <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[400px] p-0" align="start">
+                    <div className="p-2 border-b">
+                      <Input
+                        placeholder="🔍 Buscar loja por nome ou código..."
+                        value={buscaLojasTemp}
+                        onChange={(e) => setBuscaLojasTemp(e.target.value)}
+                        className="h-8"
+                      />
+                    </div>
+                    
+                    <div className="max-h-[300px] overflow-y-auto p-2">
+                      <div className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer border-b pb-2 mb-1">
+                        <Checkbox
+                          checked={lojasSelecionadasTemp.length === lojas.length && lojas.length > 0}
+                          onCheckedChange={() => {
+                            if (lojasSelecionadasTemp.length === lojas.length) {
+                              setLojasSelecionadasTemp([])
+                            } else {
+                              setLojasSelecionadasTemp(lojas.map(l => l.id))
+                            }
+                          }}
+                        />
+                        <Label className="cursor-pointer font-semibold flex-1">
+                          Selecionar todas as lojas ({lojas.length})
+                        </Label>
+                      </div>
+                      
+                      {lojas
+                        .filter(loja => {
+                          const busca = buscaLojasTemp.toLowerCase()
+                          return loja.nome_loja.toLowerCase().includes(busca) ||
+                                 (loja.codigo && loja.codigo.toLowerCase().includes(busca))
+                        })
+                        .map((loja) => (
+                          <div
+                            key={loja.id}
+                            className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
+                            onClick={() => {
+                              setLojasSelecionadasTemp(prev =>
+                                prev.includes(loja.id)
+                                  ? prev.filter(id => id !== loja.id)
+                                  : [...prev, loja.id]
+                              )
+                            }}
+                          >
+                            <Checkbox
+                              checked={lojasSelecionadasTemp.includes(loja.id)}
+                              onCheckedChange={() => {}}
+                            />
+                            <Label className="cursor-pointer flex-1">
+                              <span className="font-mono text-xs">{loja.codigo}</span> - {loja.nome_loja}
+                            </Label>
+                          </div>
+                        ))}
+                    </div>
+                    
+                    <div className="p-2 border-t flex justify-between">
+                      <Button variant="ghost" size="sm" onClick={() => setLojasSelecionadasTemp([])}>
+                        Limpar tudo
+                      </Button>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={cancelarSelecaoLojas}>
+                          Cancelar
+                        </Button>
+                        <Button size="sm" onClick={aplicarSelecaoLojas} style={{ background: PRIMARY_COLOR }}>
+                          Aplicar ({lojasSelecionadasTemp.length})
+                        </Button>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                <p className="text-xs text-muted-foreground">
+                  Clique para selecionar uma ou mais lojas
+                </p>
+              </div>
+
+              {/* Datas */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Data Início *</Label>
+                  <Input
+                    type="date"
+                    value={novaAcao.data_inicio}
+                    onChange={(e) => setNovaAcao({ ...novaAcao, data_inicio: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Data Fim *</Label>
+                  <Input
+                    type="date"
+                    value={novaAcao.data_fim}
+                    onChange={(e) => setNovaAcao({ ...novaAcao, data_fim: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              {/* Tipo, Prioridade, Status */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Tipo</Label>
+                  <Select value={novaAcao.tipo} onValueChange={(value) => setNovaAcao({ ...novaAcao, tipo: value })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="manutencao">🔧 Manutenção</SelectItem>
+                      <SelectItem value="logistica">🚚 Logística</SelectItem>
+                      <SelectItem value="treinamento">🎓 Treinamento</SelectItem>
+                      <SelectItem value="controle">📋 Controle</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label>Prioridade</Label>
+                  <Select value={novaAcao.prioridade} onValueChange={(value) => setNovaAcao({ ...novaAcao, prioridade: value })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="baixa">🟢 Baixa</SelectItem>
+                      <SelectItem value="media">🟡 Média</SelectItem>
+                      <SelectItem value="alta">🔴 Alta</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <Select value={novaAcao.status} onValueChange={(value: any) => setNovaAcao({ ...novaAcao, status: value })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pendente">⏳ Pendente</SelectItem>
+                      <SelectItem value="em_andamento">⚡ Em Andamento</SelectItem>
+                      <SelectItem value="agendada">📅 Agendada</SelectItem>
+                      <SelectItem value="concluida">✅ Concluída</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Descrição */}
+              <div className="space-y-2">
+                <Label>Descrição</Label>
+                <textarea
+                  className="w-full min-h-[80px] p-2 border rounded-md text-sm"
+                  value={novaAcao.descricao}
+                  onChange={(e) => setNovaAcao({ ...novaAcao, descricao: e.target.value })}
+                  placeholder="Descrição detalhada da ação..."
+                />
+              </div>
+            </div>
+            
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowNovaAcaoModal(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={criarNovaAcao} disabled={salvando} style={{ background: PRIMARY_COLOR }}>
+                {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                Salvar ação
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </TooltipProvider>
   )
 }
