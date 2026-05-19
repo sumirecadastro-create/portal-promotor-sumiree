@@ -14,7 +14,12 @@ import {
   Save,
   Search,
   Check,
-  ChevronRight as ChevronRightIcon
+  ChevronRight as ChevronRightIcon,
+  Info,
+  Calendar as CalendarIcon,
+  Tag,
+  MapPin,
+  User
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -49,6 +54,12 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 
@@ -94,6 +105,163 @@ function Checkbox({ checked, onCheckedChange }: { checked: boolean; onCheckedCha
   )
 }
 
+// Componente de Detalhes da Campanha
+function DetalhesCampanha({ 
+  campanha, 
+  open, 
+  onOpenChange 
+}: { 
+  campanha: Campanha | null; 
+  open: boolean; 
+  onOpenChange: (open: boolean) => void;
+}) {
+  if (!campanha) return null
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'ativa': return { text: 'Ativa', color: 'text-green-600', bg: 'bg-green-100' }
+      case 'pendente': return { text: 'Pendente', color: 'text-yellow-600', bg: 'bg-yellow-100' }
+      case 'concluida': return { text: 'Concluída', color: 'text-blue-600', bg: 'bg-blue-100' }
+      default: return { text: status, color: 'text-gray-600', bg: 'bg-gray-100' }
+    }
+  }
+
+  const getTipoIcon = (tipo?: string) => {
+    switch (tipo) {
+      case 'promocao': return '🎉'
+      case 'evento': return '📅'
+      case 'lancamento': return '🚀'
+      default: return '📢'
+    }
+  }
+
+  const statusInfo = getStatusText(campanha.status)
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[500px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <span>{getTipoIcon(campanha.tipo)}</span>
+            {campanha.nome}
+          </DialogTitle>
+          <DialogDescription>
+            Detalhes completos da campanha
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="space-y-4 py-4">
+          {/* Status */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-500">Status</span>
+            <Badge className={cn(statusInfo.bg, statusInfo.color)}>
+              {statusInfo.text}
+            </Badge>
+          </div>
+
+          {/* Período */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-500">Período</span>
+            <div className="text-right">
+              <div className="text-sm font-medium">
+                {new Date(campanha.data_inicio).toLocaleDateString('pt-BR')}
+              </div>
+              <div className="text-xs text-gray-400">até</div>
+              <div className="text-sm font-medium">
+                {new Date(campanha.data_fim).toLocaleDateString('pt-BR')}
+              </div>
+            </div>
+          </div>
+
+          {/* Duração */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-500">Duração</span>
+            <span className="text-sm">
+              {Math.ceil((new Date(campanha.data_fim).getTime() - new Date(campanha.data_inicio).getTime()) / (1000 * 60 * 60 * 24))} dias
+            </span>
+          </div>
+
+          {/* Lojas Participantes */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Store className="h-4 w-4 text-gray-500" />
+              <span className="text-sm font-medium text-gray-500">Lojas Participantes</span>
+              <Badge variant="secondary" className="text-xs">
+                {campanha.lojas?.length || 0} loja(s)
+              </Badge>
+            </div>
+            {campanha.lojas && campanha.lojas.length > 0 ? (
+              <div className="max-h-32 overflow-y-auto border rounded-md p-2 space-y-1">
+                {campanha.lojas.map(loja => (
+                  <div key={loja.id} className="text-sm flex items-center gap-2">
+                    <MapPin className="h-3 w-3 text-gray-400" />
+                    <span className="font-mono text-xs">{loja.codigo}</span>
+                    <span className="text-gray-600">-</span>
+                    <span className="text-gray-600">{loja.nome_loja}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400">Nenhuma loja vinculada</p>
+            )}
+          </div>
+
+          {/* Promotores */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <Users className="h-4 w-4 text-gray-500" />
+              <span className="text-sm font-medium text-gray-500">Promotores Responsáveis</span>
+              <Badge variant="secondary" className="text-xs">
+                {campanha.promotores?.length || 0} promotor(es)
+              </Badge>
+            </div>
+            {campanha.promotores && campanha.promotores.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {campanha.promotores.map(promotor => (
+                  <Badge key={promotor.id} variant="outline" className="gap-1">
+                    <User className="h-3 w-3" />
+                    {promotor.promotor_nome}
+                  </Badge>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400">Nenhum promotor vinculado</p>
+            )}
+          </div>
+        </div>
+        
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Fechar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// Componente de Tooltip da Campanha
+function CampanhaTooltip({ campanha, children }: { campanha: Campanha; children: React.ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {children}
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs p-3 bg-gray-900 text-white">
+        <div className="space-y-2">
+          <p className="font-semibold text-sm">{campanha.nome}</p>
+          <div className="text-xs space-y-1">
+            <p>📅 {new Date(campanha.data_inicio).toLocaleDateString('pt-BR')} até {new Date(campanha.data_fim).toLocaleDateString('pt-BR')}</p>
+            <p>🏪 {campanha.lojas?.length || 0} lojas participantes</p>
+            <p>👥 {campanha.promotores?.length || 0} promotores</p>
+            <p className="text-gray-300 text-xs">Clique para ver mais detalhes</p>
+          </div>
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
 export default function Campanhas() {
   // Estados principais
   const [mesAtual, setMesAtual] = useState(new Date())
@@ -107,6 +275,8 @@ export default function Campanhas() {
   // Estados dos modais
   const [showFilterModal, setShowFilterModal] = useState(false)
   const [showNovaCampanhaModal, setShowNovaCampanhaModal] = useState(false)
+  const [showDetalhesModal, setShowDetalhesModal] = useState(false)
+  const [campanhaSelecionada, setCampanhaSelecionada] = useState<Campanha | null>(null)
   
   // Estado dos filtros
   const [filtroStatus, setFiltroStatus] = useState<string>('todos')
@@ -142,6 +312,12 @@ export default function Campanhas() {
   const dias = Array.from({ length: diasNoMes }, (_, i) => i + 1)
   const hoje = new Date()
   hoje.setHours(0, 0, 0, 0)
+
+  // Abrir modal de detalhes
+  const abrirDetalhes = (campanha: Campanha) => {
+    setCampanhaSelecionada(campanha)
+    setShowDetalhesModal(true)
+  }
 
   // Funções do Popover de Lojas
   const abrirSelecionarLojas = () => {
@@ -217,21 +393,17 @@ export default function Campanhas() {
   // Buscar campanhas do Supabase - CORRIGIDO para mostrar campanhas que CRUZAM o período
   async function carregarCampanhas() {
     try {
-      // Calcular primeiro e último dia do mês atual
       const startDate = `${ano}-${String(mes + 1).padStart(2, '0')}-01`
       const lastDay = new Date(ano, mes + 1, 0).getDate()
       const endDate = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
       
       console.log('📅 Buscando campanhas que cruzam o período:', startDate, 'até:', endDate)
       
-      // Buscar campanhas que TENHAM SOBREPOSIÇÃO com o mês atual
-      // Uma campanha deve ser mostrada se:
-      // - Ela começa ANTES ou no FIM do mês E termina DEPOIS ou no INÍCIO do mês
       let query = supabase
         .from('campanhas')
         .select('*')
-        .lte('data_inicio', endDate)   // Começa antes ou no fim do mês
-        .gte('data_fim', startDate)     // Termina depois ou no início do mês
+        .lte('data_inicio', endDate)
+        .gte('data_fim', startDate)
       
       if (filtroStatus !== 'todos') {
         query = query.eq('status', filtroStatus)
@@ -244,17 +416,15 @@ export default function Campanhas() {
         throw campanhasError
       }
       
-      console.log('📊 Campanhas encontradas (que cruzam o período):', campanhasData?.length || 0)
+      console.log('📊 Campanhas encontradas:', campanhasData?.length || 0)
       
       if (!campanhasData || campanhasData.length === 0) {
         setCampanhas([])
         return
       }
       
-      // Buscar todas as relações de uma vez
       const campanhaIds = campanhasData.map(c => c.id)
       
-      // Buscar relações com lojas (tabela: lojas_campanhas)
       const { data: lojasRel, error: lojasRelError } = await supabase
         .from('lojas_campanhas')
         .select('campanha_id, loja_id')
@@ -264,7 +434,6 @@ export default function Campanhas() {
         console.error('Erro ao buscar relações com lojas:', lojasRelError)
       }
       
-      // Buscar relações com promotores (tabela: promotores_campanhas)
       const { data: promotoresRel, error: promotoresRelError } = await supabase
         .from('promotores_campanhas')
         .select('campanha_id, promotor_id')
@@ -274,7 +443,6 @@ export default function Campanhas() {
         console.error('Erro ao buscar relações com promotores:', promotoresRelError)
       }
       
-      // Organizar IDs por campanha
       const lojasPorCampanha: Record<string, string[]> = {}
       lojasRel?.forEach(rel => {
         if (!lojasPorCampanha[rel.campanha_id]) {
@@ -291,7 +459,6 @@ export default function Campanhas() {
         promotoresPorCampanha[rel.campanha_id].push(rel.promotor_id)
       })
       
-      // Buscar dados das lojas
       const todosLojasIds = new Set(Object.values(lojasPorCampanha).flat())
       let lojasData: any[] = []
       if (todosLojasIds.size > 0) {
@@ -303,7 +470,6 @@ export default function Campanhas() {
       }
       const lojasMap = new Map(lojasData.map(l => [l.id, l]))
       
-      // Buscar dados dos promotores
       const todosPromotoresIds = new Set(Object.values(promotoresPorCampanha).flat())
       let promotoresData: any[] = []
       if (todosPromotoresIds.size > 0) {
@@ -315,7 +481,6 @@ export default function Campanhas() {
       }
       const promotoresMap = new Map(promotoresData.map(p => [p.id, p]))
       
-      // Montar campanhas com relações
       const campanhasComRelacoes = campanhasData.map(campanha => {
         const lojaIds = lojasPorCampanha[campanha.id] || []
         const promotorIds = promotoresPorCampanha[campanha.id] || []
@@ -330,10 +495,6 @@ export default function Campanhas() {
       })
       
       console.log('✅ Campanhas carregadas:', campanhasComRelacoes.length)
-      campanhasComRelacoes.forEach(camp => {
-        console.log(`📌 ${camp.nome}: ${camp.lojas?.length || 0} lojas, ${camp.data_inicio} a ${camp.data_fim}`)
-      })
-      
       setCampanhas(campanhasComRelacoes)
     } catch (err) {
       console.error('Erro ao carregar campanhas:', err)
@@ -352,7 +513,7 @@ export default function Campanhas() {
     carregarDados()
   }, [mesAtual, filtroStatus])
 
-  // Filtrar lojas para exibição
+  // Filtrar lojas
   const lojasFiltradas = lojas.filter(loja => {
     const matchNome = loja.nome_loja.toLowerCase().includes(lojaFiltroNome.toLowerCase()) ||
       (loja.codigo && loja.codigo.toLowerCase().includes(lojaFiltroNome.toLowerCase()))
@@ -362,16 +523,11 @@ export default function Campanhas() {
     return matchNome && matchSelecao
   })
 
-  // Função CORRIGIDA para obter campanhas do dia
   function getCampanhasDoDia(lojaId: string, dia: number) {
-    // Criar data no formato YYYY-MM-DD
     const dateStr = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
     
     return campanhas.filter(campanha => {
-      // Verificar se a loja está na campanha
       if (!campanha.loja_ids?.includes(lojaId)) return false
-      
-      // Verificar se a data está dentro do período da campanha
       return dateStr >= campanha.data_inicio && dateStr <= campanha.data_fim
     })
   }
@@ -386,7 +542,6 @@ export default function Campanhas() {
     setMesAtual(new Date(ano, mes + delta, 1))
   }
 
-  // Funções para gerenciar lojas selecionadas (filtro)
   function toggleLojaSelecionada(lojaId: string) {
     setLojasSelecionadas(prev =>
       prev.includes(lojaId)
@@ -416,7 +571,6 @@ export default function Campanhas() {
 
     setSalvando(true)
     try {
-      // 1. Criar a campanha
       const { data: campanha, error: campanhaError } = await supabase
         .from('campanhas')
         .insert([{
@@ -431,7 +585,6 @@ export default function Campanhas() {
 
       if (campanhaError) throw campanhaError
 
-      // 2. Inserir relações com lojas
       if (novaCampanha.loja_ids.length > 0) {
         const relacoesLojas = novaCampanha.loja_ids.map(loja_id => ({
           campanha_id: campanha.id,
@@ -443,10 +596,8 @@ export default function Campanhas() {
           .insert(relacoesLojas)
 
         if (lojasError) throw lojasError
-        console.log(`✅ Vinculadas ${relacoesLojas.length} lojas à campanha`)
       }
 
-      // 3. Inserir relações com promotores (OPCIONAL)
       if (novaCampanha.promotor_ids && novaCampanha.promotor_ids.length > 0) {
         const relacoesPromotores = novaCampanha.promotor_ids.map(promotor_id => ({
           campanha_id: campanha.id,
@@ -484,7 +635,6 @@ export default function Campanhas() {
   }
 
   const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
-  
   const filtrosAtivos = (filtroStatus !== 'todos' ? 1 : 0) + (lojasSelecionadas.length > 0 ? 1 : 0)
 
   if (loading) {
@@ -499,634 +649,444 @@ export default function Campanhas() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Cabeçalho */}
-      <div className="rounded-lg p-6 text-white" style={{ background: `linear-gradient(135deg, ${PRIMARY_COLOR} 0%, #cc1168 100%)` }}>
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Calendar className="h-7 w-7" />
-              Calendário de Campanhas
-            </h1>
-            <p className="text-pink-100 text-sm mt-1">
-              {lojas.length} lojas cadastradas • {campanhas.length} campanhas no período
-            </p>
-          </div>
-          
-          <div className="flex gap-2">
-            <Button 
-              variant="secondary" 
-              size="sm" 
-              className="bg-white/20 hover:bg-white/30 text-white"
-              onClick={() => setShowFilterModal(true)}
-            >
-              <Filter className="h-4 w-4 mr-2" />
-              Filtrar
-              {filtrosAtivos > 0 && (
-                <Badge className="ml-2 bg-white text-pink-600" variant="secondary">
-                  {filtrosAtivos}
-                </Badge>
-              )}
-            </Button>
-            <Button 
-              variant="default" 
-              size="sm" 
-              style={{ background: 'white', color: PRIMARY_COLOR }} 
-              className="hover:bg-gray-100"
-              onClick={() => setShowNovaCampanhaModal(true)}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Nova Campanha
-            </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Controles do mês */}
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => mudarMes(-1)}>
-            <ChevronLeft className="h-4 w-4" />
-            Mês anterior
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => mudarMes(1)}>
-            Próximo mês
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-        <h2 className="text-xl font-bold text-gray-800">
-          {mesAtual.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}
-        </h2>
-        <div className="w-64">
-          <Input
-            placeholder="🔍 Buscar loja por nome..."
-            value={lojaFiltroNome}
-            onChange={(e) => setLojaFiltroNome(e.target.value)}
-            className="border-gray-300 focus:border-pink-500 focus:ring-pink-500"
-          />
-        </div>
-      </div>
-
-      {/* Legenda */}
-      <div className="flex flex-wrap gap-4 text-sm bg-gray-50 p-3 rounded-lg">
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full" style={{ background: PRIMARY_COLOR }}></div>
-          <span>Campanha Ativa</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
-          <span>Pendente</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-          <span>Concluída</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-5 h-3 bg-yellow-100 border border-yellow-300 rounded"></div>
-          <span>Hoje</span>
-        </div>
-        {filtroStatus !== 'todos' && (
-          <div className="flex items-center gap-2 ml-4">
-            <Badge variant="outline" className="text-xs">
-              Status: {filtroStatus === 'ativa' ? 'Ativa' : filtroStatus === 'pendente' ? 'Pendente' : 'Concluída'}
-            </Badge>
-          </div>
-        )}
-        {lojasSelecionadas.length > 0 && (
-          <div className="flex items-center gap-2 ml-4">
-            <Badge variant="outline" className="text-xs">
-              {lojasSelecionadas.length} loja(s) selecionada(s)
-            </Badge>
-          </div>
-        )}
-        <div className="flex items-center gap-2 ml-auto text-gray-500 text-xs">
-          <span>Exibindo: {lojasFiltradas.length} de {lojas.length} lojas</span>
-        </div>
-      </div>
-
-      {/* Calendário */}
-      <Card className="overflow-hidden shadow-lg border-0">
-        <CardContent className="p-0 overflow-x-auto">
-          <div className="min-w-[1200px]">
-            {/* Cabeçalho com dias */}
-            <div className="grid border-b sticky top-0 z-20" 
-              style={{ gridTemplateColumns: `250px repeat(${dias.length}, 70px)` }}>
-              <div className="p-3 font-bold text-gray-700 sticky left-0 z-10 border-r" style={{ background: '#f9fafb' }}>
-                <div className="flex items-center gap-2">
-                  <Store className="h-4 w-4" style={{ color: PRIMARY_COLOR }} />
-                  Loja / Dia
-                </div>
-              </div>
-              {dias.map((dia) => {
-                const data = new Date(ano, mes, dia)
-                const nomeDia = diasSemana[data.getDay()]
-                const isDiaHoje = isHoje(dia)
-                return (
-                  <div key={dia} className={cn(
-                    "p-2 text-center font-semibold border-r",
-                    isDiaHoje && "bg-yellow-50"
-                  )}>
-                    <div className="text-lg font-bold">{dia}</div>
-                    <div className="text-xs text-gray-500">{nomeDia}</div>
-                  </div>
-                )
-              })}
+    <TooltipProvider>
+      <div className="space-y-6">
+        {/* Cabeçalho */}
+        <div className="rounded-lg p-6 text-white" style={{ background: `linear-gradient(135deg, ${PRIMARY_COLOR} 0%, #cc1168 100%)` }}>
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <h1 className="text-2xl font-bold flex items-center gap-2">
+                <Calendar className="h-7 w-7" />
+                Calendário de Campanhas
+              </h1>
+              <p className="text-pink-100 text-sm mt-1">
+                {lojas.length} lojas cadastradas • {campanhas.length} campanhas no período
+              </p>
             </div>
+            
+            <div className="flex gap-2">
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                className="bg-white/20 hover:bg-white/30 text-white"
+                onClick={() => setShowFilterModal(true)}
+              >
+                <Filter className="h-4 w-4 mr-2" />
+                Filtrar
+                {filtrosAtivos > 0 && (
+                  <Badge className="ml-2 bg-white text-pink-600" variant="secondary">
+                    {filtrosAtivos}
+                  </Badge>
+                )}
+              </Button>
+              <Button 
+                variant="default" 
+                size="sm" 
+                style={{ background: 'white', color: PRIMARY_COLOR }} 
+                className="hover:bg-gray-100"
+                onClick={() => setShowNovaCampanhaModal(true)}
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Nova Campanha
+              </Button>
+            </div>
+          </div>
+        </div>
 
-            {/* Linhas das lojas */}
-            {lojasFiltradas.map((loja) => (
-              <div key={loja.id} className="grid border-b hover:bg-gray-50 transition-colors"
+        {/* Controles do mês */}
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => mudarMes(-1)}>
+              <ChevronLeft className="h-4 w-4" />
+              Mês anterior
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => mudarMes(1)}>
+              Próximo mês
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+          <h2 className="text-xl font-bold text-gray-800">
+            {mesAtual.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}
+          </h2>
+          <div className="w-64">
+            <Input
+              placeholder="🔍 Buscar loja por nome..."
+              value={lojaFiltroNome}
+              onChange={(e) => setLojaFiltroNome(e.target.value)}
+              className="border-gray-300 focus:border-pink-500 focus:ring-pink-500"
+            />
+          </div>
+        </div>
+
+        {/* Legenda */}
+        <div className="flex flex-wrap gap-4 text-sm bg-gray-50 p-3 rounded-lg">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full" style={{ background: PRIMARY_COLOR }}></div>
+            <span>Campanha Ativa</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
+            <span>Pendente</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+            <span>Concluída</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-3 bg-yellow-100 border border-yellow-300 rounded"></div>
+            <span>Hoje</span>
+          </div>
+          {filtroStatus !== 'todos' && (
+            <div className="flex items-center gap-2 ml-4">
+              <Badge variant="outline" className="text-xs">
+                Status: {filtroStatus === 'ativa' ? 'Ativa' : filtroStatus === 'pendente' ? 'Pendente' : 'Concluída'}
+              </Badge>
+            </div>
+          )}
+          {lojasSelecionadas.length > 0 && (
+            <div className="flex items-center gap-2 ml-4">
+              <Badge variant="outline" className="text-xs">
+                {lojasSelecionadas.length} loja(s) selecionada(s)
+              </Badge>
+            </div>
+          )}
+          <div className="flex items-center gap-2 ml-auto text-gray-500 text-xs">
+            <span>Exibindo: {lojasFiltradas.length} de {lojas.length} lojas</span>
+          </div>
+        </div>
+
+        {/* Calendário */}
+        <Card className="overflow-hidden shadow-lg border-0">
+          <CardContent className="p-0 overflow-x-auto">
+            <div className="min-w-[1200px]">
+              {/* Cabeçalho com dias */}
+              <div className="grid border-b sticky top-0 z-20" 
                 style={{ gridTemplateColumns: `250px repeat(${dias.length}, 70px)` }}>
-                
-                <div className="p-3 font-medium sticky left-0 bg-white z-10 border-r">
-                  <div className="font-bold text-gray-800">
-                    {loja.codigo || loja.id.substring(0, 6)}
-                  </div>
-                  <div className="text-xs text-gray-500 truncate" title={loja.nome_loja}>
-                    {loja.nome_loja}
+                <div className="p-3 font-bold text-gray-700 sticky left-0 z-10 border-r" style={{ background: '#f9fafb' }}>
+                  <div className="flex items-center gap-2">
+                    <Store className="h-4 w-4" style={{ color: PRIMARY_COLOR }} />
+                    Loja / Dia
                   </div>
                 </div>
-
-                {/* Dias */}
                 {dias.map((dia) => {
-                  const campanhasDoDia = getCampanhasDoDia(loja.id, dia)
+                  const data = new Date(ano, mes, dia)
+                  const nomeDia = diasSemana[data.getDay()]
                   const isDiaHoje = isHoje(dia)
-                  
                   return (
                     <div key={dia} className={cn(
-                      "p-1 border-r min-h-[80px] align-top",
+                      "p-2 text-center font-semibold border-r",
                       isDiaHoje && "bg-yellow-50"
                     )}>
-                      {campanhasDoDia.length > 0 ? (
-                        <div className="space-y-1">
-                          {campanhasDoDia.map((campanha) => (
-                            <div 
-                              key={campanha.id} 
-                              className="p-1 rounded-md text-xs cursor-pointer transition-all hover:scale-105"
-                              style={{ 
-                                background: campanha.status === 'ativa' ? `${PRIMARY_COLOR}20` : 
-                                           campanha.status === 'pendente' ? '#fef3c7' : '#dbeafe',
-                                borderLeft: `2px solid ${campanha.status === 'ativa' ? PRIMARY_COLOR : 
-                                                      campanha.status === 'pendente' ? '#f59e0b' : '#3b82f6'}`
-                              }}
-                            >
-                              <div className="font-semibold truncate">{campanha.nome}</div>
-                              {campanha.promotores && campanha.promotores.length > 0 && (
-                                <div className="text-[10px] text-gray-500 truncate">
-                                  {campanha.promotores.map(p => p.promotor_nome.split(' ')[0]).join(', ')}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="text-center text-gray-300 text-xs h-full flex items-center justify-center">
-                          —
-                        </div>
-                      )}
+                      <div className="text-lg font-bold">{dia}</div>
+                      <div className="text-xs text-gray-500">{nomeDia}</div>
                     </div>
                   )
                 })}
               </div>
-            ))}
 
-            {lojasFiltradas.length === 0 && (
-              <div className="text-center py-20 text-gray-500">
-                <Store className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-                <p>Nenhuma loja encontrada</p>
-                <p className="text-sm">Tente ajustar os filtros ou a busca</p>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+              {/* Linhas das lojas */}
+              {lojasFiltradas.map((loja) => (
+                <div key={loja.id} className="grid border-b hover:bg-gray-50 transition-colors"
+                  style={{ gridTemplateColumns: `250px repeat(${dias.length}, 70px)` }}>
+                  
+                  <div className="p-3 font-medium sticky left-0 bg-white z-10 border-r">
+                    <div className="font-bold text-gray-800">
+                      {loja.codigo || loja.id.substring(0, 6)}
+                    </div>
+                    <div className="text-xs text-gray-500 truncate" title={loja.nome_loja}>
+                      {loja.nome_loja}
+                    </div>
+                  </div>
 
-      {/* Modal de Filtro */}
-      <Dialog open={showFilterModal} onOpenChange={setShowFilterModal}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Filtrar Campanhas</DialogTitle>
-            <DialogDescription>
-              Selecione as lojas e status que deseja visualizar.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-6 py-4">
-            {/* Filtro por Status */}
-            <div className="space-y-2">
-              <Label>Status da Campanha</Label>
-              <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione um status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos os status</SelectItem>
-                  <SelectItem value="ativa">Ativa</SelectItem>
-                  <SelectItem value="pendente">Pendente</SelectItem>
-                  <SelectItem value="concluida">Concluída</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Filtro por Lojas */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Lojas para exibir</Label>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={selecionarTodasLojas}
-                  className="text-xs"
-                >
-                  {lojasSelecionadas.length === lojas.length ? 'Desmarcar todas' : 'Selecionar todas'}
-                </Button>
-              </div>
-              
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    className="w-full justify-between"
-                  >
-                    {lojasSelecionadas.length === 0
-                      ? "Todas as lojas"
-                      : `${lojasSelecionadas.length} loja(s) selecionada(s)`}
-                    <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[400px] p-0">
-                  <Command>
-                    <CommandInput placeholder="Buscar loja..." />
-                    <CommandList>
-                      <CommandEmpty>Nenhuma loja encontrada.</CommandEmpty>
-                      <CommandGroup>
-                        {lojas.map((loja) => (
-                          <CommandItem
-                            key={loja.id}
-                            value={loja.id}
-                            onSelect={() => toggleLojaSelecionada(loja.id)}
-                          >
-                            <Check
-                              className={cn(
-                                "mr-2 h-4 w-4",
-                                lojasSelecionadas.includes(loja.id) ? "opacity-100" : "opacity-0"
-                              )}
-                            />
-                            {loja.codigo} - {loja.nome_loja}
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
-              
-              {lojasSelecionadas.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {lojasSelecionadas.slice(0, 5).map(lojaId => {
-                    const loja = lojas.find(l => l.id === lojaId)
+                  {/* Dias */}
+                  {dias.map((dia) => {
+                    const campanhasDoDia = getCampanhasDoDia(loja.id, dia)
+                    const isDiaHoje = isHoje(dia)
+                    
                     return (
-                      <Badge key={lojaId} variant="secondary" className="text-xs">
-                        {loja?.codigo}
-                        <X 
-                          className="ml-1 h-3 w-3 cursor-pointer" 
-                          onClick={() => toggleLojaSelecionada(lojaId)}
-                        />
-                      </Badge>
+                      <div key={dia} className={cn(
+                        "p-1 border-r min-h-[80px] align-top",
+                        isDiaHoje && "bg-yellow-50"
+                      )}>
+                        {campanhasDoDia.length > 0 ? (
+                          <div className="space-y-1">
+                            {campanhasDoDia.map((campanha) => (
+                              <CampanhaTooltip key={campanha.id} campanha={campanha}>
+                                <div 
+                                  className="p-1 rounded-md text-xs cursor-pointer transition-all hover:scale-105"
+                                  style={{ 
+                                    background: campanha.status === 'ativa' ? `${PRIMARY_COLOR}20` : 
+                                               campanha.status === 'pendente' ? '#fef3c7' : '#dbeafe',
+                                    borderLeft: `2px solid ${campanha.status === 'ativa' ? PRIMARY_COLOR : 
+                                                          campanha.status === 'pendente' ? '#f59e0b' : '#3b82f6'}`
+                                  }}
+                                  onClick={() => abrirDetalhes(campanha)}
+                                >
+                                  <div className="font-semibold truncate flex items-center justify-between">
+                                    <span>{campanha.nome}</span>
+                                    <Info className="h-2.5 w-2.5 opacity-50" />
+                                  </div>
+                                  {campanha.promotores && campanha.promotores.length > 0 && (
+                                    <div className="text-[10px] text-gray-500 truncate">
+                                      {campanha.promotores.map(p => p.promotor_nome.split(' ')[0]).join(', ')}
+                                    </div>
+                                  )}
+                                </div>
+                              </CampanhaTooltip>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-center text-gray-300 text-xs h-full flex items-center justify-center min-h-[60px]">
+                            —
+                          </div>
+                        )}
+                      </div>
                     )
                   })}
-                  {lojasSelecionadas.length > 5 && (
-                    <Badge variant="secondary" className="text-xs">
-                      +{lojasSelecionadas.length - 5}
-                    </Badge>
-                  )}
+                </div>
+              ))}
+
+              {lojasFiltradas.length === 0 && (
+                <div className="text-center py-20 text-gray-500">
+                  <Store className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                  <p>Nenhuma loja encontrada</p>
+                  <p className="text-sm">Tente ajustar os filtros ou a busca</p>
                 </div>
               )}
             </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setFiltroStatus('todos')
-              setLojasSelecionadas([])
-            }}>
-              Limpar todos os filtros
-            </Button>
-            <Button onClick={() => setShowFilterModal(false)} style={{ background: PRIMARY_COLOR }}>
-              Aplicar filtros
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </CardContent>
+        </Card>
 
-      {/* Modal de Nova Campanha */}
-      <Dialog open={showNovaCampanhaModal} onOpenChange={setShowNovaCampanhaModal}>
-        <DialogContent className="sm:max-w-[550px]">
-          <DialogHeader>
-            <DialogTitle>Criar Nova Campanha</DialogTitle>
-            <DialogDescription>
-              Preencha os dados da campanha. <span className="text-red-500">*</span> Campos obrigatórios.
-              Promotores são opcionais.
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            {/* Nome da Campanha */}
-            <div className="space-y-2">
-              <Label>Nome da Campanha <span className="text-red-500">*</span></Label>
-              <Input
-                value={novaCampanha.nome}
-                onChange={(e) => setNovaCampanha({ ...novaCampanha, nome: e.target.value })}
-                placeholder="Ex: Promoção de Verão"
-              />
-            </div>
-
-            {/* Lojas - OBRIGATÓRIO */}
-            <div className="space-y-2">
-              <Label>Lojas <span className="text-red-500">*</span></Label>
-              <Popover open={lojasPopoverOpen} onOpenChange={setLojasPopoverOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    className="w-full justify-between h-auto min-h-[40px]"
-                    onClick={abrirSelecionarLojas}
-                  >
-                    <div className="flex flex-wrap gap-1">
-                      {novaCampanha.loja_ids.length === 0 ? (
-                        <span className="text-muted-foreground">Selecione as lojas...</span>
-                      ) : (
-                        <>
-                          <Badge variant="secondary" className="text-xs">
-                            📦 {novaCampanha.loja_ids.length} loja(s) selecionada(s)
-                          </Badge>
-                          {novaCampanha.loja_ids.slice(0, 3).map(lojaId => {
-                            const loja = lojas.find(l => l.id === lojaId)
-                            return loja ? (
-                              <Badge key={lojaId} variant="outline" className="text-xs">
-                                {loja.codigo}
-                              </Badge>
-                            ) : null
-                          })}
-                          {novaCampanha.loja_ids.length > 3 && (
-                            <Badge variant="outline" className="text-xs">
-                              +{novaCampanha.loja_ids.length - 3}
-                            </Badge>
-                          )}
-                        </>
-                      )}
-                    </div>
-                    <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[400px] p-0" align="start">
-                  <div className="p-2 border-b">
-                    <Input
-                      placeholder="🔍 Buscar loja por nome ou código..."
-                      value={buscaLojasTemp}
-                      onChange={(e) => setBuscaLojasTemp(e.target.value)}
-                      className="h-8"
-                    />
-                  </div>
-                  
-                  <div className="max-h-[300px] overflow-y-auto p-2">
-                    <div className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer border-b pb-2 mb-1">
-                      <Checkbox
-                        checked={lojasSelecionadasTemp.length === lojas.length && lojas.length > 0}
-                        onCheckedChange={() => {
-                          if (lojasSelecionadasTemp.length === lojas.length) {
-                            setLojasSelecionadasTemp([])
-                          } else {
-                            setLojasSelecionadasTemp(lojas.map(l => l.id))
-                          }
-                        }}
-                      />
-                      <Label className="cursor-pointer font-semibold flex-1">
-                        Selecionar todas as lojas ({lojas.length})
-                      </Label>
-                    </div>
-                    
-                    {lojas
-                      .filter(loja => {
-                        const busca = buscaLojasTemp.toLowerCase()
-                        return loja.nome_loja.toLowerCase().includes(busca) ||
-                               (loja.codigo && loja.codigo.toLowerCase().includes(busca))
-                      })
-                      .map((loja) => (
-                        <div
-                          key={loja.id}
-                          className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
-                          onClick={() => {
-                            setLojasSelecionadasTemp(prev =>
-                              prev.includes(loja.id)
-                                ? prev.filter(id => id !== loja.id)
-                                : [...prev, loja.id]
-                            )
-                          }}
-                        >
-                          <Checkbox
-                            checked={lojasSelecionadasTemp.includes(loja.id)}
-                            onCheckedChange={() => {}}
-                          />
-                          <Label className="cursor-pointer flex-1">
-                            <span className="font-mono text-xs">{loja.codigo}</span> - {loja.nome_loja}
-                          </Label>
-                        </div>
-                      ))}
-                    
-                    {lojas.filter(loja => {
-                      const busca = buscaLojasTemp.toLowerCase()
-                      return loja.nome_loja.toLowerCase().includes(busca) ||
-                             (loja.codigo && loja.codigo.toLowerCase().includes(busca))
-                    }).length === 0 && (
-                      <div className="text-center py-4 text-muted-foreground text-sm">
-                        Nenhuma loja encontrada
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="p-2 border-t flex justify-between">
-                    <Button variant="ghost" size="sm" onClick={() => setLojasSelecionadasTemp([])}>
-                      Limpar tudo
-                    </Button>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={cancelarSelecaoLojas}>
-                        Cancelar
-                      </Button>
-                      <Button size="sm" onClick={aplicarSelecaoLojas} style={{ background: PRIMARY_COLOR }}>
-                        Aplicar ({lojasSelecionadasTemp.length})
-                      </Button>
-                    </div>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            {/* Promotores - OPCIONAL */}
-            <div className="space-y-2">
-              <Label>Promotores <span className="text-gray-400 text-xs">(opcional)</span></Label>
-              <Popover open={promotoresPopoverOpen} onOpenChange={setPromotoresPopoverOpen}>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    role="combobox"
-                    className="w-full justify-between h-auto min-h-[40px]"
-                    onClick={abrirSelecionarPromotores}
-                  >
-                    <div className="flex flex-wrap gap-1">
-                      {novaCampanha.promotor_ids.length === 0 ? (
-                        <span className="text-muted-foreground">Nenhum promotor selecionado</span>
-                      ) : (
-                        <>
-                          <Badge variant="secondary" className="text-xs">
-                            👤 {novaCampanha.promotor_ids.length} promotor(es) selecionado(s)
-                          </Badge>
-                          {novaCampanha.promotor_ids.slice(0, 3).map(promotorId => {
-                            const promotor = promotores.find(p => p.id === promotorId)
-                            return promotor ? (
-                              <Badge key={promotorId} variant="outline" className="text-xs">
-                                {promotor.promotor_nome.split(' ')[0]}
-                              </Badge>
-                            ) : null
-                          })}
-                          {novaCampanha.promotor_ids.length > 3 && (
-                            <Badge variant="outline" className="text-xs">
-                              +{novaCampanha.promotor_ids.length - 3}
-                            </Badge>
-                          )}
-                        </>
-                      )}
-                    </div>
-                    <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-[400px] p-0" align="start">
-                  <div className="p-2 border-b">
-                    <Input
-                      placeholder="🔍 Buscar promotor por nome..."
-                      value={buscaPromotoresTemp}
-                      onChange={(e) => setBuscaPromotoresTemp(e.target.value)}
-                      className="h-8"
-                    />
-                  </div>
-                  
-                  <div className="max-h-[300px] overflow-y-auto p-2">
-                    <div className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer border-b pb-2 mb-1">
-                      <Checkbox
-                        checked={promotoresSelecionadosTemp.length === promotores.length && promotores.length > 0}
-                        onCheckedChange={() => {
-                          if (promotoresSelecionadosTemp.length === promotores.length) {
-                            setPromotoresSelecionadosTemp([])
-                          } else {
-                            setPromotoresSelecionadosTemp(promotores.map(p => p.id))
-                          }
-                        }}
-                      />
-                      <Label className="cursor-pointer font-semibold flex-1">
-                        Selecionar todos os promotores ({promotores.length})
-                      </Label>
-                    </div>
-                    
-                    {promotores
-                      .filter(promotor => {
-                        const busca = buscaPromotoresTemp.toLowerCase()
-                        return promotor.promotor_nome.toLowerCase().includes(busca)
-                      })
-                      .map((promotor) => (
-                        <div
-                          key={promotor.id}
-                          className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
-                          onClick={() => {
-                            setPromotoresSelecionadosTemp(prev =>
-                              prev.includes(promotor.id)
-                                ? prev.filter(id => id !== promotor.id)
-                                : [...prev, promotor.id]
-                            )
-                          }}
-                        >
-                          <Checkbox
-                            checked={promotoresSelecionadosTemp.includes(promotor.id)}
-                            onCheckedChange={() => {}}
-                          />
-                          <Label className="cursor-pointer flex-1">
-                            {promotor.promotor_nome}
-                          </Label>
-                        </div>
-                      ))}
-                    
-                    {promotores.filter(promotor => {
-                      const busca = buscaPromotoresTemp.toLowerCase()
-                      return promotor.promotor_nome.toLowerCase().includes(busca)
-                    }).length === 0 && (
-                      <div className="text-center py-4 text-muted-foreground text-sm">
-                        Nenhum promotor encontrado
-                      </div>
-                    )}
-                  </div>
-                  
-                  <div className="p-2 border-t flex justify-between">
-                    <Button variant="ghost" size="sm" onClick={() => setPromotoresSelecionadosTemp([])}>
-                      Limpar tudo
-                    </Button>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={cancelarSelecaoPromotores}>
-                        Cancelar
-                      </Button>
-                      <Button size="sm" onClick={aplicarSelecaoPromotores} style={{ background: PRIMARY_COLOR }}>
-                        Aplicar ({promotoresSelecionadosTemp.length})
-                      </Button>
-                    </div>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </div>
-
-            {/* Datas */}
-            <div className="grid grid-cols-2 gap-4">
+        {/* Modal de Filtro */}
+        <Dialog open={showFilterModal} onOpenChange={setShowFilterModal}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Filtrar Campanhas</DialogTitle>
+              <DialogDescription>
+                Selecione as lojas e status que deseja visualizar.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-6 py-4">
               <div className="space-y-2">
-                <Label>Data Início <span className="text-red-500">*</span></Label>
-                <Input
-                  type="date"
-                  value={novaCampanha.data_inicio}
-                  onChange={(e) => setNovaCampanha({ ...novaCampanha, data_inicio: e.target.value })}
-                />
+                <Label>Status da Campanha</Label>
+                <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os status</SelectItem>
+                    <SelectItem value="ativa">Ativa</SelectItem>
+                    <SelectItem value="pendente">Pendente</SelectItem>
+                    <SelectItem value="concluida">Concluída</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
+
               <div className="space-y-2">
-                <Label>Data Fim <span className="text-red-500">*</span></Label>
-                <Input
-                  type="date"
-                  value={novaCampanha.data_fim}
-                  onChange={(e) => setNovaCampanha({ ...novaCampanha, data_fim: e.target.value })}
-                />
+                <div className="flex items-center justify-between">
+                  <Label>Lojas para exibir</Label>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={selecionarTodasLojas}
+                    className="text-xs"
+                  >
+                    {lojasSelecionadas.length === lojas.length ? 'Desmarcar todas' : 'Selecionar todas'}
+                  </Button>
+                </div>
+                
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" role="combobox" className="w-full justify-between">
+                      {lojasSelecionadas.length === 0 ? "Todas as lojas" : `${lojasSelecionadas.length} loja(s) selecionada(s)`}
+                      <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[400px] p-0">
+                    <Command>
+                      <CommandInput placeholder="Buscar loja..." />
+                      <CommandList>
+                        <CommandEmpty>Nenhuma loja encontrada.</CommandEmpty>
+                        <CommandGroup>
+                          {lojas.map((loja) => (
+                            <CommandItem key={loja.id} value={loja.id} onSelect={() => toggleLojaSelecionada(loja.id)}>
+                              <Check className={cn("mr-2 h-4 w-4", lojasSelecionadas.includes(loja.id) ? "opacity-100" : "opacity-0")} />
+                              {loja.codigo} - {loja.nome_loja}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
             </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setFiltroStatus('todos'); setLojasSelecionadas([]); }}>
+                Limpar todos os filtros
+              </Button>
+              <Button onClick={() => setShowFilterModal(false)} style={{ background: PRIMARY_COLOR }}>
+                Aplicar filtros
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
-            {/* Status */}
-            <div className="space-y-2">
-              <Label>Status</Label>
-              <Select value={novaCampanha.status} onValueChange={(value: any) => setNovaCampanha({ ...novaCampanha, status: value })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pendente">⏳ Pendente</SelectItem>
-                  <SelectItem value="ativa">⚡ Ativa</SelectItem>
-                  <SelectItem value="concluida">✅ Concluída</SelectItem>
-                </SelectContent>
-              </Select>
+        {/* Modal de Detalhes da Campanha */}
+        <DetalhesCampanha 
+          campanha={campanhaSelecionada}
+          open={showDetalhesModal}
+          onOpenChange={setShowDetalhesModal}
+        />
+
+        {/* Modal de Nova Campanha */}
+        <Dialog open={showNovaCampanhaModal} onOpenChange={setShowNovaCampanhaModal}>
+          <DialogContent className="sm:max-w-[550px]">
+            <DialogHeader>
+              <DialogTitle>Criar Nova Campanha</DialogTitle>
+              <DialogDescription>
+                Preencha os dados da campanha. <span className="text-red-500">*</span> Campos obrigatórios.
+                Promotores são opcionais.
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Nome da Campanha <span className="text-red-500">*</span></Label>
+                <Input
+                  value={novaCampanha.nome}
+                  onChange={(e) => setNovaCampanha({ ...novaCampanha, nome: e.target.value })}
+                  placeholder="Ex: Promoção de Verão"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Lojas <span className="text-red-500">*</span></Label>
+                <Popover open={lojasPopoverOpen} onOpenChange={setLojasPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-between h-auto min-h-[40px]" onClick={abrirSelecionarLojas}>
+                      <div className="flex flex-wrap gap-1">
+                        {novaCampanha.loja_ids.length === 0 ? (
+                          <span className="text-muted-foreground">Selecione as lojas...</span>
+                        ) : (
+                          <>
+                            <Badge variant="secondary" className="text-xs">📦 {novaCampanha.loja_ids.length} loja(s)</Badge>
+                            {novaCampanha.loja_ids.slice(0, 3).map(lojaId => {
+                              const loja = lojas.find(l => l.id === lojaId)
+                              return loja ? <Badge key={lojaId} variant="outline" className="text-xs">{loja.codigo}</Badge> : null
+                            })}
+                            {novaCampanha.loja_ids.length > 3 && <Badge variant="outline" className="text-xs">+{novaCampanha.loja_ids.length - 3}</Badge>}
+                          </>
+                        )}
+                      </div>
+                      <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[400px] p-0" align="start">
+                    <div className="p-2 border-b">
+                      <Input placeholder="🔍 Buscar loja..." value={buscaLojasTemp} onChange={(e) => setBuscaLojasTemp(e.target.value)} className="h-8" />
+                    </div>
+                    <div className="max-h-[300px] overflow-y-auto p-2">
+                      <div className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer border-b pb-2 mb-1">
+                        <Checkbox checked={lojasSelecionadasTemp.length === lojas.length} onCheckedChange={() => {
+                          if (lojasSelecionadasTemp.length === lojas.length) setLojasSelecionadasTemp([])
+                          else setLojasSelecionadasTemp(lojas.map(l => l.id))
+                        }} />
+                        <Label className="cursor-pointer font-semibold flex-1">Selecionar todas ({lojas.length})</Label>
+                      </div>
+                      {lojas.filter(loja => loja.nome_loja.toLowerCase().includes(buscaLojasTemp.toLowerCase()) || (loja.codigo && loja.codigo.toLowerCase().includes(buscaLojasTemp.toLowerCase()))).map((loja) => (
+                        <div key={loja.id} className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer" onClick={() => setLojasSelecionadasTemp(prev => prev.includes(loja.id) ? prev.filter(id => id !== loja.id) : [...prev, loja.id])}>
+                          <Checkbox checked={lojasSelecionadasTemp.includes(loja.id)} />
+                          <Label className="cursor-pointer flex-1"><span className="font-mono text-xs">{loja.codigo}</span> - {loja.nome_loja}</Label>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="p-2 border-t flex justify-between">
+                      <Button variant="ghost" size="sm" onClick={() => setLojasSelecionadasTemp([])}>Limpar tudo</Button>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={cancelarSelecaoLojas}>Cancelar</Button>
+                        <Button size="sm" onClick={aplicarSelecaoLojas} style={{ background: PRIMARY_COLOR }}>Aplicar ({lojasSelecionadasTemp.length})</Button>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Promotores <span className="text-gray-400 text-xs">(opcional)</span></Label>
+                <Popover open={promotoresPopoverOpen} onOpenChange={setPromotoresPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" className="w-full justify-between h-auto min-h-[40px]" onClick={abrirSelecionarPromotores}>
+                      <div className="flex flex-wrap gap-1">
+                        {novaCampanha.promotor_ids.length === 0 ? <span className="text-muted-foreground">Nenhum promotor selecionado</span> : <Badge variant="secondary" className="text-xs">👤 {novaCampanha.promotor_ids.length} promotor(es)</Badge>}
+                      </div>
+                      <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[400px] p-0" align="start">
+                    <div className="p-2 border-b">
+                      <Input placeholder="🔍 Buscar promotor..." value={buscaPromotoresTemp} onChange={(e) => setBuscaPromotoresTemp(e.target.value)} className="h-8" />
+                    </div>
+                    <div className="max-h-[300px] overflow-y-auto p-2">
+                      <div className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer border-b pb-2 mb-1">
+                        <Checkbox checked={promotoresSelecionadosTemp.length === promotores.length} onCheckedChange={() => {
+                          if (promotoresSelecionadosTemp.length === promotores.length) setPromotoresSelecionadosTemp([])
+                          else setPromotoresSelecionadosTemp(promotores.map(p => p.id))
+                        }} />
+                        <Label className="cursor-pointer font-semibold flex-1">Selecionar todos ({promotores.length})</Label>
+                      </div>
+                      {promotores.filter(p => p.promotor_nome.toLowerCase().includes(buscaPromotoresTemp.toLowerCase())).map((promotor) => (
+                        <div key={promotor.id} className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer" onClick={() => setPromotoresSelecionadosTemp(prev => prev.includes(promotor.id) ? prev.filter(id => id !== promotor.id) : [...prev, promotor.id])}>
+                          <Checkbox checked={promotoresSelecionadosTemp.includes(promotor.id)} />
+                          <Label className="cursor-pointer flex-1">{promotor.promotor_nome}</Label>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="p-2 border-t flex justify-between">
+                      <Button variant="ghost" size="sm" onClick={() => setPromotoresSelecionadosTemp([])}>Limpar tudo</Button>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" onClick={cancelarSelecaoPromotores}>Cancelar</Button>
+                        <Button size="sm" onClick={aplicarSelecaoPromotores} style={{ background: PRIMARY_COLOR }}>Aplicar ({promotoresSelecionadosTemp.length})</Button>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Data Início <span className="text-red-500">*</span></Label>
+                  <Input type="date" value={novaCampanha.data_inicio} onChange={(e) => setNovaCampanha({ ...novaCampanha, data_inicio: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Data Fim <span className="text-red-500">*</span></Label>
+                  <Input type="date" value={novaCampanha.data_fim} onChange={(e) => setNovaCampanha({ ...novaCampanha, data_fim: e.target.value })} />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <Select value={novaCampanha.status} onValueChange={(value: any) => setNovaCampanha({ ...novaCampanha, status: value })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pendente">⏳ Pendente</SelectItem>
+                    <SelectItem value="ativa">⚡ Ativa</SelectItem>
+                    <SelectItem value="concluida">✅ Concluída</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-          </div>
-          
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowNovaCampanhaModal(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={criarNovaCampanha} disabled={salvando} style={{ background: PRIMARY_COLOR }}>
-              {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-              Salvar campanha
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+            
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowNovaCampanhaModal(false)}>Cancelar</Button>
+              <Button onClick={criarNovaCampanha} disabled={salvando} style={{ background: PRIMARY_COLOR }}>
+                {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                Salvar campanha
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </TooltipProvider>
   )
 }
