@@ -19,7 +19,9 @@ import {
   Calendar as CalendarIcon,
   Tag,
   MapPin,
-  User
+  User,
+  Edit,
+  Trash2
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -109,11 +111,13 @@ function Checkbox({ checked, onCheckedChange }: { checked: boolean; onCheckedCha
 function DetalhesCampanha({ 
   campanha, 
   open, 
-  onOpenChange 
+  onOpenChange,
+  onEditar
 }: { 
   campanha: Campanha | null; 
   open: boolean; 
   onOpenChange: (open: boolean) => void;
+  onEditar: (campanha: Campanha) => void;
 }) {
   if (!campanha) return null
 
@@ -137,6 +141,11 @@ function DetalhesCampanha({
 
   const statusInfo = getStatusText(campanha.status)
 
+  const handleEditar = () => {
+    onOpenChange(false)
+    onEditar(campanha)
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px]">
@@ -151,7 +160,6 @@ function DetalhesCampanha({
         </DialogHeader>
         
         <div className="space-y-4 py-4">
-          {/* Status */}
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-gray-500">Status</span>
             <Badge className={cn(statusInfo.bg, statusInfo.color)}>
@@ -159,7 +167,6 @@ function DetalhesCampanha({
             </Badge>
           </div>
 
-          {/* Período */}
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-gray-500">Período</span>
             <div className="text-right">
@@ -173,7 +180,6 @@ function DetalhesCampanha({
             </div>
           </div>
 
-          {/* Duração */}
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-gray-500">Duração</span>
             <span className="text-sm">
@@ -181,7 +187,6 @@ function DetalhesCampanha({
             </span>
           </div>
 
-          {/* Lojas Participantes */}
           <div>
             <div className="flex items-center gap-2 mb-2">
               <Store className="h-4 w-4 text-gray-500" />
@@ -206,7 +211,6 @@ function DetalhesCampanha({
             )}
           </div>
 
-          {/* Promotores */}
           <div>
             <div className="flex items-center gap-2 mb-2">
               <Users className="h-4 w-4 text-gray-500" />
@@ -230,9 +234,13 @@ function DetalhesCampanha({
           </div>
         </div>
         
-        <DialogFooter>
+        <DialogFooter className="gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Fechar
+          </Button>
+          <Button onClick={handleEditar} style={{ background: PRIMARY_COLOR }}>
+            <Edit className="h-4 w-4 mr-2" />
+            Editar Campanha
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -276,7 +284,9 @@ export default function Campanhas() {
   const [showFilterModal, setShowFilterModal] = useState(false)
   const [showNovaCampanhaModal, setShowNovaCampanhaModal] = useState(false)
   const [showDetalhesModal, setShowDetalhesModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
   const [campanhaSelecionada, setCampanhaSelecionada] = useState<Campanha | null>(null)
+  const [editandoCampanha, setEditandoCampanha] = useState<Campanha | null>(null)
   
   // Estado dos filtros
   const [filtroStatus, setFiltroStatus] = useState<string>('todos')
@@ -318,6 +328,17 @@ export default function Campanhas() {
     setCampanhaSelecionada(campanha)
     setShowDetalhesModal(true)
   }
+
+  // Abrir modal de edição
+  const abrirEdicao = (campanha: Campanha) => {
+    setEditandoCampanha({ ...campanha })
+    setSelectedLojasEdit(campanha.lojas?.map(l => l.id) || [])
+    setShowEditModal(true)
+  }
+
+  // Estado para edição
+  const [selectedLojasEdit, setSelectedLojasEdit] = useState<string[]>([])
+  const [selectedPromotoresEdit, setSelectedPromotoresEdit] = useState<string[]>([])
 
   // Funções do Popover de Lojas
   const abrirSelecionarLojas = () => {
@@ -390,14 +411,12 @@ export default function Campanhas() {
     }
   }
 
-  // Buscar campanhas do Supabase - CORRIGIDO para mostrar campanhas que CRUZAM o período
+  // Buscar campanhas do Supabase
   async function carregarCampanhas() {
     try {
       const startDate = `${ano}-${String(mes + 1).padStart(2, '0')}-01`
       const lastDay = new Date(ano, mes + 1, 0).getDate()
       const endDate = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
-      
-      console.log('📅 Buscando campanhas que cruzam o período:', startDate, 'até:', endDate)
       
       let query = supabase
         .from('campanhas')
@@ -415,8 +434,6 @@ export default function Campanhas() {
         console.error('Erro ao buscar campanhas:', campanhasError)
         throw campanhasError
       }
-      
-      console.log('📊 Campanhas encontradas:', campanhasData?.length || 0)
       
       if (!campanhasData || campanhasData.length === 0) {
         setCampanhas([])
@@ -494,7 +511,6 @@ export default function Campanhas() {
         }
       })
       
-      console.log('✅ Campanhas carregadas:', campanhasComRelacoes.length)
       setCampanhas(campanhasComRelacoes)
     } catch (err) {
       console.error('Erro ao carregar campanhas:', err)
@@ -609,7 +625,7 @@ export default function Campanhas() {
           .insert(relacoesPromotores)
 
         if (promotoresError) {
-          console.error('Erro ao vincular promotores (não crítico):', promotoresError)
+          console.error('Erro ao vincular promotores:', promotoresError)
         }
       }
 
@@ -634,6 +650,124 @@ export default function Campanhas() {
     }
   }
 
+  async function atualizarCampanha() {
+    if (!editandoCampanha) return
+    if (!editandoCampanha.nome || !editandoCampanha.data_inicio || !editandoCampanha.data_fim) {
+      alert('Preencha os campos obrigatórios: Nome, Data Início e Data Fim')
+      return
+    }
+
+    if (selectedLojasEdit.length === 0) {
+      alert('Selecione pelo menos uma loja para a campanha')
+      return
+    }
+
+    setSalvando(true)
+    try {
+      // Atualizar campanha
+      const { error: campanhaError } = await supabase
+        .from('campanhas')
+        .update({
+          nome: editandoCampanha.nome,
+          data_inicio: editandoCampanha.data_inicio,
+          data_fim: editandoCampanha.data_fim,
+          status: editandoCampanha.status,
+          tipo: editandoCampanha.tipo
+        })
+        .eq('id', editandoCampanha.id)
+
+      if (campanhaError) throw campanhaError
+
+      // Remover relações antigas
+      const { error: deleteLojasError } = await supabase
+        .from('lojas_campanhas')
+        .delete()
+        .eq('campanha_id', editandoCampanha.id)
+
+      if (deleteLojasError) throw deleteLojasError
+
+      // Inserir novas relações de lojas
+      if (selectedLojasEdit.length > 0) {
+        const relacoesLojas = selectedLojasEdit.map(loja_id => ({
+          campanha_id: editandoCampanha.id,
+          loja_id: loja_id
+        }))
+
+        const { error: lojasError } = await supabase
+          .from('lojas_campanhas')
+          .insert(relacoesLojas)
+
+        if (lojasError) throw lojasError
+      }
+
+      // Remover relações antigas de promotores
+      const { error: deletePromotoresError } = await supabase
+        .from('promotores_campanhas')
+        .delete()
+        .eq('campanha_id', editandoCampanha.id)
+
+      if (deletePromotoresError) throw deletePromotoresError
+
+      // Inserir novas relações de promotores
+      if (selectedPromotoresEdit.length > 0) {
+        const relacoesPromotores = selectedPromotoresEdit.map(promotor_id => ({
+          campanha_id: editandoCampanha.id,
+          promotor_id: promotor_id
+        }))
+
+        const { error: promotoresError } = await supabase
+          .from('promotores_campanhas')
+          .insert(relacoesPromotores)
+
+        if (promotoresError) throw promotoresError
+      }
+
+      setShowEditModal(false)
+      setEditandoCampanha(null)
+      await carregarCampanhas()
+      
+      alert('Campanha atualizada com sucesso!')
+    } catch (err) {
+      console.error('Erro ao atualizar campanha:', err)
+      alert('Erro ao atualizar campanha. Tente novamente.')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  async function excluirCampanha(id: string, nome: string) {
+    if (!confirm(`Deseja realmente excluir a campanha "${nome}"?`)) return
+
+    try {
+      const { error: deleteLojasError } = await supabase
+        .from('lojas_campanhas')
+        .delete()
+        .eq('campanha_id', id)
+
+      if (deleteLojasError) throw deleteLojasError
+
+      const { error: deletePromotoresError } = await supabase
+        .from('promotores_campanhas')
+        .delete()
+        .eq('campanha_id', id)
+
+      if (deletePromotoresError) throw deletePromotoresError
+
+      const { error: campanhaError } = await supabase
+        .from('campanhas')
+        .delete()
+        .eq('id', id)
+
+      if (campanhaError) throw campanhaError
+
+      await carregarCampanhas()
+      alert('Campanha excluída com sucesso!')
+    } catch (err) {
+      console.error('Erro ao excluir campanha:', err)
+      alert('Erro ao excluir campanha. Tente novamente.')
+    }
+  }
+
   const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
   const filtrosAtivos = (filtroStatus !== 'todos' ? 1 : 0) + (lojasSelecionadas.length > 0 ? 1 : 0)
 
@@ -651,7 +785,7 @@ export default function Campanhas() {
   return (
     <TooltipProvider>
       <div className="space-y-6">
-        {/* Cabeçalho */}
+        {/* Cabeçalho - igual ao original, mantido */}
         <div className="rounded-lg p-6 text-white" style={{ background: `linear-gradient(135deg, ${PRIMARY_COLOR} 0%, #cc1168 100%)` }}>
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
@@ -759,7 +893,6 @@ export default function Campanhas() {
         <Card className="overflow-hidden shadow-lg border-0">
           <CardContent className="p-0 overflow-x-auto">
             <div className="min-w-[1200px]">
-              {/* Cabeçalho com dias */}
               <div className="grid border-b sticky top-0 z-20" 
                 style={{ gridTemplateColumns: `250px repeat(${dias.length}, 70px)` }}>
                 <div className="p-3 font-bold text-gray-700 sticky left-0 z-10 border-r" style={{ background: '#f9fafb' }}>
@@ -784,7 +917,6 @@ export default function Campanhas() {
                 })}
               </div>
 
-              {/* Linhas das lojas */}
               {lojasFiltradas.map((loja) => (
                 <div key={loja.id} className="grid border-b hover:bg-gray-50 transition-colors"
                   style={{ gridTemplateColumns: `250px repeat(${dias.length}, 70px)` }}>
@@ -798,7 +930,6 @@ export default function Campanhas() {
                     </div>
                   </div>
 
-                  {/* Dias */}
                   {dias.map((dia) => {
                     const campanhasDoDia = getCampanhasDoDia(loja.id, dia)
                     const isDiaHoje = isHoje(dia)
@@ -813,7 +944,7 @@ export default function Campanhas() {
                             {campanhasDoDia.map((campanha) => (
                               <CampanhaTooltip key={campanha.id} campanha={campanha}>
                                 <div 
-                                  className="p-1 rounded-md text-xs cursor-pointer transition-all hover:scale-105"
+                                  className="p-1 rounded-md text-xs cursor-pointer transition-all hover:scale-105 relative group"
                                   style={{ 
                                     background: campanha.status === 'ativa' ? `${PRIMARY_COLOR}20` : 
                                                campanha.status === 'pendente' ? '#fef3c7' : '#dbeafe',
@@ -822,7 +953,7 @@ export default function Campanhas() {
                                   }}
                                   onClick={() => abrirDetalhes(campanha)}
                                 >
-                                  <div className="font-semibold truncate flex items-center justify-between">
+                                  <div className="font-semibold truncate flex items-center justify-between pr-4">
                                     <span>{campanha.nome}</span>
                                     <Info className="h-2.5 w-2.5 opacity-50" />
                                   </div>
@@ -836,7 +967,7 @@ export default function Campanhas() {
                             ))}
                           </div>
                         ) : (
-                          <div className="text-center text-gray-300 text-xs h-full flex items-center justify-center min-h-[60px]">
+                          <div className="text-center text-gray-300 text-xs h-full flex items-center justify-center">
                             —
                           </div>
                         )}
@@ -857,7 +988,168 @@ export default function Campanhas() {
           </CardContent>
         </Card>
 
-        {/* Modal de Filtro */}
+        {/* Modal de Detalhes da Campanha */}
+        <DetalhesCampanha 
+          campanha={campanhaSelecionada}
+          open={showDetalhesModal}
+          onOpenChange={setShowDetalhesModal}
+          onEditar={abrirEdicao}
+        />
+
+        {/* Modal de Edição de Campanha */}
+        <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+          <DialogContent className="sm:max-w-[550px]">
+            <DialogHeader>
+              <DialogTitle>Editar Campanha</DialogTitle>
+              <DialogDescription>
+                Altere os dados da campanha. <span className="text-red-500">*</span> Campos obrigatórios.
+              </DialogDescription>
+            </DialogHeader>
+            
+            {editandoCampanha && (
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Nome da Campanha <span className="text-red-500">*</span></Label>
+                  <Input
+                    value={editandoCampanha.nome}
+                    onChange={(e) => setEditandoCampanha({ ...editandoCampanha, nome: e.target.value })}
+                    placeholder="Ex: Promoção de Verão"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Lojas <span className="text-red-500">*</span></Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-between">
+                        {selectedLojasEdit.length === 0 ? "Selecione as lojas..." : `${selectedLojasEdit.length} loja(s) selecionada(s)`}
+                        <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[400px] p-0" align="start">
+                      <div className="p-2 border-b">
+                        <Input placeholder="Buscar loja..." className="h-8" />
+                      </div>
+                      <div className="max-h-[300px] overflow-y-auto p-2">
+                        {lojas.map((loja) => (
+                          <div
+                            key={loja.id}
+                            className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
+                            onClick={() => {
+                              setSelectedLojasEdit(prev =>
+                                prev.includes(loja.id)
+                                  ? prev.filter(id => id !== loja.id)
+                                  : [...prev, loja.id]
+                              )
+                            }}
+                          >
+                            <Checkbox checked={selectedLojasEdit.includes(loja.id)} />
+                            <Label className="cursor-pointer flex-1">
+                              {loja.codigo} - {loja.nome_loja}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Promotores <span className="text-gray-400 text-xs">(opcional)</span></Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-between">
+                        {selectedPromotoresEdit.length === 0 ? "Nenhum promotor selecionado" : `${selectedPromotoresEdit.length} promotor(es) selecionado(s)`}
+                        <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[400px] p-0" align="start">
+                      <div className="p-2 border-b">
+                        <Input placeholder="Buscar promotor..." className="h-8" />
+                      </div>
+                      <div className="max-h-[300px] overflow-y-auto p-2">
+                        {promotores.map((promotor) => (
+                          <div
+                            key={promotor.id}
+                            className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
+                            onClick={() => {
+                              setSelectedPromotoresEdit(prev =>
+                                prev.includes(promotor.id)
+                                  ? prev.filter(id => id !== promotor.id)
+                                  : [...prev, promotor.id]
+                              )
+                            }}
+                          >
+                            <Checkbox checked={selectedPromotoresEdit.includes(promotor.id)} />
+                            <Label className="cursor-pointer flex-1">{promotor.promotor_nome}</Label>
+                          </div>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Data Início <span className="text-red-500">*</span></Label>
+                    <Input
+                      type="date"
+                      value={editandoCampanha.data_inicio}
+                      onChange={(e) => setEditandoCampanha({ ...editandoCampanha, data_inicio: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Data Fim <span className="text-red-500">*</span></Label>
+                    <Input
+                      type="date"
+                      value={editandoCampanha.data_fim}
+                      onChange={(e) => setEditandoCampanha({ ...editandoCampanha, data_fim: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <Select 
+                    value={editandoCampanha.status} 
+                    onValueChange={(value) => setEditandoCampanha({ ...editandoCampanha, status: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pendente">⏳ Pendente</SelectItem>
+                      <SelectItem value="ativa">⚡ Ativa</SelectItem>
+                      <SelectItem value="concluida">✅ Concluída</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+            
+            <DialogFooter>
+              {editandoCampanha && (
+                <Button 
+                  variant="destructive" 
+                  onClick={() => excluirCampanha(editandoCampanha.id, editandoCampanha.nome)}
+                  className="mr-auto"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Excluir
+                </Button>
+              )}
+              <Button variant="outline" onClick={() => setShowEditModal(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={atualizarCampanha} disabled={salvando} style={{ background: PRIMARY_COLOR }}>
+                {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                Salvar alterações
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de Filtro - mantido original */}
         <Dialog open={showFilterModal} onOpenChange={setShowFilterModal}>
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
@@ -885,12 +1177,7 @@ export default function Campanhas() {
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label>Lojas para exibir</Label>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={selecionarTodasLojas}
-                    className="text-xs"
-                  >
+                  <Button variant="ghost" size="sm" onClick={selecionarTodasLojas} className="text-xs">
                     {lojasSelecionadas.length === lojas.length ? 'Desmarcar todas' : 'Selecionar todas'}
                   </Button>
                 </div>
@@ -932,14 +1219,7 @@ export default function Campanhas() {
           </DialogContent>
         </Dialog>
 
-        {/* Modal de Detalhes da Campanha */}
-        <DetalhesCampanha 
-          campanha={campanhaSelecionada}
-          open={showDetalhesModal}
-          onOpenChange={setShowDetalhesModal}
-        />
-
-        {/* Modal de Nova Campanha */}
+        {/* Modal de Nova Campanha - mantido original */}
         <Dialog open={showNovaCampanhaModal} onOpenChange={setShowNovaCampanhaModal}>
           <DialogContent className="sm:max-w-[550px]">
             <DialogHeader>
@@ -997,7 +1277,7 @@ export default function Campanhas() {
                       {lojas.filter(loja => loja.nome_loja.toLowerCase().includes(buscaLojasTemp.toLowerCase()) || (loja.codigo && loja.codigo.toLowerCase().includes(buscaLojasTemp.toLowerCase()))).map((loja) => (
                         <div key={loja.id} className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer" onClick={() => setLojasSelecionadasTemp(prev => prev.includes(loja.id) ? prev.filter(id => id !== loja.id) : [...prev, loja.id])}>
                           <Checkbox checked={lojasSelecionadasTemp.includes(loja.id)} />
-                          <Label className="cursor-pointer flex-1"><span className="font-mono text-xs">{loja.codigo}</span> - {loja.nome_loja}</Label>
+                          <Label className="cursor-pointer flex-1">{loja.codigo} - {loja.nome_loja}</Label>
                         </div>
                       ))}
                     </div>
