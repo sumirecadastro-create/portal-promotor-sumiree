@@ -27,7 +27,9 @@ import {
   Tag,
   MapPin,
   FileText,
-  Flag
+  Flag,
+  Edit,
+  Trash2
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -150,11 +152,13 @@ function Checkbox({ checked, onCheckedChange }: { checked: boolean; onCheckedCha
 function DetalhesAcao({ 
   acao, 
   open, 
-  onOpenChange 
+  onOpenChange,
+  onEditar
 }: { 
   acao: Acao | null; 
   open: boolean; 
   onOpenChange: (open: boolean) => void;
+  onEditar: (acao: Acao) => void;
 }) {
   if (!acao) return null
 
@@ -188,6 +192,11 @@ function DetalhesAcao({
       case 'baixa': return 'text-green-600 bg-green-100'
       default: return 'text-gray-600 bg-gray-100'
     }
+  }
+
+  const handleEditar = () => {
+    onOpenChange(false)
+    onEditar(acao)
   }
 
   return (
@@ -308,9 +317,13 @@ function DetalhesAcao({
           )}
         </div>
         
-        <DialogFooter>
+        <DialogFooter className="gap-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Fechar
+          </Button>
+          <Button onClick={handleEditar} style={{ background: PRIMARY_COLOR }}>
+            <Edit className="h-4 w-4 mr-2" />
+            Editar Ação
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -368,7 +381,9 @@ export default function Acoes() {
   const [showFilterModal, setShowFilterModal] = useState(false)
   const [showNovaAcaoModal, setShowNovaAcaoModal] = useState(false)
   const [showDetalhesModal, setShowDetalhesModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
   const [acaoSelecionada, setAcaoSelecionada] = useState<Acao | null>(null)
+  const [editandoAcao, setEditandoAcao] = useState<Acao | null>(null)
   
   // Estado dos filtros
   const [filtroStatus, setFiltroStatus] = useState<string>('todos')
@@ -389,6 +404,9 @@ export default function Acoes() {
   })
   const [salvando, setSalvando] = useState(false)
   
+  // Estado para edição
+  const [selectedLojasEdit, setSelectedLojasEdit] = useState<string[]>([])
+  
   // Estados do Popover de Lojas
   const [lojasPopoverOpen, setLojasPopoverOpen] = useState(false)
   const [buscaLojasTemp, setBuscaLojasTemp] = useState('')
@@ -406,6 +424,13 @@ export default function Acoes() {
   const abrirDetalhes = (acao: Acao) => {
     setAcaoSelecionada(acao)
     setShowDetalhesModal(true)
+  }
+
+  // Abrir modal de edição
+  const abrirEdicao = (acao: Acao) => {
+    setEditandoAcao({ ...acao })
+    setSelectedLojasEdit(acao.lojas?.map(l => l.id) || [])
+    setShowEditModal(true)
   }
 
   // Funções do Popover
@@ -450,14 +475,15 @@ export default function Acoes() {
   // Buscar ações do Supabase com suas lojas
   async function carregarAcoes() {
     try {
-      const startDate = new Date(ano, mes, 1).toISOString()
-      const endDate = new Date(ano, mes + 1, 0).toISOString()
+      const startDate = `${ano}-${String(mes + 1).padStart(2, '0')}-01`
+      const lastDay = new Date(ano, mes + 1, 0).getDate()
+      const endDate = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
       
       let query = supabase
         .from('acoes')
         .select('*')
-        .gte('data_inicio', startDate)
-        .lte('data_fim', endDate)
+        .lte('data_inicio', endDate)
+        .gte('data_fim', startDate)
       
       if (filtroStatus !== 'todos') {
         query = query.eq('status', filtroStatus)
@@ -498,7 +524,7 @@ export default function Acoes() {
         
         return { 
           ...acao, 
-          loja_ids: [],
+            loja_ids: [],
           lojas: []
         }
       }))
@@ -531,15 +557,11 @@ export default function Acoes() {
   })
 
   function getAcoesDoDia(lojaId: string, dia: number) {
-    const dataAtual = new Date(ano, mes, dia)
-    dataAtual.setHours(0, 0, 0, 0)
+    const dateStr = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
     
     return acoes.filter(acao => {
-      const inicio = new Date(acao.data_inicio)
-      const fim = new Date(acao.data_fim)
-      inicio.setHours(0, 0, 0, 0)
-      fim.setHours(23, 59, 59, 999)
-      return acao.loja_ids?.includes(lojaId) && dataAtual >= inicio && dataAtual <= fim
+      if (!acao.loja_ids?.includes(lojaId)) return false
+      return dateStr >= acao.data_inicio && dateStr <= acao.data_fim
     })
   }
 
@@ -628,6 +650,97 @@ export default function Acoes() {
       alert('Erro ao criar ação. Tente novamente.')
     } finally {
       setSalvando(false)
+    }
+  }
+
+  async function atualizarAcao() {
+    if (!editandoAcao) return
+    if (!editandoAcao.nome || !editandoAcao.data_inicio || !editandoAcao.data_fim) {
+      alert('Preencha todos os campos obrigatórios')
+      return
+    }
+
+    if (selectedLojasEdit.length === 0) {
+      alert('Selecione pelo menos uma loja para a ação')
+      return
+    }
+
+    setSalvando(true)
+    try {
+      // Atualizar ação
+      const { error: acaoError } = await supabase
+        .from('acoes')
+        .update({
+          nome: editandoAcao.nome,
+          data_inicio: editandoAcao.data_inicio,
+          data_fim: editandoAcao.data_fim,
+          status: editandoAcao.status,
+          tipo: editandoAcao.tipo,
+          prioridade: editandoAcao.prioridade,
+          descricao: editandoAcao.descricao
+        })
+        .eq('id', editandoAcao.id)
+
+      if (acaoError) throw acaoError
+
+      // Remover relações antigas
+      const { error: deleteError } = await supabase
+        .from('acoes_lojas')
+        .delete()
+        .eq('acao_id', editandoAcao.id)
+
+      if (deleteError) throw deleteError
+
+      // Inserir novas relações
+      if (selectedLojasEdit.length > 0) {
+        const relacoes = selectedLojasEdit.map(loja_id => ({
+          acao_id: editandoAcao.id,
+          loja_id: loja_id
+        }))
+
+        const { error: relacoesError } = await supabase
+          .from('acoes_lojas')
+          .insert(relacoes)
+
+        if (relacoesError) throw relacoesError
+      }
+
+      setShowEditModal(false)
+      setEditandoAcao(null)
+      await carregarAcoes()
+      
+      alert('Ação atualizada com sucesso!')
+    } catch (err) {
+      console.error('Erro ao atualizar ação:', err)
+      alert('Erro ao atualizar ação. Tente novamente.')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  async function excluirAcao(id: string, nome: string) {
+    if (!confirm(`Deseja realmente excluir a ação "${nome}"?`)) return
+
+    try {
+      const { error: deleteRelError } = await supabase
+        .from('acoes_lojas')
+        .delete()
+        .eq('acao_id', id)
+
+      if (deleteRelError) throw deleteRelError
+
+      const { error: acaoError } = await supabase
+        .from('acoes')
+        .delete()
+        .eq('id', id)
+
+      if (acaoError) throw acaoError
+
+      await carregarAcoes()
+      alert('Ação excluída com sucesso!')
+    } catch (err) {
+      console.error('Erro ao excluir ação:', err)
+      alert('Erro ao excluir ação. Tente novamente.')
     }
   }
 
@@ -769,7 +882,6 @@ export default function Acoes() {
         <Card className="overflow-hidden shadow-lg border-0">
           <CardContent className="p-0 overflow-x-auto">
             <div className="min-w-[1200px]">
-              {/* Cabeçalho com dias */}
               <div className="grid border-b sticky top-0 z-20" 
                 style={{ gridTemplateColumns: `250px repeat(${dias.length}, 80px)` }}>
                 <div className="p-3 font-bold text-gray-700 sticky left-0 z-10 border-r" style={{ background: '#f9fafb' }}>
@@ -794,7 +906,6 @@ export default function Acoes() {
                 })}
               </div>
 
-              {/* Linhas das lojas */}
               {lojasFiltradas.map((loja) => (
                 <div key={loja.id} className="grid border-b hover:bg-gray-50 transition-colors"
                   style={{ gridTemplateColumns: `250px repeat(${dias.length}, 80px)` }}>
@@ -808,7 +919,6 @@ export default function Acoes() {
                     </div>
                   </div>
 
-                  {/* Dias */}
                   {dias.map((dia) => {
                     const acoesDoDia = getAcoesDoDia(loja.id, dia)
                     const isDiaHoje = isHoje(dia)
@@ -830,7 +940,7 @@ export default function Acoes() {
                               return (
                                 <AcaoTooltip key={acao.id} acao={acao}>
                                   <div 
-                                    className="p-1.5 rounded-md text-xs cursor-pointer transition-all hover:scale-105"
+                                    className="p-1.5 rounded-md text-xs cursor-pointer transition-all hover:scale-105 relative group"
                                     style={{ 
                                       background: statusConfig.bg,
                                       borderLeft: `3px solid ${statusConfig.color}`
@@ -852,8 +962,7 @@ export default function Acoes() {
                                       <span className="text-[10px] text-gray-400">
                                         {new Date(acao.data_inicio).getDate() === dia ? 
                                           (new Date(acao.data_fim).getDate() === dia ? 'Único' : 'Início') :
-                                          (new Date(acao.data_fim).getDate() === dia ? 'Fim' : '')
-                                        }
+                                          (new Date(acao.data_fim).getDate() === dia ? 'Fim' : '')}
                                       </span>
                                     </div>
                                   </div>
@@ -888,7 +997,174 @@ export default function Acoes() {
           acao={acaoSelecionada}
           open={showDetalhesModal}
           onOpenChange={setShowDetalhesModal}
+          onEditar={abrirEdicao}
         />
+
+        {/* Modal de Edição de Ação */}
+        <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+          <DialogContent className="sm:max-w-[550px]">
+            <DialogHeader>
+              <DialogTitle>Editar Ação</DialogTitle>
+              <DialogDescription>
+                Altere os dados da ação. <span className="text-red-500">*</span> Campos obrigatórios.
+              </DialogDescription>
+            </DialogHeader>
+            
+            {editandoAcao && (
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Nome da Ação <span className="text-red-500">*</span></Label>
+                  <Input
+                    value={editandoAcao.nome}
+                    onChange={(e) => setEditandoAcao({ ...editandoAcao, nome: e.target.value })}
+                    placeholder="Ex: Troca de Display"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Lojas <span className="text-red-500">*</span></Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-between">
+                        {selectedLojasEdit.length === 0 ? "Selecione as lojas..." : `${selectedLojasEdit.length} loja(s) selecionada(s)`}
+                        <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[400px] p-0" align="start">
+                      <div className="p-2 border-b">
+                        <Input placeholder="Buscar loja..." className="h-8" />
+                      </div>
+                      <div className="max-h-[300px] overflow-y-auto p-2">
+                        {lojas.map((loja) => (
+                          <div
+                            key={loja.id}
+                            className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
+                            onClick={() => {
+                              setSelectedLojasEdit(prev =>
+                                prev.includes(loja.id)
+                                  ? prev.filter(id => id !== loja.id)
+                                  : [...prev, loja.id]
+                              )
+                            }}
+                          >
+                            <Checkbox checked={selectedLojasEdit.includes(loja.id)} />
+                            <Label className="cursor-pointer flex-1">
+                              {loja.codigo} - {loja.nome_loja}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Data Início <span className="text-red-500">*</span></Label>
+                    <Input
+                      type="date"
+                      value={editandoAcao.data_inicio}
+                      onChange={(e) => setEditandoAcao({ ...editandoAcao, data_inicio: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Data Fim <span className="text-red-500">*</span></Label>
+                    <Input
+                      type="date"
+                      value={editandoAcao.data_fim}
+                      onChange={(e) => setEditandoAcao({ ...editandoAcao, data_fim: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="space-y-2">
+                    <Label>Tipo</Label>
+                    <Select 
+                      value={editandoAcao.tipo} 
+                      onValueChange={(value) => setEditandoAcao({ ...editandoAcao, tipo: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="manutencao">🔧 Manutenção</SelectItem>
+                        <SelectItem value="logistica">🚚 Logística</SelectItem>
+                        <SelectItem value="treinamento">🎓 Treinamento</SelectItem>
+                        <SelectItem value="controle">📋 Controle</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label>Prioridade</Label>
+                    <Select 
+                      value={editandoAcao.prioridade} 
+                      onValueChange={(value) => setEditandoAcao({ ...editandoAcao, prioridade: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="baixa">🟢 Baixa</SelectItem>
+                        <SelectItem value="media">🟡 Média</SelectItem>
+                        <SelectItem value="alta">🔴 Alta</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label>Status</Label>
+                    <Select 
+                      value={editandoAcao.status} 
+                      onValueChange={(value) => setEditandoAcao({ ...editandoAcao, status: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pendente">⏳ Pendente</SelectItem>
+                        <SelectItem value="em_andamento">⚡ Em Andamento</SelectItem>
+                        <SelectItem value="agendada">📅 Agendada</SelectItem>
+                        <SelectItem value="concluida">✅ Concluída</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Descrição</Label>
+                  <textarea
+                    className="w-full min-h-[80px] p-2 border rounded-md text-sm"
+                    value={editandoAcao.descricao || ''}
+                    onChange={(e) => setEditandoAcao({ ...editandoAcao, descricao: e.target.value })}
+                    placeholder="Descrição detalhada da ação..."
+                  />
+                </div>
+              </div>
+            )}
+            
+            <DialogFooter>
+              {editandoAcao && (
+                <Button 
+                  variant="destructive" 
+                  onClick={() => excluirAcao(editandoAcao.id, editandoAcao.nome)}
+                  className="mr-auto"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Excluir
+                </Button>
+              )}
+              <Button variant="outline" onClick={() => setShowEditModal(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={atualizarAcao} disabled={salvando} style={{ background: PRIMARY_COLOR }}>
+                {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                Salvar alterações
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Modal de Filtro */}
         <Dialog open={showFilterModal} onOpenChange={setShowFilterModal}>
@@ -966,8 +1242,14 @@ export default function Acoes() {
                 
                 <Popover>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" role="combobox" className="w-full justify-between">
-                      {lojasSelecionadas.length === 0 ? "Todas as lojas" : `${lojasSelecionadas.length} loja(s) selecionada(s)`}
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      className="w-full justify-between"
+                    >
+                      {lojasSelecionadas.length === 0
+                        ? "Todas as lojas"
+                        : `${lojasSelecionadas.length} loja(s) selecionada(s)`}
                       <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                     </Button>
                   </PopoverTrigger>
