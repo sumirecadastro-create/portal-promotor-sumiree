@@ -214,19 +214,24 @@ export default function Campanhas() {
     }
   }
 
-  // Buscar campanhas do Supabase - CORRIGIDO
+  // Buscar campanhas do Supabase - CORRIGIDO para mostrar campanhas que CRUZAM o período
   async function carregarCampanhas() {
     try {
-      const startDate = new Date(ano, mes, 1).toISOString().split('T')[0]
-      const endDate = new Date(ano, mes + 1, 0).toISOString().split('T')[0]
+      // Calcular primeiro e último dia do mês atual
+      const startDate = `${ano}-${String(mes + 1).padStart(2, '0')}-01`
+      const lastDay = new Date(ano, mes + 1, 0).getDate()
+      const endDate = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
       
-      console.log('📅 Buscando campanhas de:', startDate, 'até:', endDate)
+      console.log('📅 Buscando campanhas que cruzam o período:', startDate, 'até:', endDate)
       
+      // Buscar campanhas que TENHAM SOBREPOSIÇÃO com o mês atual
+      // Uma campanha deve ser mostrada se:
+      // - Ela começa ANTES ou no FIM do mês E termina DEPOIS ou no INÍCIO do mês
       let query = supabase
         .from('campanhas')
         .select('*')
-        .gte('data_inicio', startDate)
-        .lte('data_fim', endDate)
+        .lte('data_inicio', endDate)   // Começa antes ou no fim do mês
+        .gte('data_fim', startDate)     // Termina depois ou no início do mês
       
       if (filtroStatus !== 'todos') {
         query = query.eq('status', filtroStatus)
@@ -239,14 +244,14 @@ export default function Campanhas() {
         throw campanhasError
       }
       
-      console.log('📊 Campanhas encontradas:', campanhasData?.length || 0)
+      console.log('📊 Campanhas encontradas (que cruzam o período):', campanhasData?.length || 0)
       
       if (!campanhasData || campanhasData.length === 0) {
         setCampanhas([])
         return
       }
       
-      // Buscar todas as relações de uma vez para melhor performance
+      // Buscar todas as relações de uma vez
       const campanhaIds = campanhasData.map(c => c.id)
       
       // Buscar relações com lojas (tabela: lojas_campanhas)
@@ -325,6 +330,10 @@ export default function Campanhas() {
       })
       
       console.log('✅ Campanhas carregadas:', campanhasComRelacoes.length)
+      campanhasComRelacoes.forEach(camp => {
+        console.log(`📌 ${camp.nome}: ${camp.lojas?.length || 0} lojas, ${camp.data_inicio} a ${camp.data_fim}`)
+      })
+      
       setCampanhas(campanhasComRelacoes)
     } catch (err) {
       console.error('Erro ao carregar campanhas:', err)
@@ -343,7 +352,7 @@ export default function Campanhas() {
     carregarDados()
   }, [mesAtual, filtroStatus])
 
-  // Filtrar lojas
+  // Filtrar lojas para exibição
   const lojasFiltradas = lojas.filter(loja => {
     const matchNome = loja.nome_loja.toLowerCase().includes(lojaFiltroNome.toLowerCase()) ||
       (loja.codigo && loja.codigo.toLowerCase().includes(lojaFiltroNome.toLowerCase()))
@@ -353,16 +362,17 @@ export default function Campanhas() {
     return matchNome && matchSelecao
   })
 
+  // Função CORRIGIDA para obter campanhas do dia
   function getCampanhasDoDia(lojaId: string, dia: number) {
-    const dataAtual = new Date(ano, mes, dia)
-    dataAtual.setHours(0, 0, 0, 0)
+    // Criar data no formato YYYY-MM-DD
+    const dateStr = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
     
     return campanhas.filter(campanha => {
-      const inicio = new Date(campanha.data_inicio)
-      const fim = new Date(campanha.data_fim)
-      inicio.setHours(0, 0, 0, 0)
-      fim.setHours(23, 59, 59, 999)
-      return campanha.loja_ids?.includes(lojaId) && dataAtual >= inicio && dataAtual <= fim
+      // Verificar se a loja está na campanha
+      if (!campanha.loja_ids?.includes(lojaId)) return false
+      
+      // Verificar se a data está dentro do período da campanha
+      return dateStr >= campanha.data_inicio && dateStr <= campanha.data_fim
     })
   }
 
@@ -394,13 +404,11 @@ export default function Campanhas() {
   }
 
   async function criarNovaCampanha() {
-    // VALIDAÇÃO: apenas nome e datas são obrigatórios
     if (!novaCampanha.nome || !novaCampanha.data_inicio || !novaCampanha.data_fim) {
       alert('Preencha os campos obrigatórios: Nome, Data Início e Data Fim')
       return
     }
 
-    // VALIDAÇÃO: pelo menos uma loja é obrigatória
     if (novaCampanha.loja_ids.length === 0) {
       alert('Selecione pelo menos uma loja para a campanha')
       return
@@ -423,7 +431,7 @@ export default function Campanhas() {
 
       if (campanhaError) throw campanhaError
 
-      // 2. Inserir relações com lojas (tabela: lojas_campanhas)
+      // 2. Inserir relações com lojas
       if (novaCampanha.loja_ids.length > 0) {
         const relacoesLojas = novaCampanha.loja_ids.map(loja_id => ({
           campanha_id: campanha.id,
@@ -438,7 +446,7 @@ export default function Campanhas() {
         console.log(`✅ Vinculadas ${relacoesLojas.length} lojas à campanha`)
       }
 
-      // 3. Inserir relações com promotores (tabela: promotores_campanhas) - OPCIONAL
+      // 3. Inserir relações com promotores (OPCIONAL)
       if (novaCampanha.promotor_ids && novaCampanha.promotor_ids.length > 0) {
         const relacoesPromotores = novaCampanha.promotor_ids.map(promotor_id => ({
           campanha_id: campanha.id,
@@ -451,8 +459,6 @@ export default function Campanhas() {
 
         if (promotoresError) {
           console.error('Erro ao vincular promotores (não crítico):', promotoresError)
-        } else {
-          console.log(`✅ Vinculados ${relacoesPromotores.length} promotores à campanha`)
         }
       }
 
