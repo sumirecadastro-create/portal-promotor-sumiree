@@ -29,7 +29,14 @@ import {
   FileText,
   Flag,
   Edit,
-  Trash2
+  Trash2,
+  Gift,
+  ShoppingBag,
+  Ticket,
+  Balloon,
+  Sparkles,
+  Microscope,
+  Megaphone
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -87,6 +94,25 @@ interface Acao {
 
 const PRIMARY_COLOR = '#FF1686'
 
+// Função auxiliar para formatar data local para YYYY-MM-DD
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+// Função para obter o primeiro dia do mês no formato YYYY-MM-DD
+function getFirstDayOfMonth(year: number, month: number): string {
+  return `${year}-${String(month + 1).padStart(2, '0')}-01`
+}
+
+// Função para obter o último dia do mês no formato YYYY-MM-DD
+function getLastDayOfMonth(year: number, month: number): string {
+  const lastDay = new Date(year, month + 1, 0).getDate()
+  return `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+}
+
 // Configuração de status
 const getStatusConfig = (status: string) => {
   switch (status) {
@@ -117,19 +143,25 @@ const getPrioridadeConfig = (prioridade: string) => {
   }
 }
 
-// Configuração de tipo
+// Configuração de tipo - ATUALIZADO COM NOVAS OPÇÕES
 const getTipoConfig = (tipo: string) => {
   switch (tipo) {
-    case 'manutencao':
-      return { icon: Wrench, label: 'Manutenção', description: 'Ações de manutenção e reparo' }
-    case 'logistica':
-      return { icon: Truck, label: 'Logística', description: 'Ações de logística e transporte' }
-    case 'treinamento':
-      return { icon: GraduationCap, label: 'Treinamento', description: 'Treinamentos e capacitações' }
-    case 'controle':
-      return { icon: ClipboardList, label: 'Controle', description: 'Ações de controle e auditoria' }
+    case 'compre_ganhe':
+      return { icon: Gift, label: 'Compre e Ganhe', description: 'Promoção onde o cliente compra e ganha brindes', color: '#FF1686' }
+    case 'compre_aplique':
+      return { icon: ShoppingBag, label: 'Compre e Aplique', description: 'Promoção onde o cliente compra e aplica o produto', color: '#FF1686' }
+    case 'compre_concorra':
+      return { icon: Ticket, label: 'Compre e Concorra', description: 'Promoção onde o cliente compra e concorre a prêmios', color: '#FF1686' }
+    case 'estouro_balão':
+      return { icon: Balloon, label: 'Estouro de Balão', description: 'Dinâmica de estouro de balões com prêmios', color: '#FF1686' }
+    case 'roleta_premiada':
+      return { icon: Sparkles, label: 'Roleta Premiada', description: 'Dinâmica de roleta para clientes', color: '#FF1686' }
+    case 'analise_capilar':
+      return { icon: Microscope, label: 'Análise Capilar', description: 'Análise e diagnóstico capilar personalizado', color: '#FF1686' }
+    case 'abordagem':
+      return { icon: Megaphone, label: 'Abordagem', description: 'Abordagem ativa de clientes', color: '#FF1686' }
     default:
-      return { icon: Target, label: 'Outra', description: 'Outros tipos de ação' }
+      return { icon: Target, label: 'Outra', description: 'Outros tipos de ação', color: '#6b7280' }
   }
 }
 
@@ -166,12 +198,13 @@ function DetalhesAcao({
   const prioridadeConfig = getPrioridadeConfig(acao.prioridade)
   const tipoConfig = getTipoConfig(acao.tipo)
   const StatusIcon = statusConfig.icon
+  const TipoIcon = tipoConfig.icon
 
   const calcularDias = () => {
-    const inicio = new Date(acao.data_inicio)
-    const fim = new Date(acao.data_fim)
+    const inicio = new Date(acao.data_inicio + 'T00:00:00')
+    const fim = new Date(acao.data_fim + 'T00:00:00')
     const diffTime = Math.abs(fim.getTime() - inicio.getTime())
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1
     return diffDays
   }
 
@@ -204,7 +237,7 @@ function DetalhesAcao({
       <DialogContent className="sm:max-w-[550px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <tipoConfig.icon className="h-5 w-5" style={{ color: PRIMARY_COLOR }} />
+            <TipoIcon className="h-5 w-5" style={{ color: tipoConfig.color }} />
             {acao.nome}
           </DialogTitle>
           <DialogDescription>
@@ -213,7 +246,6 @@ function DetalhesAcao({
         </DialogHeader>
         
         <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
-          {/* Status e Prioridade */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <div className="flex items-center gap-2 mb-1">
@@ -236,20 +268,18 @@ function DetalhesAcao({
             </div>
           </div>
 
-          {/* Tipo */}
           <div>
             <div className="flex items-center gap-2 mb-1">
               <Tag className="h-4 w-4 text-gray-500" />
               <span className="text-sm font-medium text-gray-500">Tipo</span>
             </div>
             <div className="flex items-center gap-2">
-              <tipoConfig.icon className="h-4 w-4" style={{ color: PRIMARY_COLOR }} />
-              <span className="text-sm">{tipoConfig.label}</span>
+              <TipoIcon className="h-4 w-4" style={{ color: tipoConfig.color }} />
+              <span className="text-sm font-medium">{tipoConfig.label}</span>
               <span className="text-xs text-gray-400">- {tipoConfig.description}</span>
             </div>
           </div>
 
-          {/* Período */}
           <div>
             <div className="flex items-center gap-2 mb-1">
               <CalendarIcon className="h-4 w-4 text-gray-500" />
@@ -260,14 +290,14 @@ function DetalhesAcao({
                 <div>
                   <div className="text-xs text-gray-500">Data Início</div>
                   <div className="font-medium">
-                    {new Date(acao.data_inicio).toLocaleDateString('pt-BR')}
+                    {new Date(acao.data_inicio + 'T00:00:00').toLocaleDateString('pt-BR')}
                   </div>
                 </div>
                 <div className="text-gray-400">→</div>
                 <div>
                   <div className="text-xs text-gray-500">Data Fim</div>
                   <div className="font-medium">
-                    {new Date(acao.data_fim).toLocaleDateString('pt-BR')}
+                    {new Date(acao.data_fim + 'T00:00:00').toLocaleDateString('pt-BR')}
                   </div>
                 </div>
                 <div>
@@ -278,7 +308,6 @@ function DetalhesAcao({
             </div>
           </div>
 
-          {/* Lojas Participantes */}
           <div>
             <div className="flex items-center gap-2 mb-2">
               <Store className="h-4 w-4 text-gray-500" />
@@ -303,7 +332,6 @@ function DetalhesAcao({
             )}
           </div>
 
-          {/* Descrição */}
           {acao.descricao && (
             <div>
               <div className="flex items-center gap-2 mb-1">
@@ -336,6 +364,7 @@ function AcaoTooltip({ acao, children }: { acao: Acao; children: React.ReactNode
   const statusConfig = getStatusConfig(acao.status)
   const prioridadeConfig = getPrioridadeConfig(acao.prioridade)
   const tipoConfig = getTipoConfig(acao.tipo)
+  const TipoIcon = tipoConfig.icon
 
   return (
     <Tooltip>
@@ -345,7 +374,7 @@ function AcaoTooltip({ acao, children }: { acao: Acao; children: React.ReactNode
       <TooltipContent side="top" className="max-w-xs p-3 bg-gray-900 text-white">
         <div className="space-y-2">
           <p className="font-semibold text-sm flex items-center gap-2">
-            <tipoConfig.icon className="h-3 w-3" />
+            <TipoIcon className="h-3 w-3" />
             {acao.nome}
           </p>
           <div className="text-xs space-y-1">
@@ -355,11 +384,8 @@ function AcaoTooltip({ acao, children }: { acao: Acao; children: React.ReactNode
               <span className="opacity-70 ml-2">Prioridade:</span>
               <span>{prioridadeConfig.label}</span>
             </p>
-            <p>📅 {new Date(acao.data_inicio).toLocaleDateString('pt-BR')} até {new Date(acao.data_fim).toLocaleDateString('pt-BR')}</p>
+            <p>📅 {new Date(acao.data_inicio + 'T00:00:00').toLocaleDateString('pt-BR')} até {new Date(acao.data_fim + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
             <p>🏪 {acao.lojas?.length || 0} lojas participantes</p>
-            {acao.descricao && (
-              <p className="text-gray-300 text-xs truncate max-w-[200px]">📝 {acao.descricao.substring(0, 50)}...</p>
-            )}
             <p className="text-gray-400 text-[10px] mt-1">Clique para ver mais detalhes</p>
           </div>
         </div>
@@ -398,7 +424,7 @@ export default function Acoes() {
     data_inicio: '',
     data_fim: '',
     status: 'pendente' as const,
-    tipo: 'manutencao',
+    tipo: 'compre_ganhe',
     prioridade: 'media',
     descricao: ''
   })
@@ -419,6 +445,9 @@ export default function Acoes() {
   const dias = Array.from({ length: diasNoMes }, (_, i) => i + 1)
   const hoje = new Date()
   hoje.setHours(0, 0, 0, 0)
+
+  // Data atual no formato YYYY-MM-DD para comparação
+  const hojeStr = formatLocalDate(hoje)
 
   // Abrir modal de detalhes
   const abrirDetalhes = (acao: Acao) => {
@@ -475,9 +504,10 @@ export default function Acoes() {
   // Buscar ações do Supabase com suas lojas
   async function carregarAcoes() {
     try {
-      const startDate = `${ano}-${String(mes + 1).padStart(2, '0')}-01`
-      const lastDay = new Date(ano, mes + 1, 0).getDate()
-      const endDate = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+      const startDate = getFirstDayOfMonth(ano, mes)
+      const endDate = getLastDayOfMonth(ano, mes)
+      
+      console.log('📅 Buscando ações que cruzam o período:', startDate, 'até:', endDate)
       
       let query = supabase
         .from('acoes')
@@ -524,7 +554,7 @@ export default function Acoes() {
         
         return { 
           ...acao, 
-            loja_ids: [],
+          loja_ids: [],
           lojas: []
         }
       }))
@@ -566,9 +596,8 @@ export default function Acoes() {
   }
 
   function isHoje(dia: number) {
-    return hoje.getDate() === dia && 
-           hoje.getMonth() === mes && 
-           hoje.getFullYear() === ano
+    const dataStr = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
+    return dataStr === hojeStr
   }
 
   function mudarMes(delta: number) {
@@ -638,7 +667,7 @@ export default function Acoes() {
         data_inicio: '',
         data_fim: '',
         status: 'pendente',
-        tipo: 'manutencao',
+        tipo: 'compre_ganhe',
         prioridade: 'media',
         descricao: ''
       })
@@ -667,7 +696,6 @@ export default function Acoes() {
 
     setSalvando(true)
     try {
-      // Atualizar ação
       const { error: acaoError } = await supabase
         .from('acoes')
         .update({
@@ -683,7 +711,6 @@ export default function Acoes() {
 
       if (acaoError) throw acaoError
 
-      // Remover relações antigas
       const { error: deleteError } = await supabase
         .from('acoes_lojas')
         .delete()
@@ -691,7 +718,6 @@ export default function Acoes() {
 
       if (deleteError) throw deleteError
 
-      // Inserir novas relações
       if (selectedLojasEdit.length > 0) {
         const relacoes = selectedLojasEdit.map(loja_id => ({
           acao_id: editandoAcao.id,
@@ -761,6 +787,17 @@ export default function Acoes() {
       </div>
     )
   }
+
+  // Lista de tipos de ação para usar nos selects
+  const tiposAcao = [
+    { value: 'compre_ganhe', label: '🎁 Compre e Ganhe', description: 'Promoção onde o cliente compra e ganha brindes' },
+    { value: 'compre_aplique', label: '🛍️ Compre e Aplique', description: 'Promoção onde o cliente compra e aplica o produto' },
+    { value: 'compre_concorra', label: '🎫 Compre e Concorra', description: 'Promoção onde o cliente compra e concorre a prêmios' },
+    { value: 'estouro_balão', label: '🎈 Estouro de Balão', description: 'Dinâmica de estouro de balões com prêmios' },
+    { value: 'roleta_premiada', label: '✨ Roleta Premiada', description: 'Dinâmica de roleta para clientes' },
+    { value: 'analise_capilar', label: '🔬 Análise Capilar', description: 'Análise e diagnóstico capilar personalizado' },
+    { value: 'abordagem', label: '📢 Abordagem', description: 'Abordagem ativa de clientes' }
+  ]
 
   return (
     <TooltipProvider>
@@ -960,9 +997,9 @@ export default function Acoes() {
                                     <div className="flex items-center justify-between mt-1">
                                       <span className="text-[10px]">{prioridadeConfig.label}</span>
                                       <span className="text-[10px] text-gray-400">
-                                        {new Date(acao.data_inicio).getDate() === dia ? 
-                                          (new Date(acao.data_fim).getDate() === dia ? 'Único' : 'Início') :
-                                          (new Date(acao.data_fim).getDate() === dia ? 'Fim' : '')}
+                                        {new Date(acao.data_inicio + 'T00:00:00').getDate() === dia ? 
+                                          (new Date(acao.data_fim + 'T00:00:00').getDate() === dia ? 'Único' : 'Início') :
+                                          (new Date(acao.data_fim + 'T00:00:00').getDate() === dia ? 'Fim' : '')}
                                       </span>
                                     </div>
                                   </div>
@@ -992,7 +1029,7 @@ export default function Acoes() {
           </CardContent>
         </Card>
 
-        {/* Modal de Detalhes da Ação */}
+        {/* Modal de Detalhes */}
         <DetalhesAcao 
           acao={acaoSelecionada}
           open={showDetalhesModal}
@@ -1000,7 +1037,7 @@ export default function Acoes() {
           onEditar={abrirEdicao}
         />
 
-        {/* Modal de Edição de Ação */}
+        {/* Modal de Edição */}
         <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
           <DialogContent className="sm:max-w-[550px]">
             <DialogHeader>
@@ -1017,7 +1054,7 @@ export default function Acoes() {
                   <Input
                     value={editandoAcao.nome}
                     onChange={(e) => setEditandoAcao({ ...editandoAcao, nome: e.target.value })}
-                    placeholder="Ex: Troca de Display"
+                    placeholder="Ex: Promoção de Verão"
                   />
                 </div>
 
@@ -1088,10 +1125,11 @@ export default function Acoes() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="manutencao">🔧 Manutenção</SelectItem>
-                        <SelectItem value="logistica">🚚 Logística</SelectItem>
-                        <SelectItem value="treinamento">🎓 Treinamento</SelectItem>
-                        <SelectItem value="controle">📋 Controle</SelectItem>
+                        {tiposAcao.map(tipo => (
+                          <SelectItem key={tipo.value} value={tipo.value}>
+                            {tipo.label}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1176,7 +1214,6 @@ export default function Acoes() {
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-6 py-4">
-              {/* Filtro por Status */}
               <div className="space-y-2">
                 <Label>Status da Ação</Label>
                 <Select value={filtroStatus} onValueChange={setFiltroStatus}>
@@ -1193,7 +1230,6 @@ export default function Acoes() {
                 </Select>
               </div>
 
-              {/* Filtro por Prioridade */}
               <div className="space-y-2">
                 <Label>Prioridade</Label>
                 <Select value={filtroPrioridade} onValueChange={setFiltroPrioridade}>
@@ -1209,7 +1245,6 @@ export default function Acoes() {
                 </Select>
               </div>
 
-              {/* Filtro por Tipo */}
               <div className="space-y-2">
                 <Label>Tipo de Ação</Label>
                 <Select value={filtroTipo} onValueChange={setFiltroTipo}>
@@ -1218,15 +1253,15 @@ export default function Acoes() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="todos">Todos</SelectItem>
-                    <SelectItem value="manutencao">Manutenção</SelectItem>
-                    <SelectItem value="logistica">Logística</SelectItem>
-                    <SelectItem value="treinamento">Treinamento</SelectItem>
-                    <SelectItem value="controle">Controle</SelectItem>
+                    {tiposAcao.map(tipo => (
+                      <SelectItem key={tipo.value} value={tipo.value}>
+                        {tipo.label}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              {/* Filtro por Lojas */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label>Lojas para exibir</Label>
@@ -1316,17 +1351,15 @@ export default function Acoes() {
             </DialogHeader>
             
             <div className="space-y-4 py-4">
-              {/* Nome da Ação */}
               <div className="space-y-2">
                 <Label>Nome da Ação *</Label>
                 <Input
                   value={novaAcao.nome}
                   onChange={(e) => setNovaAcao({ ...novaAcao, nome: e.target.value })}
-                  placeholder="Ex: Troca de Display"
+                  placeholder="Ex: Promoção de Verão"
                 />
               </div>
 
-              {/* Lojas */}
               <div className="space-y-2">
                 <Label>Lojas *</Label>
                 <Popover open={lojasPopoverOpen} onOpenChange={setLojasPopoverOpen}>
@@ -1440,7 +1473,6 @@ export default function Acoes() {
                 </p>
               </div>
 
-              {/* Datas */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Data Início *</Label>
@@ -1460,7 +1492,6 @@ export default function Acoes() {
                 </div>
               </div>
 
-              {/* Tipo, Prioridade, Status */}
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label>Tipo</Label>
@@ -1469,10 +1500,11 @@ export default function Acoes() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="manutencao">🔧 Manutenção</SelectItem>
-                      <SelectItem value="logistica">🚚 Logística</SelectItem>
-                      <SelectItem value="treinamento">🎓 Treinamento</SelectItem>
-                      <SelectItem value="controle">📋 Controle</SelectItem>
+                      {tiposAcao.map(tipo => (
+                        <SelectItem key={tipo.value} value={tipo.value}>
+                          {tipo.label}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1507,7 +1539,6 @@ export default function Acoes() {
                 </div>
               </div>
 
-              {/* Descrição */}
               <div className="space-y-2">
                 <Label>Descrição</Label>
                 <textarea
