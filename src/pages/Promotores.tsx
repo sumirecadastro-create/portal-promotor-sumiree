@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Search, MapPin, Store, Plus, Edit, Trash2, AlertCircle, Phone, Calendar, FileText, Upload } from 'lucide-react'
+import { Search, MapPin, Store, Plus, Edit, Trash2, AlertCircle, Phone, Calendar, FileText, Upload, X, ChevronRight as ChevronRightIcon } from 'lucide-react'
 import { getPromotores, Promotor, createPromotor, updatePromotor, deletePromotor, getMarcasDisponiveis, Marca } from '@/services/promotores'
 import { uploadCartaPromotor, deleteCartaPromotor } from '@/services/uploadCarta'
 import { getLojas } from '@/services/lojas'
@@ -79,13 +79,22 @@ export default function Promotores() {
   // Formulário de novo promotor
   const [newPromotor, setNewPromotor] = useState({
     promotor_nome: '',
-    loja_id: '',
+    loja_ids: [] as string[],
     gerente_id: '',
     marca_ids: [] as string[],
     dias_semana: '',
     contato_responsavel: '',
     status: 'ativo'
   })
+
+  // Estados para os popovers de seleção
+  const [lojasPopoverOpenNew, setLojasPopoverOpenNew] = useState(false)
+  const [buscaLojasNew, setBuscaLojasNew] = useState('')
+  const [lojasSelecionadasTempNew, setLojasSelecionadasTempNew] = useState<string[]>([])
+
+  const [lojasPopoverOpenEdit, setLojasPopoverOpenEdit] = useState(false)
+  const [buscaLojasEdit, setBuscaLojasEdit] = useState('')
+  const [lojasSelecionadasTempEdit, setLojasSelecionadasTempEdit] = useState<string[]>([])
 
   const loadData = async () => {
     setLoading(true)
@@ -130,6 +139,40 @@ export default function Promotores() {
     loadData()
   }, [])
 
+  // Funções do Popover de Lojas (Novo)
+  const abrirSelecionarLojasNew = () => {
+    setLojasSelecionadasTempNew([...newPromotor.loja_ids])
+    setBuscaLojasNew('')
+    setLojasPopoverOpenNew(true)
+  }
+
+  const aplicarSelecaoLojasNew = () => {
+    setNewPromotor({ ...newPromotor, loja_ids: [...lojasSelecionadasTempNew] })
+    setLojasPopoverOpenNew(false)
+  }
+
+  const cancelarSelecaoLojasNew = () => {
+    setLojasPopoverOpenNew(false)
+  }
+
+  // Funções do Popover de Lojas (Edição)
+  const abrirSelecionarLojasEdit = () => {
+    setLojasSelecionadasTempEdit(editingPromotor?.loja_ids || [])
+    setBuscaLojasEdit('')
+    setLojasPopoverOpenEdit(true)
+  }
+
+  const aplicarSelecaoLojasEdit = () => {
+    if (editingPromotor) {
+      setEditingPromotor({ ...editingPromotor, loja_ids: [...lojasSelecionadasTempEdit] })
+    }
+    setLojasPopoverOpenEdit(false)
+  }
+
+  const cancelarSelecaoLojasEdit = () => {
+    setLojasPopoverOpenEdit(false)
+  }
+
   const handleCreatePromotor = async () => {
     if (!newPromotor.promotor_nome?.trim()) {
       toast({
@@ -144,7 +187,7 @@ export default function Promotores() {
     try {
       const result = await createPromotor({
         promotor_nome: newPromotor.promotor_nome.trim(),
-        loja_id: newPromotor.loja_id === '__none__' ? undefined : newPromotor.loja_id,
+        loja_ids: newPromotor.loja_ids,
         gerente_id: newPromotor.gerente_id === '__none__' ? undefined : newPromotor.gerente_id,
         marca_ids: newPromotor.marca_ids,
         dias_semana: newPromotor.dias_semana || undefined,
@@ -155,12 +198,12 @@ export default function Promotores() {
       if (result) {
         toast({
           title: 'Sucesso',
-          description: 'Promotor criado com sucesso!',
+          description: `Promotor criado com ${newPromotor.loja_ids.length} loja(s) e ${newPromotor.marca_ids.length} marca(s)!`,
         })
         setOpen(false)
         setNewPromotor({
           promotor_nome: '',
-          loja_id: '',
+          loja_ids: [],
           gerente_id: '',
           marca_ids: [],
           dias_semana: '',
@@ -201,7 +244,7 @@ export default function Promotores() {
       
       const result = await updatePromotor(editingPromotor.id, {
         promotor_nome: editingPromotor.promotor_nome.trim(),
-        loja_id: editingPromotor.loja_id === '__none__' ? undefined : editingPromotor.loja_id,
+        loja_ids: editingPromotor.loja_ids || [],
         gerente_id: editingPromotor.gerente_id === '__none__' ? undefined : editingPromotor.gerente_id,
         marca_ids: marcaIds,
         dias_semana: editingPromotor.dias_semana || undefined,
@@ -212,7 +255,7 @@ export default function Promotores() {
       if (result) {
         toast({
           title: 'Sucesso',
-          description: 'Promotor atualizado com sucesso!',
+          description: `Promotor atualizado com ${editingPromotor.loja_ids?.length || 0} loja(s) e ${marcaIds.length} marca(s)!`,
         })
         setEditOpen(false)
         setEditingPromotor(null)
@@ -286,9 +329,7 @@ export default function Promotores() {
           title: 'Sucesso',
           description: 'Carta de apresentação enviada com sucesso!',
         })
-        // Atualizar o promotor com a nova carta
         setEditingPromotor({ ...editingPromotor, carta: result.data })
-        // Recarregar a lista para atualizar o card
         await loadData()
       } else {
         throw new Error(result.error || 'Erro ao fazer upload')
@@ -301,7 +342,6 @@ export default function Promotores() {
       })
     } finally {
       setUploadingCarta(false)
-      // Limpar o input
       e.target.value = ''
     }
   }
@@ -312,7 +352,6 @@ export default function Promotores() {
     if (!confirm('Deseja realmente remover a carta de apresentação?')) return
     
     try {
-      // Extrair o caminho do arquivo da URL
       const url = editingPromotor.carta.arquivo
       const filePath = url.split('/documentos/')[1]
       
@@ -323,7 +362,6 @@ export default function Promotores() {
         description: 'Carta removida com sucesso!',
       })
       
-      // Atualizar o promotor
       setEditingPromotor({ ...editingPromotor, carta: null })
       await loadData()
     } catch (error: any) {
@@ -355,9 +393,11 @@ export default function Promotores() {
     return name.substring(0, 2).toUpperCase()
   }
 
-  const getLojaNome = (promoter: Promotor) => {
-    if (!promoter) return 'Nenhuma loja vinculada'
-    return promoter.lojas?.nome_loja || 'Nenhuma loja vinculada'
+  const getLojasText = (promoter: Promotor) => {
+    if (!promoter || !promoter.lojas || promoter.lojas.length === 0) {
+      return 'Nenhuma loja vinculada'
+    }
+    return promoter.lojas.map(l => l.cod_loja).join(', ')
   }
 
   const getGerenteNome = (promoter: Promotor) => {
@@ -395,6 +435,144 @@ export default function Promotores() {
     }
   }
 
+  // Componente de multiselect para lojas
+  const LojasMultiSelect = ({ 
+    selectedIds, 
+    onChange, 
+    label,
+    open,
+    onOpenChange,
+    buscaTemp,
+    setBuscaTemp,
+    tempIds,
+    setTempIds,
+    onAplicar,
+    onCancelar
+  }: { 
+    selectedIds: string[], 
+    onChange: (ids: string[]) => void,
+    label: string,
+    open: boolean,
+    onOpenChange: (open: boolean) => void,
+    buscaTemp: string,
+    setBuscaTemp: (busca: string) => void,
+    tempIds: string[],
+    setTempIds: (ids: string[]) => void,
+    onAplicar: () => void,
+    onCancelar: () => void
+  }) => {
+    const safeMarcas = Array.isArray(lojas) ? lojas : []
+    
+    const filteredLojas = safeMarcas.filter(loja => 
+      loja?.nome_loja?.toLowerCase().includes(buscaTemp.toLowerCase()) ||
+      loja?.cod_loja?.toLowerCase().includes(buscaTemp.toLowerCase())
+    )
+
+    return (
+      <div className="space-y-2">
+        <Label>{label}</Label>
+        <Popover open={open} onOpenChange={onOpenChange}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              role="combobox"
+              className="w-full justify-between min-h-[40px] h-auto"
+            >
+              <div className="flex flex-wrap gap-1">
+                {selectedIds.length === 0 ? (
+                  <span className="text-muted-foreground">Selecione as lojas...</span>
+                ) : (
+                  <>
+                    <Badge variant="secondary" className="text-xs">
+                      📦 {selectedIds.length} loja(s) selecionada(s)
+                    </Badge>
+                    {selectedIds.slice(0, 3).map(lojaId => {
+                      const loja = safeMarcas.find(l => l.id === lojaId)
+                      return loja ? (
+                        <Badge key={lojaId} variant="outline" className="text-xs">
+                          {loja.cod_loja}
+                        </Badge>
+                      ) : null
+                    })}
+                    {selectedIds.length > 3 && (
+                      <Badge variant="outline" className="text-xs">
+                        +{selectedIds.length - 3}
+                      </Badge>
+                    )}
+                  </>
+                )}
+              </div>
+              <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[400px] p-0" align="start">
+            <div className="p-2 border-b">
+              <Input
+                placeholder="🔍 Buscar loja por nome ou código..."
+                value={buscaTemp}
+                onChange={(e) => setBuscaTemp(e.target.value)}
+                className="h-8"
+              />
+            </div>
+            <div className="max-h-[300px] overflow-y-auto p-2">
+              <div className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer border-b pb-2 mb-1">
+                <Checkbox
+                  checked={tempIds.length === safeMarcas.length && safeMarcas.length > 0}
+                  onCheckedChange={() => {
+                    if (tempIds.length === safeMarcas.length) {
+                      setTempIds([])
+                    } else {
+                      setTempIds(safeMarcas.map(l => l.id))
+                    }
+                  }}
+                />
+                <Label className="cursor-pointer font-semibold flex-1">
+                  Selecionar todas as lojas ({safeMarcas.length})
+                </Label>
+              </div>
+              {filteredLojas.map((loja) => (
+                <div
+                  key={loja.id}
+                  className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
+                  onClick={() => {
+                    setTempIds(prev =>
+                      prev.includes(loja.id)
+                        ? prev.filter(id => id !== loja.id)
+                        : [...prev, loja.id]
+                    )
+                  }}
+                >
+                  <Checkbox checked={tempIds.includes(loja.id)} />
+                  <Label className="cursor-pointer flex-1">
+                    <span className="font-mono text-xs">{loja.cod_loja}</span> - {loja.nome_loja}
+                  </Label>
+                </div>
+              ))}
+              {filteredLojas.length === 0 && (
+                <div className="text-center py-4 text-muted-foreground text-sm">
+                  Nenhuma loja encontrada
+                </div>
+              )}
+            </div>
+            <div className="p-2 border-t flex justify-between">
+              <Button variant="ghost" size="sm" onClick={() => setTempIds([])}>
+                Limpar tudo
+              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={onCancelar}>
+                  Cancelar
+                </Button>
+                <Button size="sm" onClick={onAplicar} style={{ background: '#FF1686' }}>
+                  Aplicar ({tempIds.length})
+                </Button>
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
+    )
+  }
+
   // Componente de multiselect para marcas
   const MarcasMultiSelect = ({ 
     selectedIds, 
@@ -417,60 +595,96 @@ export default function Promotores() {
 
     const selectedMarcas = safeMarcas.filter(m => safeSelectedIds.includes(m?.id))
 
+    const handleToggleMarca = (marcaId: string) => {
+      const newIds = safeSelectedIds.includes(marcaId)
+        ? safeSelectedIds.filter(id => id !== marcaId)
+        : [...safeSelectedIds, marcaId]
+      onChange(newIds)
+    }
+
+    const handleSelectAll = () => {
+      if (safeSelectedIds.length === safeMarcas.length) {
+        onChange([])
+      } else {
+        onChange(safeMarcas.map(m => m.id))
+      }
+    }
+
     return (
-      <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            role="combobox"
-            disabled={disabled}
-            className="w-full justify-between min-h-[40px] h-auto"
-          >
-            <div className="flex flex-wrap gap-1">
-              {selectedMarcas.length > 0 ? (
-                selectedMarcas.map(marca => (
-                  <Badge key={marca.id} variant="secondary" className="text-xs">
-                    {marca.nome}
-                  </Badge>
+      <div className="space-y-2">
+        <Label>Marcas que Atende</Label>
+        <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              role="combobox"
+              disabled={disabled}
+              className="w-full justify-between min-h-[40px] h-auto"
+            >
+              <div className="flex flex-wrap gap-1">
+                {selectedMarcas.length > 0 ? (
+                  selectedMarcas.map(marca => (
+                    <Badge key={marca.id} variant="secondary" className="text-xs">
+                      {marca.nome}
+                    </Badge>
+                  ))
+                ) : (
+                  <span className="text-muted-foreground">Selecione as marcas...</span>
+                )}
+              </div>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[400px] p-0" align="start">
+            <div className="p-2 border-b">
+              <Input
+                placeholder="Buscar marca..."
+                className="h-8"
+                value={marcaSearch}
+                onChange={(e) => setMarcaSearch(e.target.value)}
+              />
+            </div>
+            <div className="max-h-64 overflow-y-auto p-2">
+              <div className="flex items-center justify-between p-2 border-b mb-2">
+                <span className="text-sm font-medium">Marcas disponíveis</span>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={handleSelectAll}
+                  className="text-xs"
+                >
+                  {safeSelectedIds.length === safeMarcas.length ? 'Desmarcar todas' : 'Selecionar todas'}
+                </Button>
+              </div>
+              {filteredMarcas.length > 0 ? (
+                filteredMarcas.map((marca) => (
+                  <div
+                    key={marca.id}
+                    className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
+                    onClick={() => handleToggleMarca(marca.id)}
+                  >
+                    <Checkbox
+                      checked={safeSelectedIds.includes(marca.id)}
+                      onCheckedChange={() => handleToggleMarca(marca.id)}
+                    />
+                    <Label className="cursor-pointer flex-1">{marca.nome}</Label>
+                  </div>
                 ))
               ) : (
-                <span className="text-muted-foreground">Selecione as marcas...</span>
+                <div className="text-center py-4 text-muted-foreground">
+                  {marcaSearch ? 'Nenhuma marca encontrada' : 'Nenhuma marca cadastrada'}
+                </div>
               )}
             </div>
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-full p-0" align="start">
-          <div className="p-2 border-b">
-            <Input
-              placeholder="Buscar marca..."
-              className="h-8"
-              value={marcaSearch}
-              onChange={(e) => setMarcaSearch(e.target.value)}
-            />
+          </PopoverContent>
+        </Popover>
+        {safeSelectedIds.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            <span className="text-xs text-muted-foreground">
+              {safeSelectedIds.length} marca(s) selecionada(s)
+            </span>
           </div>
-          <div className="max-h-64 overflow-y-auto p-2">
-            {filteredMarcas.length > 0 ? (
-              filteredMarcas.map((marca) => (
-                <div
-                  key={marca.id}
-                  className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
-                  onClick={() => onChange(toggleMarca(marca.id, safeSelectedIds))}
-                >
-                  <Checkbox
-                    checked={safeSelectedIds.includes(marca.id)}
-                    onCheckedChange={() => onChange(toggleMarca(marca.id, safeSelectedIds))}
-                  />
-                  <Label className="cursor-pointer flex-1">{marca.nome}</Label>
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-4 text-muted-foreground">
-                {marcaSearch ? 'Nenhuma marca encontrada' : 'Nenhuma marca cadastrada'}
-              </div>
-            )}
-          </div>
-        </PopoverContent>
-      </Popover>
+        )}
+      </div>
     )
   }
 
@@ -517,62 +731,44 @@ export default function Promotores() {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="loja_id">Loja Vinculada</Label>
-                <Select
-                  value={newPromotor.loja_id || '__none__'}
-                  onValueChange={(value) => {
-                    setNewPromotor({ ...newPromotor, loja_id: value, gerente_id: '__none__' })
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione uma loja" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Nenhuma loja</SelectItem>
-                    {lojas.map((loja) => (
-                      <SelectItem key={loja.id} value={loja.id}>
-                        {loja.cod_loja} - {loja.nome_loja}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <LojasMultiSelect
+                selectedIds={newPromotor.loja_ids}
+                onChange={(ids) => setNewPromotor({ ...newPromotor, loja_ids: ids })}
+                label="Lojas Vinculadas"
+                open={lojasPopoverOpenNew}
+                onOpenChange={setLojasPopoverOpenNew}
+                buscaTemp={buscaLojasNew}
+                setBuscaTemp={setBuscaLojasNew}
+                tempIds={lojasSelecionadasTempNew}
+                setTempIds={setLojasSelecionadasTempNew}
+                onAplicar={aplicarSelecaoLojasNew}
+                onCancelar={cancelarSelecaoLojasNew}
+              />
 
               <div className="space-y-2">
                 <Label htmlFor="gerente_id">Gerente Responsável</Label>
                 <Select
                   value={newPromotor.gerente_id || '__none__'}
                   onValueChange={(value) => setNewPromotor({ ...newPromotor, gerente_id: value })}
-                  disabled={!newPromotor.loja_id || newPromotor.loja_id === '__none__'}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder={newPromotor.loja_id && newPromotor.loja_id !== '__none__' ? "Selecione um gerente" : "Primeiro selecione uma loja"} />
+                    <SelectValue placeholder="Selecione um gerente" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">Nenhum gerente</SelectItem>
-                    {gerentes
-                      .filter(g => {
-                        if (!newPromotor.loja_id || newPromotor.loja_id === '__none__') return false
-                        const lojaSelecionada = lojas.find(l => l.id === newPromotor.loja_id)
-                        return lojaSelecionada ? g.cod_loja === lojaSelecionada.cod_loja : false
-                      })
-                      .map((gerente) => (
-                        <SelectItem key={gerente.id} value={gerente.id}>
-                          {gerente.nome_gerente} {gerente.telefone ? `- ${gerente.telefone}` : ''}
-                        </SelectItem>
-                      ))}
+                    {gerentes.map((gerente) => (
+                      <SelectItem key={gerente.id} value={gerente.id}>
+                        {gerente.nome_gerente} {gerente.telefone ? `- ${gerente.telefone}` : ''}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label>Marcas que Atende</Label>
-                <MarcasMultiSelect
-                  selectedIds={newPromotor.marca_ids}
-                  onChange={(ids) => setNewPromotor({ ...newPromotor, marca_ids: ids })}
-                />
-              </div>
+              <MarcasMultiSelect
+                selectedIds={newPromotor.marca_ids}
+                onChange={(ids) => setNewPromotor({ ...newPromotor, marca_ids: ids })}
+              />
 
               <div className="space-y-2">
                 <Label htmlFor="dias_semana">Dias de Atuação</Label>
@@ -626,72 +822,50 @@ export default function Promotores() {
                   />
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="edit_loja_id">Loja Vinculada</Label>
-                  <Select
-                    value={editingPromotor.loja_id || '__none__'}
-                    onValueChange={(value) => {
-                      setEditingPromotor({ 
-                        ...editingPromotor, 
-                        loja_id: value === '__none__' ? null : value, 
-                        gerente_id: null 
-                      })
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione uma loja" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Nenhuma loja</SelectItem>
-                      {lojas.map((loja) => (
-                        <SelectItem key={loja.id} value={loja.id}>
-                          {loja.cod_loja} - {loja.nome_loja}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <LojasMultiSelect
+                  selectedIds={editingPromotor.loja_ids || []}
+                  onChange={(ids) => setEditingPromotor({ ...editingPromotor, loja_ids: ids })}
+                  label="Lojas Vinculadas"
+                  open={lojasPopoverOpenEdit}
+                  onOpenChange={setLojasPopoverOpenEdit}
+                  buscaTemp={buscaLojasEdit}
+                  setBuscaTemp={setBuscaLojasEdit}
+                  tempIds={lojasSelecionadasTempEdit}
+                  setTempIds={setLojasSelecionadasTempEdit}
+                  onAplicar={aplicarSelecaoLojasEdit}
+                  onCancelar={cancelarSelecaoLojasEdit}
+                />
 
                 <div className="space-y-2">
                   <Label htmlFor="edit_gerente_id">Gerente Responsável</Label>
                   <Select
                     value={editingPromotor.gerente_id || '__none__'}
                     onValueChange={(value) => setEditingPromotor({ ...editingPromotor, gerente_id: value === '__none__' ? null : value })}
-                    disabled={!editingPromotor.loja_id}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder={editingPromotor.loja_id ? "Selecione um gerente" : "Primeiro selecione uma loja"} />
+                      <SelectValue placeholder="Selecione um gerente" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="__none__">Nenhum gerente</SelectItem>
-                      {gerentes
-                        .filter(g => {
-                          if (!editingPromotor.loja_id) return false
-                          const lojaSelecionada = lojas.find(l => l.id === editingPromotor.loja_id)
-                          return lojaSelecionada ? g.cod_loja === lojaSelecionada.cod_loja : false
-                        })
-                        .map((gerente) => (
-                          <SelectItem key={gerente.id} value={gerente.id}>
-                            {gerente.nome_gerente} {gerente.telefone ? `- ${gerente.telefone}` : ''}
-                          </SelectItem>
-                        ))}
+                      {gerentes.map((gerente) => (
+                        <SelectItem key={gerente.id} value={gerente.id}>
+                          {gerente.nome_gerente} {gerente.telefone ? `- ${gerente.telefone}` : ''}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Marcas que Atende</Label>
-                  <MarcasMultiSelect
-                    selectedIds={editingPromotor.marcas?.map(m => m?.id).filter(Boolean) || []}
-                    onChange={(ids) => {
-                      const selectedMarcas = marcasDisponiveis.filter(m => ids.includes(m.id))
-                      setEditingPromotor({ 
-                        ...editingPromotor, 
-                        marcas: selectedMarcas
-                      })
-                    }}
-                  />
-                </div>
+                <MarcasMultiSelect
+                  selectedIds={editingPromotor.marcas?.map(m => m?.id).filter(Boolean) || []}
+                  onChange={(ids) => {
+                    const selectedMarcas = marcasDisponiveis.filter(m => ids.includes(m.id))
+                    setEditingPromotor({ 
+                      ...editingPromotor, 
+                      marcas: selectedMarcas
+                    })
+                  }}
+                />
 
                 <div className="space-y-2">
                   <Label htmlFor="edit_dias_semana">Dias de Atuação</Label>
@@ -825,9 +999,21 @@ export default function Promotores() {
                     </div>
 
                     <div className="flex flex-col gap-2 w-full text-sm text-muted-foreground mt-4 text-left border-t pt-4">
-                      <div className="flex items-center gap-2">
-                        <Store className="h-4 w-4 shrink-0" />
-                        <span className="truncate">{getLojaNome(promoter)}</span>
+                      <div className="flex items-start gap-2">
+                        <Store className="h-4 w-4 shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          {promoter.lojas && promoter.lojas.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {promoter.lojas.map(loja => (
+                                <Badge key={loja.id} variant="outline" className="text-xs">
+                                  {loja.cod_loja}
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : (
+                            <span>Nenhuma loja vinculada</span>
+                          )}
+                        </div>
                       </div>
                       <div className="flex items-center gap-2">
                         <MapPin className="h-4 w-4 shrink-0" />
