@@ -15,14 +15,11 @@ export default defineConfig(({ mode }) => ({
     outDir: mode === 'development' ? 'dev-dist' : 'dist',
     minify: mode !== 'development',
     sourcemap: mode === 'development',
-    commonjsOptions: {
-      transformMixedEsModules: true,
-    },
+ 
   },
   plugins: [mode === 'development' ? uidPlugin() : undefined, react()].filter(Boolean),
   define: {
     'process.env.NODE_ENV': JSON.stringify(mode ?? process.env.NODE_ENV ?? 'production'),
-    'global': 'window',
   },
   resolve: {
     alias: [
@@ -35,8 +32,5 @@ export default defineConfig(({ mode }) => ({
         replacement: path.resolve(__dirname, 'node_modules', 'zod', 'v4', 'core'),
       }
     ],
-  },
-  optimizeDeps: {
-    include: ['react', 'react-dom', 'react/jsx-dev-runtime', 'react/jsx-runtime'],
   },
 }))
