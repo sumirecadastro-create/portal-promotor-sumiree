@@ -13,7 +13,8 @@ import CadastroUsuarios from './pages/CadastroUsuarios'
 import Marcas from './pages/Marcas'
 import Acoes from './pages/Acoes'
 import Relatorios from './pages/Relatorios'
-import Campanhas from './pages/Campanhas' 
+import Campanhas from './pages/Campanhas'
+import Configuracoes from './pages/Configuracoes'  // ← ADICIONE ESTA LINHA
 import NotFound from './pages/NotFound'
 import Login from './pages/Login'
 import { AuthProvider } from './hooks/use-auth'
@@ -38,6 +39,7 @@ const App = () => (
             <Route path="/acoes" element={<Acoes />} />
             <Route path="/relatorios" element={<Relatorios />} />
             <Route path="/campanhas" element={<Campanhas />} />
+            <Route path="/configuracoes" element={<Configuracoes />} />  {/* ← ADICIONE ESTA LINHA */}
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
