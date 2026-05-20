@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard,
   Store,
@@ -41,6 +41,7 @@ const allItems = [
 
 export function AppSidebar() {
   const location = useLocation()
+  const navigate = useNavigate()
   const { user, signOut, loading } = useAuth()
 
   // 🔥 Pega o role do usuário da tabela usuarios_internos
@@ -79,6 +80,15 @@ export function AppSidebar() {
     
     return false
   })
+
+  const handleSignOut = async () => {
+    await signOut()
+    navigate('/login')
+  }
+
+  const handleConfiguracoes = () => {
+    navigate('/configuracoes')
+  }
 
   return (
     <Sidebar>
@@ -122,14 +132,18 @@ export function AppSidebar() {
         </div>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton className="text-muted-foreground">
+            <SidebarMenuButton 
+              onClick={handleConfiguracoes}
+              isActive={location.pathname === '/configuracoes'}
+              className="cursor-pointer"
+            >
               <Settings />
               <span>Configurações</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
             <SidebarMenuButton
-              onClick={signOut}
+              onClick={handleSignOut}
               className="text-red-500 hover:text-red-600 cursor-pointer"
             >
               <LogOut />
