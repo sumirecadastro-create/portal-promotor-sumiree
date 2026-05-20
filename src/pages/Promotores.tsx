@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Search, MapPin, Store, Plus, Edit, Trash2, AlertCircle, Phone, Calendar, FileText, Upload, X, ChevronRight as ChevronRightIcon } from 'lucide-react'
+import { Search, MapPin, Store, Plus, Edit, Trash2, AlertCircle, Phone, Calendar, FileText, Upload, X, ChevronRight as ChevronRightIcon, User } from 'lucide-react'
 import { getPromotores, Promotor, createPromotor, updatePromotor, deletePromotor, getMarcasDisponiveis, Marca } from '@/services/promotores'
 import { uploadCartaPromotor, deleteCartaPromotor } from '@/services/uploadCarta'
 import { getLojas } from '@/services/lojas'
@@ -87,14 +87,25 @@ export default function Promotores() {
     status: 'ativo'
   })
 
-  // Estados para os popovers de seleção
+  // Estados para os popovers de seleção de lojas (Novo)
   const [lojasPopoverOpenNew, setLojasPopoverOpenNew] = useState(false)
   const [buscaLojasNew, setBuscaLojasNew] = useState('')
   const [lojasSelecionadasTempNew, setLojasSelecionadasTempNew] = useState<string[]>([])
 
+  // Estados para os popovers de seleção de lojas (Edição)
   const [lojasPopoverOpenEdit, setLojasPopoverOpenEdit] = useState(false)
   const [buscaLojasEdit, setBuscaLojasEdit] = useState('')
   const [lojasSelecionadasTempEdit, setLojasSelecionadasTempEdit] = useState<string[]>([])
+
+  // Estados para os popovers de seleção de gerentes (Novo)
+  const [gerentesPopoverOpenNew, setGerentesPopoverOpenNew] = useState(false)
+  const [buscaGerentesNew, setBuscaGerentesNew] = useState('')
+  const [gerenteSelecionadoTempNew, setGerenteSelecionadoTempNew] = useState<string>('')
+
+  // Estados para os popovers de seleção de gerentes (Edição)
+  const [gerentesPopoverOpenEdit, setGerentesPopoverOpenEdit] = useState(false)
+  const [buscaGerentesEdit, setBuscaGerentesEdit] = useState('')
+  const [gerenteSelecionadoTempEdit, setGerenteSelecionadoTempEdit] = useState<string>('')
 
   const loadData = async () => {
     setLoading(true)
@@ -173,6 +184,54 @@ export default function Promotores() {
     setLojasPopoverOpenEdit(false)
   }
 
+  // Funções do Popover de Gerentes (Novo)
+  const abrirSelecionarGerentesNew = () => {
+    setGerenteSelecionadoTempNew(newPromotor.gerente_id)
+    setBuscaGerentesNew('')
+    setGerentesPopoverOpenNew(true)
+  }
+
+  const aplicarSelecaoGerentesNew = () => {
+    setNewPromotor({ ...newPromotor, gerente_id: gerenteSelecionadoTempNew })
+    setGerentesPopoverOpenNew(false)
+  }
+
+  const cancelarSelecaoGerentesNew = () => {
+    setGerentesPopoverOpenNew(false)
+  }
+
+  const limparGerenteNew = () => {
+    setGerenteSelecionadoTempNew('')
+    setNewPromotor({ ...newPromotor, gerente_id: '' })
+    setGerentesPopoverOpenNew(false)
+  }
+
+  // Funções do Popover de Gerentes (Edição)
+  const abrirSelecionarGerentesEdit = () => {
+    setGerenteSelecionadoTempEdit(editingPromotor?.gerente_id || '')
+    setBuscaGerentesEdit('')
+    setGerentesPopoverOpenEdit(true)
+  }
+
+  const aplicarSelecaoGerentesEdit = () => {
+    if (editingPromotor) {
+      setEditingPromotor({ ...editingPromotor, gerente_id: gerenteSelecionadoTempEdit })
+    }
+    setGerentesPopoverOpenEdit(false)
+  }
+
+  const cancelarSelecaoGerentesEdit = () => {
+    setGerentesPopoverOpenEdit(false)
+  }
+
+  const limparGerenteEdit = () => {
+    setGerenteSelecionadoTempEdit('')
+    if (editingPromotor) {
+      setEditingPromotor({ ...editingPromotor, gerente_id: '' })
+    }
+    setGerentesPopoverOpenEdit(false)
+  }
+
   const handleCreatePromotor = async () => {
     if (!newPromotor.promotor_nome?.trim()) {
       toast({
@@ -188,7 +247,7 @@ export default function Promotores() {
       const result = await createPromotor({
         promotor_nome: newPromotor.promotor_nome.trim(),
         loja_ids: newPromotor.loja_ids,
-        gerente_id: newPromotor.gerente_id === '__none__' ? undefined : newPromotor.gerente_id,
+        gerente_id: newPromotor.gerente_id || undefined,
         marca_ids: newPromotor.marca_ids,
         dias_semana: newPromotor.dias_semana || undefined,
         contato_responsavel: newPromotor.contato_responsavel || undefined,
@@ -245,7 +304,7 @@ export default function Promotores() {
       const result = await updatePromotor(editingPromotor.id, {
         promotor_nome: editingPromotor.promotor_nome.trim(),
         loja_ids: editingPromotor.loja_ids || [],
-        gerente_id: editingPromotor.gerente_id === '__none__' ? undefined : editingPromotor.gerente_id,
+        gerente_id: editingPromotor.gerente_id || undefined,
         marca_ids: marcaIds,
         dias_semana: editingPromotor.dias_semana || undefined,
         contato_responsavel: editingPromotor.contato_responsavel || undefined,
@@ -393,16 +452,14 @@ export default function Promotores() {
     return name.substring(0, 2).toUpperCase()
   }
 
-  const getLojasText = (promoter: Promotor) => {
-    if (!promoter || !promoter.lojas || promoter.lojas.length === 0) {
-      return 'Nenhuma loja vinculada'
-    }
-    return promoter.lojas.map(l => l.cod_loja).join(', ')
-  }
-
   const getGerenteNome = (promoter: Promotor) => {
     if (!promoter) return 'Sem gerente'
     return promoter.gerentes?.nome_gerente || 'Sem gerente'
+  }
+
+  const getGerenteTelefone = (promoter: Promotor) => {
+    if (!promoter) return ''
+    return promoter.gerentes?.telefone || ''
   }
 
   const getMarcasBadges = (promoter: Promotor) => {
@@ -461,9 +518,9 @@ export default function Promotores() {
     onAplicar: () => void,
     onCancelar: () => void
   }) => {
-    const safeMarcas = Array.isArray(lojas) ? lojas : []
+    const safeLojas = Array.isArray(lojas) ? lojas : []
     
-    const filteredLojas = safeMarcas.filter(loja => 
+    const filteredLojas = safeLojas.filter(loja => 
       loja?.nome_loja?.toLowerCase().includes(buscaTemp.toLowerCase()) ||
       loja?.cod_loja?.toLowerCase().includes(buscaTemp.toLowerCase())
     )
@@ -487,7 +544,7 @@ export default function Promotores() {
                       📦 {selectedIds.length} loja(s) selecionada(s)
                     </Badge>
                     {selectedIds.slice(0, 3).map(lojaId => {
-                      const loja = safeMarcas.find(l => l.id === lojaId)
+                      const loja = safeLojas.find(l => l.id === lojaId)
                       return loja ? (
                         <Badge key={lojaId} variant="outline" className="text-xs">
                           {loja.cod_loja}
@@ -517,17 +574,17 @@ export default function Promotores() {
             <div className="max-h-[300px] overflow-y-auto p-2">
               <div className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer border-b pb-2 mb-1">
                 <Checkbox
-                  checked={tempIds.length === safeMarcas.length && safeMarcas.length > 0}
+                  checked={tempIds.length === safeLojas.length && safeLojas.length > 0}
                   onCheckedChange={() => {
-                    if (tempIds.length === safeMarcas.length) {
+                    if (tempIds.length === safeLojas.length) {
                       setTempIds([])
                     } else {
-                      setTempIds(safeMarcas.map(l => l.id))
+                      setTempIds(safeLojas.map(l => l.id))
                     }
                   }}
                 />
                 <Label className="cursor-pointer font-semibold flex-1">
-                  Selecionar todas as lojas ({safeMarcas.length})
+                  Selecionar todas as lojas ({safeLojas.length})
                 </Label>
               </div>
               {filteredLojas.map((loja) => (
@@ -566,6 +623,120 @@ export default function Promotores() {
                   Aplicar ({tempIds.length})
                 </Button>
               </div>
+            </div>
+          </PopoverContent>
+        </Popover>
+      </div>
+    )
+  }
+
+  // Componente de seleção única para gerente (com Popover e busca)
+  const GerenteSelect = ({
+    selectedId,
+    onChange,
+    label,
+    open,
+    onOpenChange,
+    buscaTemp,
+    setBuscaTemp,
+    tempId,
+    setTempId,
+    onAplicar,
+    onCancelar,
+    onLimpar
+  }: {
+    selectedId: string,
+    onChange: (id: string) => void,
+    label: string,
+    open: boolean,
+    onOpenChange: (open: boolean) => void,
+    buscaTemp: string,
+    setBuscaTemp: (busca: string) => void,
+    tempId: string,
+    setTempId: (id: string) => void,
+    onAplicar: () => void,
+    onCancelar: () => void,
+    onLimpar: () => void
+  }) => {
+    const safeGerentes = Array.isArray(gerentes) ? gerentes : []
+    
+    const filteredGerentes = safeGerentes.filter(gerente => 
+      gerente?.nome_gerente?.toLowerCase().includes(buscaTemp.toLowerCase()) ||
+      gerente?.telefone?.toLowerCase().includes(buscaTemp.toLowerCase())
+    )
+
+    const selectedGerente = safeGerentes.find(g => g.id === selectedId)
+
+    return (
+      <div className="space-y-2">
+        <Label>{label}</Label>
+        <Popover open={open} onOpenChange={onOpenChange}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              role="combobox"
+              className="w-full justify-between"
+            >
+              {selectedGerente ? (
+                <div className="flex flex-col items-start text-left">
+                  <span className="text-sm font-medium">{selectedGerente.nome_gerente}</span>
+                  {selectedGerente.telefone && (
+                    <span className="text-xs text-muted-foreground">{selectedGerente.telefone}</span>
+                  )}
+                </div>
+              ) : (
+                <span className="text-muted-foreground">Selecione um gerente...</span>
+              )}
+              <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[400px] p-0" align="start">
+            <div className="p-2 border-b">
+              <Input
+                placeholder="🔍 Buscar gerente por nome ou telefone..."
+                value={buscaTemp}
+                onChange={(e) => setBuscaTemp(e.target.value)}
+                className="h-8"
+              />
+            </div>
+            <div className="max-h-[300px] overflow-y-auto p-2">
+              <div 
+                className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer border-b pb-2 mb-1"
+                onClick={onLimpar}
+              >
+                <Checkbox checked={tempId === ''} />
+                <Label className="cursor-pointer font-semibold flex-1 text-red-500">
+                  Nenhum gerente
+                </Label>
+              </div>
+              {filteredGerentes.map((gerente) => (
+                <div
+                  key={gerente.id}
+                  className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
+                  onClick={() => setTempId(gerente.id)}
+                >
+                  <Checkbox checked={tempId === gerente.id} />
+                  <div className="flex-1">
+                    <div className="text-sm font-medium">{gerente.nome_gerente}</div>
+                    {gerente.telefone && (
+                      <div className="text-xs text-muted-foreground">{gerente.telefone}</div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {filteredGerentes.length === 0 && (
+                <div className="text-center py-4 text-muted-foreground text-sm">
+                  Nenhum gerente encontrado
+                </div>
+              )}
+            </div>
+            <div className="p-2 border-t flex justify-end gap-2">
+              <Button variant="outline" size="sm" onClick={onCancelar}>
+                Cancelar
+              </Button>
+              <Button size="sm" onClick={onAplicar} style={{ background: '#FF1686' }}>
+                Aplicar
+              </Button>
             </div>
           </PopoverContent>
         </Popover>
@@ -745,25 +916,20 @@ export default function Promotores() {
                 onCancelar={cancelarSelecaoLojasNew}
               />
 
-              <div className="space-y-2">
-                <Label htmlFor="gerente_id">Gerente Responsável</Label>
-                <Select
-                  value={newPromotor.gerente_id || '__none__'}
-                  onValueChange={(value) => setNewPromotor({ ...newPromotor, gerente_id: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um gerente" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Nenhum gerente</SelectItem>
-                    {gerentes.map((gerente) => (
-                      <SelectItem key={gerente.id} value={gerente.id}>
-                        {gerente.nome_gerente} {gerente.telefone ? `- ${gerente.telefone}` : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+              <GerenteSelect
+                selectedId={newPromotor.gerente_id}
+                onChange={(id) => setNewPromotor({ ...newPromotor, gerente_id: id })}
+                label="Gerente Responsável"
+                open={gerentesPopoverOpenNew}
+                onOpenChange={setGerentesPopoverOpenNew}
+                buscaTemp={buscaGerentesNew}
+                setBuscaTemp={setBuscaGerentesNew}
+                tempId={gerenteSelecionadoTempNew}
+                setTempId={setGerenteSelecionadoTempNew}
+                onAplicar={aplicarSelecaoGerentesNew}
+                onCancelar={cancelarSelecaoGerentesNew}
+                onLimpar={limparGerenteNew}
+              />
 
               <MarcasMultiSelect
                 selectedIds={newPromotor.marca_ids}
@@ -836,25 +1002,20 @@ export default function Promotores() {
                   onCancelar={cancelarSelecaoLojasEdit}
                 />
 
-                <div className="space-y-2">
-                  <Label htmlFor="edit_gerente_id">Gerente Responsável</Label>
-                  <Select
-                    value={editingPromotor.gerente_id || '__none__'}
-                    onValueChange={(value) => setEditingPromotor({ ...editingPromotor, gerente_id: value === '__none__' ? null : value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione um gerente" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Nenhum gerente</SelectItem>
-                      {gerentes.map((gerente) => (
-                        <SelectItem key={gerente.id} value={gerente.id}>
-                          {gerente.nome_gerente} {gerente.telefone ? `- ${gerente.telefone}` : ''}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <GerenteSelect
+                  selectedId={editingPromotor.gerente_id || ''}
+                  onChange={(id) => setEditingPromotor({ ...editingPromotor, gerente_id: id })}
+                  label="Gerente Responsável"
+                  open={gerentesPopoverOpenEdit}
+                  onOpenChange={setGerentesPopoverOpenEdit}
+                  buscaTemp={buscaGerentesEdit}
+                  setBuscaTemp={setBuscaGerentesEdit}
+                  tempId={gerenteSelecionadoTempEdit}
+                  setTempId={setGerenteSelecionadoTempEdit}
+                  onAplicar={aplicarSelecaoGerentesEdit}
+                  onCancelar={cancelarSelecaoGerentesEdit}
+                  onLimpar={limparGerenteEdit}
+                />
 
                 <MarcasMultiSelect
                   selectedIds={editingPromotor.marcas?.map(m => m?.id).filter(Boolean) || []}
@@ -1016,8 +1177,15 @@ export default function Promotores() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <MapPin className="h-4 w-4 shrink-0" />
-                        <span className="truncate">Gerente: {getGerenteNome(promoter)}</span>
+                        <User className="h-4 w-4 shrink-0" />
+                        <div className="flex-1">
+                          <span>{getGerenteNome(promoter)}</span>
+                          {getGerenteTelefone(promoter) && (
+                            <span className="text-xs text-muted-foreground ml-2">
+                              ({getGerenteTelefone(promoter)})
+                            </span>
+                          )}
+                        </div>
                       </div>
                       {promoter.contato_responsavel && (
                         <div className="flex items-center gap-2">
