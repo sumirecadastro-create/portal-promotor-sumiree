@@ -142,6 +142,8 @@ export default function Promotores() {
 
     setSaving(true)
     try {
+      console.log('📝 Criando promotor com marcas:', newPromotor.marca_ids)
+      
       const result = await createPromotor({
         promotor_nome: newPromotor.promotor_nome.trim(),
         loja_id: newPromotor.loja_id === '__none__' ? undefined : newPromotor.loja_id,
@@ -155,7 +157,7 @@ export default function Promotores() {
       if (result) {
         toast({
           title: 'Sucesso',
-          description: 'Promotor criado com sucesso!',
+          description: `Promotor criado com ${newPromotor.marca_ids.length} marca(s)!`,
         })
         setOpen(false)
         setNewPromotor({
@@ -199,6 +201,9 @@ export default function Promotores() {
         ? editingPromotor.marcas.map(m => m?.id).filter(Boolean)
         : []
       
+      console.log('📝 Atualizando promotor com marcas:', marcaIds)
+      console.log('📝 Total de marcas selecionadas:', marcaIds.length)
+      
       const result = await updatePromotor(editingPromotor.id, {
         promotor_nome: editingPromotor.promotor_nome.trim(),
         loja_id: editingPromotor.loja_id === '__none__' ? undefined : editingPromotor.loja_id,
@@ -212,7 +217,7 @@ export default function Promotores() {
       if (result) {
         toast({
           title: 'Sucesso',
-          description: 'Promotor atualizado com sucesso!',
+          description: `Promotor atualizado com ${marcaIds.length} marca(s)!`,
         })
         setEditOpen(false)
         setEditingPromotor(null)
@@ -286,9 +291,7 @@ export default function Promotores() {
           title: 'Sucesso',
           description: 'Carta de apresentação enviada com sucesso!',
         })
-        // Atualizar o promotor com a nova carta
         setEditingPromotor({ ...editingPromotor, carta: result.data })
-        // Recarregar a lista para atualizar o card
         await loadData()
       } else {
         throw new Error(result.error || 'Erro ao fazer upload')
@@ -301,7 +304,6 @@ export default function Promotores() {
       })
     } finally {
       setUploadingCarta(false)
-      // Limpar o input
       e.target.value = ''
     }
   }
@@ -312,7 +314,6 @@ export default function Promotores() {
     if (!confirm('Deseja realmente remover a carta de apresentação?')) return
     
     try {
-      // Extrair o caminho do arquivo da URL
       const url = editingPromotor.carta.arquivo
       const filePath = url.split('/documentos/')[1]
       
@@ -323,7 +324,6 @@ export default function Promotores() {
         description: 'Carta removida com sucesso!',
       })
       
-      // Atualizar o promotor
       setEditingPromotor({ ...editingPromotor, carta: null })
       await loadData()
     } catch (error: any) {
@@ -395,7 +395,7 @@ export default function Promotores() {
     }
   }
 
-  // Componente de multiselect para marcas
+  // Componente de multiselect para marcas - CORRIGIDO
   const MarcasMultiSelect = ({ 
     selectedIds, 
     onChange, 
@@ -417,60 +417,95 @@ export default function Promotores() {
 
     const selectedMarcas = safeMarcas.filter(m => safeSelectedIds.includes(m?.id))
 
+    const handleToggleMarca = (marcaId: string) => {
+      const newIds = safeSelectedIds.includes(marcaId)
+        ? safeSelectedIds.filter(id => id !== marcaId)
+        : [...safeSelectedIds, marcaId]
+      onChange(newIds)
+    }
+
+    const handleSelectAll = () => {
+      if (safeSelectedIds.length === safeMarcas.length) {
+        onChange([])
+      } else {
+        onChange(safeMarcas.map(m => m.id))
+      }
+    }
+
     return (
-      <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            role="combobox"
-            disabled={disabled}
-            className="w-full justify-between min-h-[40px] h-auto"
-          >
-            <div className="flex flex-wrap gap-1">
-              {selectedMarcas.length > 0 ? (
-                selectedMarcas.map(marca => (
-                  <Badge key={marca.id} variant="secondary" className="text-xs">
-                    {marca.nome}
-                  </Badge>
+      <div className="space-y-2">
+        <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              role="combobox"
+              disabled={disabled}
+              className="w-full justify-between min-h-[40px] h-auto"
+            >
+              <div className="flex flex-wrap gap-1">
+                {selectedMarcas.length > 0 ? (
+                  selectedMarcas.map(marca => (
+                    <Badge key={marca.id} variant="secondary" className="text-xs">
+                      {marca.nome}
+                    </Badge>
+                  ))
+                ) : (
+                  <span className="text-muted-foreground">Selecione as marcas...</span>
+                )}
+              </div>
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-[400px] p-0" align="start">
+            <div className="p-2 border-b">
+              <Input
+                placeholder="Buscar marca..."
+                className="h-8"
+                value={marcaSearch}
+                onChange={(e) => setMarcaSearch(e.target.value)}
+              />
+            </div>
+            <div className="max-h-64 overflow-y-auto p-2">
+              <div className="flex items-center justify-between p-2 border-b mb-2">
+                <span className="text-sm font-medium">Marcas disponíveis</span>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={handleSelectAll}
+                  className="text-xs"
+                >
+                  {safeSelectedIds.length === safeMarcas.length ? 'Desmarcar todas' : 'Selecionar todas'}
+                </Button>
+              </div>
+              {filteredMarcas.length > 0 ? (
+                filteredMarcas.map((marca) => (
+                  <div
+                    key={marca.id}
+                    className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
+                    onClick={() => handleToggleMarca(marca.id)}
+                  >
+                    <Checkbox
+                      checked={safeSelectedIds.includes(marca.id)}
+                      onCheckedChange={() => handleToggleMarca(marca.id)}
+                    />
+                    <Label className="cursor-pointer flex-1">{marca.nome}</Label>
+                  </div>
                 ))
               ) : (
-                <span className="text-muted-foreground">Selecione as marcas...</span>
+                <div className="text-center py-4 text-muted-foreground">
+                  {marcaSearch ? 'Nenhuma marca encontrada' : 'Nenhuma marca cadastrada'}
+                </div>
               )}
             </div>
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent className="w-full p-0" align="start">
-          <div className="p-2 border-b">
-            <Input
-              placeholder="Buscar marca..."
-              className="h-8"
-              value={marcaSearch}
-              onChange={(e) => setMarcaSearch(e.target.value)}
-            />
+          </PopoverContent>
+        </Popover>
+        {safeSelectedIds.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            <span className="text-xs text-muted-foreground">
+              {safeSelectedIds.length} marca(s) selecionada(s)
+            </span>
           </div>
-          <div className="max-h-64 overflow-y-auto p-2">
-            {filteredMarcas.length > 0 ? (
-              filteredMarcas.map((marca) => (
-                <div
-                  key={marca.id}
-                  className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
-                  onClick={() => onChange(toggleMarca(marca.id, safeSelectedIds))}
-                >
-                  <Checkbox
-                    checked={safeSelectedIds.includes(marca.id)}
-                    onCheckedChange={() => onChange(toggleMarca(marca.id, safeSelectedIds))}
-                  />
-                  <Label className="cursor-pointer flex-1">{marca.nome}</Label>
-                </div>
-              ))
-            ) : (
-              <div className="text-center py-4 text-muted-foreground">
-                {marcaSearch ? 'Nenhuma marca encontrada' : 'Nenhuma marca cadastrada'}
-              </div>
-            )}
-          </div>
-        </PopoverContent>
-      </Popover>
+        )}
+      </div>
     )
   }
 
