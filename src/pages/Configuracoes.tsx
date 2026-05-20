@@ -14,26 +14,17 @@ import {
   Eye,
   EyeOff,
   Building2,
-  Calendar
+  Calendar,
+  CheckCircle2
 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
-import { useNavigate } from 'react-router-dom'
 
 export default function Configuracoes() {
   const { user, perfil, isAdmin, userLojaId } = useAuth()
   const { toast } = useToast()
-  const navigate = useNavigate()
   
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
@@ -47,9 +38,6 @@ export default function Configuracoes() {
     newPassword: '',
     confirmPassword: ''
   })
-  
-  // Estados do modal de confirmação
-  const [showConfirmModal, setShowConfirmModal] = useState(false)
   
   // Estados para dados do usuário
   const [userEmail, setUserEmail] = useState('')
@@ -79,7 +67,18 @@ export default function Configuracoes() {
     }
   }, [user, perfil, isAdmin, userLojaId])
 
-  const handlePasswordChange = () => {
+  // Resetar o estado de sucesso após 5 segundos
+  useEffect(() => {
+    if (success) {
+      const timer = setTimeout(() => {
+        setSuccess(false)
+      }, 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [success])
+
+  const handlePasswordChange = async () => {
+    // Validações
     if (!passwordForm.currentPassword) {
       toast({
         variant: 'destructive',
@@ -115,13 +114,8 @@ export default function Configuracoes() {
       })
       return
     }
-    
-    setShowConfirmModal(true)
-  }
 
-  const confirmPasswordChange = async () => {
     setLoading(true)
-    setShowConfirmModal(false)
     
     try {
       // Verificar a senha atual
@@ -149,26 +143,18 @@ export default function Configuracoes() {
         throw updateError
       }
       
+      // Sucesso
       setSuccess(true)
-      
-      toast({
-        title: 'Senha alterada!',
-        description: 'Sua senha foi alterada com sucesso. Faça login novamente.',
-      })
-      
-      // Limpar formulário
       setPasswordForm({
         currentPassword: '',
         newPassword: '',
         confirmPassword: ''
       })
       
-      // Aguardar e fazer logout manualmente
-      setTimeout(async () => {
-        await supabase.auth.signOut()
-        localStorage.clear()
-        navigate('/login')
-      }, 2000)
+      toast({
+        title: 'Senha alterada!',
+        description: 'Sua senha foi alterada com sucesso.',
+      })
       
     } catch (error: any) {
       toast({
@@ -176,6 +162,7 @@ export default function Configuracoes() {
         title: 'Erro',
         description: error.message || 'Erro ao alterar senha',
       })
+    } finally {
       setLoading(false)
     }
   }
@@ -183,24 +170,6 @@ export default function Configuracoes() {
   const getInitials = () => {
     if (!userEmail) return 'U'
     return userEmail.substring(0, 2).toUpperCase()
-  }
-
-  // Tela de sucesso após alterar senha
-  if (success) {
-    return (
-      <div className="flex flex-col items-center justify-center h-96">
-        <div className="text-center">
-          <div className="h-16 w-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
-            <svg className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-          </div>
-          <h2 className="text-2xl font-semibold mb-2">Senha alterada com sucesso!</h2>
-          <p className="text-gray-500">Redirecionando para o login...</p>
-          <Loader2 className="h-6 w-6 animate-spin mx-auto mt-4 text-pink-500" />
-        </div>
-      </div>
-    )
   }
 
   return (
@@ -296,6 +265,16 @@ export default function Configuracoes() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Mensagem de sucesso */}
+            {success && (
+              <div className="p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2">
+                <CheckCircle2 className="h-5 w-5 text-green-500" />
+                <p className="text-sm text-green-700">
+                  Senha alterada com sucesso!
+                </p>
+              </div>
+            )}
+            
             <div className="space-y-2">
               <Label htmlFor="currentPassword">Senha Atual</Label>
               <div className="relative">
@@ -380,27 +359,6 @@ export default function Configuracoes() {
           </CardContent>
         </Card>
       </div>
-
-      {/* Modal de Confirmação */}
-      <Dialog open={showConfirmModal} onOpenChange={setShowConfirmModal}>
-        <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader>
-            <DialogTitle>Confirmar alteração de senha</DialogTitle>
-            <DialogDescription>
-              Tem certeza que deseja alterar sua senha?
-              Você precisará fazer login novamente com a nova senha.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setShowConfirmModal(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={confirmPasswordChange} disabled={loading} style={{ background: '#FF1686' }}>
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
