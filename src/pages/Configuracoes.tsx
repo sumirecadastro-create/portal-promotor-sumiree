@@ -11,8 +11,6 @@ import {
   Shield, 
   Save, 
   Loader2, 
-  AlertCircle, 
-  CheckCircle2,
   Eye,
   EyeOff,
   Building2,
@@ -32,7 +30,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 
 export default function Configuracoes() {
-  const { user, perfil, isAdmin, userLojaId } = useAuth()
+  const { user, perfil, isAdmin, userLojaId, signOut } = useAuth()
   const { toast } = useToast()
   
   const [loading, setLoading] = useState(false)
@@ -151,8 +149,8 @@ export default function Configuracoes() {
       }
       
       toast({
-        title: 'Sucesso',
-        description: 'Sua senha foi alterada com sucesso!',
+        title: 'Senha alterada!',
+        description: 'Sua senha foi alterada com sucesso. Faça login novamente.',
       })
       
       // Limpar formulário
@@ -162,13 +160,17 @@ export default function Configuracoes() {
         confirmPassword: ''
       })
       
+      // Forçar logout após 2 segundos para o usuário fazer login com a nova senha
+      setTimeout(() => {
+        signOut()
+      }, 2000)
+      
     } catch (error: any) {
       toast({
         variant: 'destructive',
         title: 'Erro',
         description: error.message || 'Erro ao alterar senha',
       })
-    } finally {
       setLoading(false)
     }
   }
@@ -363,15 +365,15 @@ export default function Configuracoes() {
             <DialogTitle>Confirmar alteração de senha</DialogTitle>
             <DialogDescription>
               Tem certeza que deseja alterar sua senha?
-              Você precisará usar a nova senha no próximo login.
+              Você precisará fazer login novamente com a nova senha.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setShowConfirmModal(false)}>
               Cancelar
             </Button>
-            <Button onClick={confirmPasswordChange} style={{ background: '#FF1686' }}>
-              Confirmar
+            <Button onClick={confirmPasswordChange} disabled={loading} style={{ background: '#FF1686' }}>
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Confirmar'}
             </Button>
           </DialogFooter>
         </DialogContent>
