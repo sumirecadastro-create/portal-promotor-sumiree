@@ -1,36 +1,59 @@
-/* Vite config for building the frontend react app: https://vite.dev/config/ */
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import path from 'path'
-// @ts-expect-error - uidPlugin is a custom plugin
-import uidPlugin from './vite-plugin-react-uid'
 
-// https://vitejs.dev/config/
-export default defineConfig(({ mode }) => ({
+// Plugin para corrigir o jsxDEV
+function fixJsxDev() {
+  return {
+    name: 'fix-jsx-dev',
+    transform(code, id) {
+      if (id.includes('react/jsx-dev-runtime')) {
+        console.log('🔧 Corrigindo jsx-dev-runtime...')
+        return code.replace(
+          'exports.jsxDEV = jsxDEV;',
+          'exports.jsxDEV = jsxDEV; window.jsxDEV = jsxDEV;'
+        )
+      }
+      return code
+    },
+  }
+}
+
+export default defineConfig({
   server: {
     host: '::',
     port: 8080,
   },
   build: {
-    outDir: mode === 'development' ? 'dev-dist' : 'dist',
-    minify: mode !== 'development',
-    sourcemap: mode === 'development',
- 
+    outDir: 'dist',
+    sourcemap: false,
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: false,
+      },
+    },
   },
-  plugins: [mode === 'development' ? uidPlugin() : undefined, react()].filter(Boolean),
+  plugins: [react(), fixJsxDev()],
   define: {
-    'process.env.NODE_ENV': JSON.stringify(mode ?? process.env.NODE_ENV ?? 'production'),
+    'global': 'window',
+    'process.env.NODE_ENV': JSON.stringify('production'),
+    'process.browser': true,
   },
   resolve: {
-    alias: [
-      {
-        find: '@',
-        replacement: path.resolve(__dirname, './src'),
-      },
-      {
-        find: /zod\/v4\/core/,
-        replacement: path.resolve(__dirname, 'node_modules', 'zod', 'v4', 'core'),
-      }
-    ],
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
   },
-}))
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'react/jsx-dev-runtime', 'react/jsx-runtime'],
+    esbuildOptions: {
+      define: {
+        global: 'globalThis',
+      },
+    },
+  },
+  esbuild: {
+    logOverride: { 'this-is-undefined-in-esm': 'silent' },
+  },
+})
