@@ -8,9 +8,12 @@ const getTitleFromPath = (path: string) => {
   if (path.startsWith('/lojas')) return 'Gestão de Lojas'
   if (path.startsWith('/promotores')) return 'Equipe de Promotores'
   if (path.startsWith('/check-in')) return 'Operação Check-in'
-  if (path.startsWith('/cadastro-promotores')) return 'Cadastro de Promotores'  // ← ALTERADO
+  if (path.startsWith('/cadastro-promotores')) return 'Cadastro de Promotores'
   if (path.startsWith('/marcas')) return 'Marcas'
   if (path.startsWith('/relatorios')) return 'Relatórios e Análises'
+  if (path.startsWith('/acoes')) return 'Calendário de Ações'
+  if (path.startsWith('/campanhas')) return 'Calendário de Campanhas'
+  if (path.startsWith('/configuracoes')) return 'Configurações'  // ← ADICIONE ESTA LINHA
   return 'Portal Sumirê'
 }
 
