@@ -37,6 +37,7 @@ export default function Configuracoes() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
   
   // Estados do formulário de senha
   const [passwordForm, setPasswordForm] = useState({
@@ -150,7 +151,7 @@ export default function Configuracoes() {
       
       toast({
         title: 'Senha alterada!',
-        description: 'Sua senha foi alterada com sucesso. Faça login novamente.',
+        description: 'Sua senha foi alterada com sucesso. Você será redirecionado para o login.',
       })
       
       // Limpar formulário
@@ -160,10 +161,13 @@ export default function Configuracoes() {
         confirmPassword: ''
       })
       
-      // Forçar logout após 2 segundos para o usuário fazer login com a nova senha
-      setTimeout(() => {
-        signOut()
-      }, 2000)
+      // Aguardar um pouco e fazer logout
+      setIsLoggingOut(true)
+      
+      setTimeout(async () => {
+        await signOut()
+        // O redirecionamento é feito pelo próprio signOut
+      }, 1500)
       
     } catch (error: any) {
       toast({
@@ -178,6 +182,19 @@ export default function Configuracoes() {
   const getInitials = () => {
     if (!userEmail) return 'U'
     return userEmail.substring(0, 2).toUpperCase()
+  }
+
+  // Se estiver em processo de logout, mostrar mensagem
+  if (isLoggingOut) {
+    return (
+      <div className="flex flex-col items-center justify-center h-96">
+        <div className="text-center">
+          <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4 text-pink-500" />
+          <h2 className="text-xl font-semibold mb-2">Senha alterada com sucesso!</h2>
+          <p className="text-gray-500">Redirecionando para o login...</p>
+        </div>
+      </div>
+    )
   }
 
   return (
