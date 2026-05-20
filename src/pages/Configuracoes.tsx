@@ -28,16 +28,18 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Badge } from '@/components/ui/badge'
+import { useNavigate } from 'react-router-dom'
 
 export default function Configuracoes() {
-  const { user, perfil, isAdmin, userLojaId, signOut } = useAuth()
+  const { user, perfil, isAdmin, userLojaId } = useAuth()
   const { toast } = useToast()
+  const navigate = useNavigate()
   
   const [loading, setLoading] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
-  const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [success, setSuccess] = useState(false)
   
   // Estados do formulário de senha
   const [passwordForm, setPasswordForm] = useState({
@@ -62,7 +64,6 @@ export default function Configuracoes() {
       setUserRole(perfil.role === 'admin' ? 'Administrador' : 'Gerente')
     }
     
-    // Buscar dados da loja se for gerente
     if (!isAdmin && userLojaId) {
       const fetchLoja = async () => {
         const { data } = await supabase
@@ -78,8 +79,7 @@ export default function Configuracoes() {
     }
   }, [user, perfil, isAdmin, userLojaId])
 
-  const handlePasswordChange = async () => {
-    // Validações
+  const handlePasswordChange = () => {
     if (!passwordForm.currentPassword) {
       toast({
         variant: 'destructive',
@@ -124,7 +124,7 @@ export default function Configuracoes() {
     setShowConfirmModal(false)
     
     try {
-      // Verificar a senha atual primeiro
+      // Verificar a senha atual
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email: userEmail,
         password: passwordForm.currentPassword,
@@ -149,9 +149,11 @@ export default function Configuracoes() {
         throw updateError
       }
       
+      setSuccess(true)
+      
       toast({
         title: 'Senha alterada!',
-        description: 'Sua senha foi alterada com sucesso. Você será redirecionado para o login.',
+        description: 'Sua senha foi alterada com sucesso. Faça login novamente.',
       })
       
       // Limpar formulário
@@ -161,13 +163,12 @@ export default function Configuracoes() {
         confirmPassword: ''
       })
       
-      // Aguardar um pouco e fazer logout
-      setIsLoggingOut(true)
-      
+      // Aguardar e fazer logout manualmente
       setTimeout(async () => {
-        await signOut()
-        // O redirecionamento é feito pelo próprio signOut
-      }, 1500)
+        await supabase.auth.signOut()
+        localStorage.clear()
+        navigate('/login')
+      }, 2000)
       
     } catch (error: any) {
       toast({
@@ -184,14 +185,19 @@ export default function Configuracoes() {
     return userEmail.substring(0, 2).toUpperCase()
   }
 
-  // Se estiver em processo de logout, mostrar mensagem
-  if (isLoggingOut) {
+  // Tela de sucesso após alterar senha
+  if (success) {
     return (
       <div className="flex flex-col items-center justify-center h-96">
         <div className="text-center">
-          <Loader2 className="h-12 w-12 animate-spin mx-auto mb-4 text-pink-500" />
-          <h2 className="text-xl font-semibold mb-2">Senha alterada com sucesso!</h2>
+          <div className="h-16 w-16 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4">
+            <svg className="h-8 w-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-semibold mb-2">Senha alterada com sucesso!</h2>
           <p className="text-gray-500">Redirecionando para o login...</p>
+          <Loader2 className="h-6 w-6 animate-spin mx-auto mt-4 text-pink-500" />
         </div>
       </div>
     )
