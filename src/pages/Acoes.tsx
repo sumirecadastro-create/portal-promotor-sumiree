@@ -143,7 +143,7 @@ const getPrioridadeConfig = (prioridade: string) => {
   }
 }
 
-// Configuração de tipo - ATUALIZADO COM NOVAS OPÇÕES
+// Configuração de tipo
 const getTipoConfig = (tipo: string) => {
   switch (tipo) {
     case 'compre_ganhe':
@@ -877,7 +877,6 @@ export default function Acoes() {
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-emerald-500 rounded-full"></div>
-            <span>Concluída</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
@@ -915,10 +914,11 @@ export default function Acoes() {
           </div>
         </div>
 
-        {/* Calendário */}
+        {/* Calendário - CORRIGIDO */}
         <Card className="overflow-hidden shadow-lg border-0">
           <CardContent className="p-0 overflow-x-auto">
             <div className="min-w-[1200px]">
+              {/* Cabeçalho com dias */}
               <div className="grid border-b sticky top-0 z-20" 
                 style={{ gridTemplateColumns: `250px repeat(${dias.length}, 80px)` }}>
                 <div className="p-3 font-bold text-gray-700 sticky left-0 z-10 border-r" style={{ background: '#f9fafb' }}>
@@ -943,6 +943,7 @@ export default function Acoes() {
                 })}
               </div>
 
+              {/* Linhas das lojas */}
               {lojasFiltradas.map((loja) => (
                 <div key={loja.id} className="grid border-b hover:bg-gray-50 transition-colors"
                   style={{ gridTemplateColumns: `250px repeat(${dias.length}, 80px)` }}>
@@ -956,62 +957,67 @@ export default function Acoes() {
                     </div>
                   </div>
 
+                  {/* Dias - COM CORREÇÃO DE ALTURA */}
                   {dias.map((dia) => {
                     const acoesDoDia = getAcoesDoDia(loja.id, dia)
                     const isDiaHoje = isHoje(dia)
                     
                     return (
                       <div key={dia} className={cn(
-                        "p-1 border-r min-h-[100px] align-top",
+                        "p-1 border-r align-top",
                         isDiaHoje && "bg-yellow-50"
-                      )}>
-                        {acoesDoDia.length > 0 ? (
-                          <div className="space-y-1.5">
-                            {acoesDoDia.map((acao) => {
-                              const statusConfig = getStatusConfig(acao.status)
-                              const prioridadeConfig = getPrioridadeConfig(acao.prioridade)
-                              const tipoConfig = getTipoConfig(acao.tipo)
-                              const StatusIcon = statusConfig.icon
-                              const TipoIcon = tipoConfig.icon
-                              
-                              return (
-                                <AcaoTooltip key={acao.id} acao={acao}>
-                                  <div 
-                                    className="p-1.5 rounded-md text-xs cursor-pointer transition-all hover:scale-105 relative group"
-                                    style={{ 
-                                      background: statusConfig.bg,
-                                      borderLeft: `3px solid ${statusConfig.color}`
-                                    }}
-                                    onClick={() => abrirDetalhes(acao)}
-                                  >
-                                    <div className="flex items-center justify-between mb-0.5">
-                                      <div className="flex items-center gap-1">
-                                        <TipoIcon className="h-3 w-3" style={{ color: PRIMARY_COLOR }} />
-                                        <span className="font-semibold truncate">{acao.nome}</span>
+                      )} style={{ minHeight: '120px', height: 'auto' }}>
+                        <div className="flex flex-col h-full">
+                          {acoesDoDia.length > 0 ? (
+                            <div className="space-y-1.5">
+                              {acoesDoDia.map((acao) => {
+                                const statusConfig = getStatusConfig(acao.status)
+                                const prioridadeConfig = getPrioridadeConfig(acao.prioridade)
+                                const tipoConfig = getTipoConfig(acao.tipo)
+                                const StatusIcon = statusConfig.icon
+                                const TipoIcon = tipoConfig.icon
+                                
+                                return (
+                                  <AcaoTooltip key={acao.id} acao={acao}>
+                                    <div 
+                                      className="p-1.5 rounded-md text-xs cursor-pointer transition-all hover:scale-105 relative group"
+                                      style={{ 
+                                        background: statusConfig.bg,
+                                        borderLeft: `3px solid ${statusConfig.color}`
+                                      }}
+                                      onClick={() => abrirDetalhes(acao)}
+                                    >
+                                      <div className="flex items-center justify-between mb-0.5">
+                                        <div className="flex items-center gap-1 min-w-0 flex-1">
+                                          <TipoIcon className="h-3 w-3 flex-shrink-0" style={{ color: PRIMARY_COLOR }} />
+                                          <span className="font-semibold truncate" title={acao.nome}>
+                                            {acao.nome}
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-1 flex-shrink-0 ml-1">
+                                          <StatusIcon className="h-3 w-3" style={{ color: statusConfig.color }} />
+                                          <Info className="h-2.5 w-2.5 opacity-50" />
+                                        </div>
                                       </div>
-                                      <div className="flex items-center gap-1">
-                                        <StatusIcon className="h-3 w-3" style={{ color: statusConfig.color }} />
-                                        <Info className="h-2.5 w-2.5 opacity-50" />
+                                      <div className="flex items-center justify-between mt-1">
+                                        <span className="text-[10px]">{prioridadeConfig.label}</span>
+                                        <span className="text-[10px] text-gray-400">
+                                          {new Date(acao.data_inicio + 'T00:00:00').getDate() === dia ? 
+                                            (new Date(acao.data_fim + 'T00:00:00').getDate() === dia ? 'Único' : 'Início') :
+                                            (new Date(acao.data_fim + 'T00:00:00').getDate() === dia ? 'Fim' : '')}
+                                        </span>
                                       </div>
                                     </div>
-                                    <div className="flex items-center justify-between mt-1">
-                                      <span className="text-[10px]">{prioridadeConfig.label}</span>
-                                      <span className="text-[10px] text-gray-400">
-                                        {new Date(acao.data_inicio + 'T00:00:00').getDate() === dia ? 
-                                          (new Date(acao.data_fim + 'T00:00:00').getDate() === dia ? 'Único' : 'Início') :
-                                          (new Date(acao.data_fim + 'T00:00:00').getDate() === dia ? 'Fim' : '')}
-                                      </span>
-                                    </div>
-                                  </div>
-                                </AcaoTooltip>
-                              )
-                            })}
-                          </div>
-                        ) : (
-                          <div className="text-center text-gray-300 text-xs h-full flex items-center justify-center min-h-[80px]">
-                            —
-                          </div>
-                        )}
+                                  </AcaoTooltip>
+                                )
+                              })}
+                            </div>
+                          ) : (
+                            <div className="text-center text-gray-300 text-xs h-full flex items-center justify-center min-h-[80px]">
+                              —
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )
                   })}
