@@ -87,7 +87,6 @@ interface Acao {
   data_fim: string
   status: string
   tipo: string
-  prioridade: string
   descricao?: string
   lojas?: Loja[]
 }
@@ -113,7 +112,7 @@ function getLastDayOfMonth(year: number, month: number): string {
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 }
 
-// Configuração de status
+// Configuração de status (sem prioridade)
 const getStatusConfig = (status: string) => {
   switch (status) {
     case 'concluida':
@@ -129,21 +128,7 @@ const getStatusConfig = (status: string) => {
   }
 }
 
-// Configuração de prioridade
-const getPrioridadeConfig = (prioridade: string) => {
-  switch (prioridade) {
-    case 'alta':
-      return { color: '#ef4444', bg: '#fee2e2', label: '🔴 Alta', icon: '🔴' }
-    case 'media':
-      return { color: '#f59e0b', bg: '#fef3c7', label: '🟡 Média', icon: '🟡' }
-    case 'baixa':
-      return { color: '#10b981', bg: '#d1fae5', label: '🟢 Baixa', icon: '🟢' }
-    default:
-      return { color: '#6b7280', bg: '#f3f4f6', label: '⚪ Normal', icon: '⚪' }
-  }
-}
-
-// Configuração de tipo - ATUALIZADO COM NOVAS OPÇÕES
+// Configuração de tipo
 const getTipoConfig = (tipo: string) => {
   switch (tipo) {
     case 'compre_ganhe':
@@ -180,7 +165,53 @@ function Checkbox({ checked, onCheckedChange }: { checked: boolean; onCheckedCha
   )
 }
 
-// Componente de Detalhes da Ação
+// Função para atualizar automaticamente os status das ações baseado nas datas
+async function atualizarStatusAcoes() {
+  try {
+    const hoje = new Date().toISOString().split('T')[0]
+    console.log('📅 Atualizando status das ações... Data atual:', hoje)
+    
+    // Buscar todas as ações que não estão concluídas
+    const { data: acoes, error } = await supabase
+      .from('acoes')
+      .select('id, data_inicio, data_fim, status')
+      .neq('status', 'concluida')
+    
+    if (error) throw error
+    if (!acoes || acoes.length === 0) return
+    
+    const updates = []
+    
+    for (const acao of acoes) {
+      let novoStatus = null
+      
+      if (hoje < acao.data_inicio) {
+        novoStatus = 'agendada'
+      } else if (hoje >= acao.data_inicio && hoje <= acao.data_fim) {
+        novoStatus = 'em_andamento'
+      } else if (hoje > acao.data_fim) {
+        novoStatus = 'concluida'
+      }
+      
+      if (novoStatus && novoStatus !== acao.status) {
+        updates.push(
+          supabase.from('acoes').update({ status: novoStatus }).eq('id', acao.id)
+        )
+        console.log(`🔄 Ação ${acao.id}: ${acao.status} → ${novoStatus}`)
+      }
+    }
+    
+    if (updates.length > 0) {
+      await Promise.all(updates)
+      console.log(`✅ ${updates.length} ações tiveram status atualizado`)
+    }
+    
+  } catch (error) {
+    console.error('Erro ao atualizar status das ações:', error)
+  }
+}
+
+// Componente de Detalhes da Ação (sem prioridade)
 function DetalhesAcao({ 
   acao, 
   open, 
@@ -195,7 +226,6 @@ function DetalhesAcao({
   if (!acao) return null
 
   const statusConfig = getStatusConfig(acao.status)
-  const prioridadeConfig = getPrioridadeConfig(acao.prioridade)
   const tipoConfig = getTipoConfig(acao.tipo)
   const StatusIcon = statusConfig.icon
   const TipoIcon = tipoConfig.icon
@@ -214,15 +244,6 @@ function DetalhesAcao({
       case 'concluida': return 'text-green-600 bg-green-100'
       case 'pendente': return 'text-yellow-600 bg-yellow-100'
       case 'agendada': return 'text-blue-600 bg-blue-100'
-      default: return 'text-gray-600 bg-gray-100'
-    }
-  }
-
-  const getPrioridadeBadgeColor = () => {
-    switch (acao.prioridade) {
-      case 'alta': return 'text-red-600 bg-red-100'
-      case 'media': return 'text-yellow-600 bg-yellow-100'
-      case 'baixa': return 'text-green-600 bg-green-100'
       default: return 'text-gray-600 bg-gray-100'
     }
   }
@@ -246,26 +267,15 @@ function DetalhesAcao({
         </DialogHeader>
         
         <div className="space-y-4 py-4 max-h-[60vh] overflow-y-auto">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <Flag className="h-4 w-4 text-gray-500" />
-                <span className="text-sm font-medium text-gray-500">Status</span>
-              </div>
-              <Badge className={cn(getStatusBadgeColor(), "text-sm")}>
-                <StatusIcon className="h-3 w-3 mr-1" />
-                {statusConfig.label}
-              </Badge>
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <Flag className="h-4 w-4 text-gray-500" />
+              <span className="text-sm font-medium text-gray-500">Status</span>
             </div>
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <AlertCircle className="h-4 w-4 text-gray-500" />
-                <span className="text-sm font-medium text-gray-500">Prioridade</span>
-              </div>
-              <Badge className={cn(getPrioridadeBadgeColor(), "text-sm")}>
-                {prioridadeConfig.label}
-              </Badge>
-            </div>
+            <Badge className={cn(getStatusBadgeColor(), "text-sm")}>
+              <StatusIcon className="h-3 w-3 mr-1" />
+              {statusConfig.label}
+            </Badge>
           </div>
 
           <div>
@@ -359,10 +369,9 @@ function DetalhesAcao({
   )
 }
 
-// Componente de Tooltip da Ação
+// Componente de Tooltip da Ação (sem prioridade)
 function AcaoTooltip({ acao, children }: { acao: Acao; children: React.ReactNode }) {
   const statusConfig = getStatusConfig(acao.status)
-  const prioridadeConfig = getPrioridadeConfig(acao.prioridade)
   const tipoConfig = getTipoConfig(acao.tipo)
   const TipoIcon = tipoConfig.icon
 
@@ -381,8 +390,6 @@ function AcaoTooltip({ acao, children }: { acao: Acao; children: React.ReactNode
             <p className="flex items-center gap-2">
               <span className="opacity-70">Status:</span>
               <span style={{ color: statusConfig.color }}>{statusConfig.label}</span>
-              <span className="opacity-70 ml-2">Prioridade:</span>
-              <span>{prioridadeConfig.label}</span>
             </p>
             <p>📅 {new Date(acao.data_inicio + 'T00:00:00').toLocaleDateString('pt-BR')} até {new Date(acao.data_fim + 'T00:00:00').toLocaleDateString('pt-BR')}</p>
             <p>🏪 {acao.lojas?.length || 0} lojas participantes</p>
@@ -413,11 +420,10 @@ export default function Acoes() {
   
   // Estado dos filtros
   const [filtroStatus, setFiltroStatus] = useState<string>('todos')
-  const [filtroPrioridade, setFiltroPrioridade] = useState<string>('todas')
   const [filtroTipo, setFiltroTipo] = useState<string>('todos')
   const [lojasSelecionadas, setLojasSelecionadas] = useState<string[]>([])
   
-  // Estado da nova ação
+  // Estado da nova ação (sem prioridade)
   const [novaAcao, setNovaAcao] = useState({
     nome: '',
     loja_ids: [] as string[],
@@ -425,7 +431,6 @@ export default function Acoes() {
     data_fim: '',
     status: 'pendente' as const,
     tipo: 'compre_ganhe',
-    prioridade: 'media',
     descricao: ''
   })
   const [salvando, setSalvando] = useState(false)
@@ -519,10 +524,6 @@ export default function Acoes() {
         query = query.eq('status', filtroStatus)
       }
       
-      if (filtroPrioridade !== 'todas') {
-        query = query.eq('prioridade', filtroPrioridade)
-      }
-      
       if (filtroTipo !== 'todos') {
         query = query.eq('tipo', filtroTipo)
       }
@@ -572,9 +573,16 @@ export default function Acoes() {
     setLoading(false)
   }
 
+  // useEffect com atualização automática de status
   useEffect(() => {
-    carregarDados()
-  }, [mesAtual, filtroStatus, filtroPrioridade, filtroTipo])
+    const init = async () => {
+      // Primeiro atualiza os status automaticamente
+      await atualizarStatusAcoes()
+      // Depois carrega os dados
+      await carregarDados()
+    }
+    init()
+  }, [mesAtual, filtroStatus, filtroTipo])
 
   // Filtrar lojas
   const lojasFiltradas = lojas.filter(loja => {
@@ -586,29 +594,13 @@ export default function Acoes() {
     return matchNome && matchSelecao
   })
 
-  // ============================================
-  // FUNÇÃO CORRIGIDA - COM ORDENAÇÃO POR PRIORIDADE
-  // ============================================
+  // Função para obter ações do dia (sem ordenação por prioridade)
   function getAcoesDoDia(lojaId: string, dia: number) {
     const dateStr = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
     
-    const acoesDoDia = acoes.filter(acao => {
+    return acoes.filter(acao => {
       if (!acao.loja_ids?.includes(lojaId)) return false
       return dateStr >= acao.data_inicio && dateStr <= acao.data_fim
-    })
-    
-    // Ordem de prioridade: Alta (🔴) primeiro, depois Média (🟡), depois Baixa (🟢)
-    const prioridadeOrder: Record<string, number> = { 
-      'alta': 0,    // 🔴 Rosa/Alta - aparece primeiro (em cima)
-      'media': 1,   // 🟡 Amarelo/Média - aparece depois (no meio)
-      'baixa': 2    // 🟢 Verde/Baixa - aparece por último (embaixo)
-    }
-    
-    // Ordenar o array
-    return [...acoesDoDia].sort((a, b) => {
-      const orderA = prioridadeOrder[a.prioridade] ?? 3
-      const orderB = prioridadeOrder[b.prioridade] ?? 3
-      return orderA - orderB
     })
   }
 
@@ -658,7 +650,6 @@ export default function Acoes() {
           data_fim: novaAcao.data_fim,
           status: novaAcao.status,
           tipo: novaAcao.tipo,
-          prioridade: novaAcao.prioridade,
           descricao: novaAcao.descricao
         }])
         .select()
@@ -685,7 +676,6 @@ export default function Acoes() {
         data_fim: '',
         status: 'pendente',
         tipo: 'compre_ganhe',
-        prioridade: 'media',
         descricao: ''
       })
       await carregarAcoes()
@@ -721,7 +711,6 @@ export default function Acoes() {
           data_fim: editandoAcao.data_fim,
           status: editandoAcao.status,
           tipo: editandoAcao.tipo,
-          prioridade: editandoAcao.prioridade,
           descricao: editandoAcao.descricao
         })
         .eq('id', editandoAcao.id)
@@ -790,7 +779,6 @@ export default function Acoes() {
   const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
   
   const filtrosAtivos = (filtroStatus !== 'todos' ? 1 : 0) + 
-                        (filtroPrioridade !== 'todas' ? 1 : 0) + 
                         (filtroTipo !== 'todos' ? 1 : 0) + 
                         (lojasSelecionadas.length > 0 ? 1 : 0)
 
@@ -805,7 +793,7 @@ export default function Acoes() {
     )
   }
 
-  // Lista de tipos de ação para usar nos selects
+  // Lista de tipos de ação
   const tiposAcao = [
     { value: 'compre_ganhe', label: '🎁 Compre e Ganhe', description: 'Promoção onde o cliente compra e ganha brindes' },
     { value: 'compre_aplique', label: '🛍️ Compre e Aplique', description: 'Promoção onde o cliente compra e aplica o produto' },
@@ -904,22 +892,11 @@ export default function Acoes() {
             <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
             <span>Agendada</span>
           </div>
-          <div className="flex items-center gap-2 ml-4">
-            <span>🔴 Alta</span>
-            <span>🟡 Média</span>
-            <span>🟢 Baixa</span>
-          </div>
           {filtroStatus !== 'todos' && (
             <Badge variant="outline" className="text-xs">
               Status: {filtroStatus === 'em_andamento' ? 'Em Andamento' : 
                        filtroStatus === 'concluida' ? 'Concluída' : 
                        filtroStatus === 'pendente' ? 'Pendente' : 'Agendada'}
-            </Badge>
-          )}
-          {filtroPrioridade !== 'todas' && (
-            <Badge variant="outline" className="text-xs">
-              Prioridade: {filtroPrioridade === 'alta' ? '🔴 Alta' : 
-                           filtroPrioridade === 'media' ? '🟡 Média' : '🟢 Baixa'}
             </Badge>
           )}
           {lojasSelecionadas.length > 0 && (
@@ -986,7 +963,6 @@ export default function Acoes() {
                           <div className="space-y-1.5">
                             {acoesDoDia.map((acao) => {
                               const statusConfig = getStatusConfig(acao.status)
-                              const prioridadeConfig = getPrioridadeConfig(acao.prioridade)
                               const tipoConfig = getTipoConfig(acao.tipo)
                               const StatusIcon = statusConfig.icon
                               const TipoIcon = tipoConfig.icon
@@ -1012,7 +988,6 @@ export default function Acoes() {
                                       </div>
                                     </div>
                                     <div className="flex items-center justify-between mt-1">
-                                      <span className="text-[10px]">{prioridadeConfig.label}</span>
                                       <span className="text-[10px] text-gray-400">
                                         {new Date(acao.data_inicio + 'T00:00:00').getDate() === dia ? 
                                           (new Date(acao.data_fim + 'T00:00:00').getDate() === dia ? 'Único' : 'Início') :
@@ -1131,7 +1106,7 @@ export default function Acoes() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label>Tipo</Label>
                     <Select 
@@ -1147,23 +1122,6 @@ export default function Acoes() {
                             {tipo.label}
                           </SelectItem>
                         ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label>Prioridade</Label>
-                    <Select 
-                      value={editandoAcao.prioridade} 
-                      onValueChange={(value) => setEditandoAcao({ ...editandoAcao, prioridade: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="baixa">🟢 Baixa</SelectItem>
-                        <SelectItem value="media">🟡 Média</SelectItem>
-                        <SelectItem value="alta">🔴 Alta</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1243,21 +1201,6 @@ export default function Acoes() {
                     <SelectItem value="pendente">Pendente</SelectItem>
                     <SelectItem value="concluida">Concluída</SelectItem>
                     <SelectItem value="agendada">Agendada</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Prioridade</Label>
-                <Select value={filtroPrioridade} onValueChange={setFiltroPrioridade}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione uma prioridade" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todas">Todas</SelectItem>
-                    <SelectItem value="alta">🔴 Alta</SelectItem>
-                    <SelectItem value="media">🟡 Média</SelectItem>
-                    <SelectItem value="baixa">🟢 Baixa</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1344,7 +1287,6 @@ export default function Acoes() {
             <DialogFooter>
               <Button variant="outline" onClick={() => {
                 setFiltroStatus('todos')
-                setFiltroPrioridade('todas')
                 setFiltroTipo('todos')
                 setLojasSelecionadas([])
               }}>
@@ -1509,7 +1451,7 @@ export default function Acoes() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Tipo</Label>
                   <Select value={novaAcao.tipo} onValueChange={(value) => setNovaAcao({ ...novaAcao, tipo: value })}>
@@ -1522,20 +1464,6 @@ export default function Acoes() {
                           {tipo.label}
                         </SelectItem>
                       ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label>Prioridade</Label>
-                  <Select value={novaAcao.prioridade} onValueChange={(value) => setNovaAcao({ ...novaAcao, prioridade: value })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="baixa">🟢 Baixa</SelectItem>
-                      <SelectItem value="media">🟡 Média</SelectItem>
-                      <SelectItem value="alta">🔴 Alta</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
