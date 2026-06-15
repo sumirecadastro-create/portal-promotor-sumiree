@@ -12,7 +12,6 @@ import {
   User,
   Calendar,
   Target,
-  Upload,  // ← ADICIONADO
 } from 'lucide-react'
 import {
   Sidebar,
@@ -38,7 +37,6 @@ const allItems = [
   { title: 'Ações', url: '/acoes', icon: Target },
   { title: 'Campanhas', url: '/campanhas', icon: Calendar },
   { title: 'Relatórios', url: '/relatorios', icon: BarChart3 },
-  { title: 'Importar Usuários', url: '/importar-usuarios', icon: Upload },  // ← ADICIONADO
 ]
 
 export function AppSidebar() {
@@ -65,10 +63,10 @@ export function AppSidebar() {
 
   // 🔥 Filtro de menu baseado no perfil
   const items = allItems.filter((item) => {
-    // ADMIN: vê tudo (incluindo Cadastro de Usuários e Importar Usuários)
+    // ADMIN: vê tudo
     if (role === 'admin') return true
     
-    // GESTOR: NÃO vê Cadastro de Usuários nem Importar Usuários
+    // GESTOR: NÃO vê Cadastro de Usuários
     if (role === 'gestor')
       return ['Dashboard', 'Lojas', 'Promotores', 'Ações', 'Campanhas', 'Relatórios'].includes(item.title)
     
