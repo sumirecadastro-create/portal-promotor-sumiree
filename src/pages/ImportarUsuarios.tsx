@@ -21,24 +21,29 @@ export default function ImportarUsuarios() {
   const [resultado, setResultado] = useState<{ sucesso: number; erro: number; detalhes: string[] }>({ sucesso: 0, erro: 0, detalhes: [] })
   const { toast } = useToast()
 
-  // Função para parsear os dados
+  // Função para parsear os dados - CORRIGIDA
   const parsearDados = (texto: string): UsuarioImport[] => {
-    const linhas = texto.split('\n').filter(l => l.trim())
+    const linhas = texto.split('\n').filter(l => l.trim() && !l.startsWith('--'))
     const usuarios: UsuarioImport[] = []
     let senhaIndex = 1
 
     for (const linha of linhas) {
-      // Ignorar linhas de cabeçalho ou vazias
-      if (linha.startsWith('--') || linha.startsWith('L') === false) continue
-      
-      // Formato esperado: L01|Angélica Claro|angelica.claro@sumireonline.com.br|gestor
-      const partes = linha.split('|').map(p => p.trim())
+      // Remover espaços extras e caracteres especiais
+      const linhaLimpa = linha.replace(/^[-*]\s*/, '').trim()
+      const partes = linhaLimpa.split('|').map(p => p.trim())
       
       if (partes.length >= 4) {
         const lojaCodigo = partes[0]
         const nome = partes[1]
         const email = partes[2]
         const cargo = partes[3] as 'admin' | 'regional' | 'gestor' | 'apoio'
+        
+        // Validar email
+        if (!email.includes('@')) {
+          console.error(`Email inválido: ${email}`)
+          continue
+        }
+        
         const senha = `Sumire@${String(senhaIndex++).padStart(2, '0')}`
         
         usuarios.push({
@@ -54,11 +59,62 @@ export default function ImportarUsuarios() {
     return usuarios
   }
 
-  // Dados pré-formatados para você copiar e colar
-  const dadosExemplo = `L01|Angélica Claro|angelica.claro@sumireonline.com.br|gestor
+  // Dados corrigidos (com @ nos emails)
+  const dadosCorrigidos = `L01|Angélica Claro|angelica.claro@sumireonline.com.br|gestor
 L03|Fernanda Costa|fernanda.costa@sumireonline.com.br|gestor
 L04|Natália Neves|natalia.neves@sumireonline.com.br|gestor
 L05|Simone Rezende|simone.rezende@sumireonline.com.br|gestor
+L07|Adriana Martins|adriana.martins@sumireonline.com.br|gestor
+L08|Michelli Lima|michelli.lima@sumireonline.com.br|gestor
+L09|Amanda Silva|amanda.silva@sumireonline.com.br|gestor
+L10|Michele Castilho|michele.castilho@sumireonline.com.br|gestor
+L11|Vanessa Carini|vanessa.carini@sumireonline.com.br|gestor
+L12|Daimon Camargo|daimon.camargo@sumireonline.com.br|gestor
+L13|Juliete Cordeiro|juliete.cordeiro@sumireonline.com.br|gestor
+L14|Dalila Oliveira|dalila.oliveira@sumireonline.com.br|gestor
+L25|Rafaela Nascimento|rafaela.nascimento@sumireonline.com.br|gestor
+L26|Tiffany Jesus|tiffany.jesus@sumireonline.com.br|gestor
+L29|Ana Paula Ferecini|anapaula.ferecini@sumireonline.com.br|gestor
+L30|Stefani Souza|stefani.souza@sumireonline.com.br|gestor
+L32|Gisele Alves|gisele.alves@sumireonline.com.br|gestor
+L33|João Lizardo|joao.lizardo@sumireonline.com.br|gestor
+L34|Valdilene Barros|valdilene.barros@sumireonline.com.br|gestor
+L35|Juliana Silva|juliana.silva@sumireonline.com.br|gestor
+L42|Maria Sousa|maria.sousa@sumireonline.com.br|gestor
+L43|Erika Takamine|erika.takamine@sumireonline.com.br|gestor
+L44|Karen Giosa|karen.giosa@sumireonline.com.br|gestor
+L45|Luana Louzada|luana.louzada@sumireonline.com.br|gestor
+L46|Alessandra Vieira|alessandra.vieira@sumireonline.com.br|gestor
+L47|Solange Sales|solange.sales@sumireonline.com.br|gestor
+L48|Sheile Pereira|sheile.pereira@sumireonline.com.br|gestor
+L49|Elisangela Ferreira|elisangela.ferreira@sumireonline.com.br|gestor
+L50|Marcos Gonçalves|marcos.goncalves@sumireonline.com.br|gestor
+L51|Nicole Benedicto|nicole.benedicto@sumireonline.com.br|gestor
+L52|Carolini Quaresma|carolini.quaresma@sumireonline.com.br|gestor
+L54|Joice Marques|joice.marques@sumireonline.com.br|gestor
+L55|Iza Taiane|iza.taiane@sumireonline.com.br|gestor
+L56|Luciana Colombo|luciana.colombo@sumireonline.com.br|gestor
+L57|Gláucia Franchi|glaucia.franchi@sumireonline.com.br|gestor
+L58|Claudia Maeda|claudia.maeda@sumireonline.com.br|gestor
+L60|Letícia Rodrigues|leticia.rodrigues@sumireonline.com.br|gestor
+L61|Márcia Strozzi|marcia.strozzi@sumireonline.com.br|gestor
+L62|Sandra Malerva|sandra.malerva@sumireonline.com.br|gestor
+L63|Ivanete Gimenez|ivanete.gimenez@sumireonline.com.br|gestor
+L64|Graciele Cunha|graciele.cunha@sumireonline.com.br|gestor
+L66|Inara Felix|inara.felix@sumireonline.com.br|gestor
+L67|Franciele Souza|franciele.souza@sumireonline.com.br|gestor
+L70|Edneia Degoes|edneia.degoes@sumireonline.com.br|gestor
+L71|Anna Lucia|anna.lucia@sumireonline.com.br|gestor
+L72|Natália Jesus|natalia.jesus@sumireonline.com.br|gestor
+L77|Jeane Cruz|jeane.cruz@sumireonline.com.br|gestor
+L78|Silviane Pessoa|silviane.pessoa@sumireonline.com.br|gestor
+L79|Sonia Ferreira|sonia.ferreira@sumireonline.com.br|gestor
+L80|Ellen Santos|ellen.santos@sumireonline.com.br|gestor
+L81|Beatriz Rodrigues|beatriz.rodrigues@sumireonline.com.br|gestor
+L83|Thais Ribeiro|thais.ribeiro@sumireonline.com.br|gestor
+L84|Fran Cassia|fran.cassia@sumireonline.com.br|gestor
+L85|Eliana Pinheiro|eliana.pinheiro@sumireonline.com.br|gestor
+L86|Marcilene Oliveira|marcilene.oliveira@sumireonline.com.br|gestor
 REGIONAL|Simone Rezende|simone.rezende@sumireonline.com.br|regional
 REGIONAL|Angélica Claro|angelica.claro@sumireonline.com.br|regional
 REGIONAL|Henrique Bittencourt|henrique.bittencourt@sumireonline.com.br|regional
@@ -78,6 +134,13 @@ REGIONAL|Claudia Honda|claudia.honda@sumireonline.com.br|regional`
     setResultado({ sucesso: 0, erro: 0, detalhes: [] })
     
     const usuarios = parsearDados(dados)
+    
+    if (usuarios.length === 0) {
+      toast({ variant: 'destructive', title: 'Erro', description: 'Nenhum usuário válido encontrado. Verifique o formato dos dados.' })
+      setImportando(false)
+      return
+    }
+    
     let sucesso = 0
     let erro = 0
     const detalhes: string[] = []
@@ -87,53 +150,51 @@ REGIONAL|Claudia Honda|claudia.honda@sumireonline.com.br|regional`
         // 1. Buscar loja_id se for gestor
         let lojaId = null
         if (usuario.loja_codigo) {
-          const { data: loja } = await supabase
+          const { data: loja, error: lojaError } = await supabase
             .from('lojas')
             .select('id')
             .eq('cod_loja', usuario.loja_codigo)
             .single()
           
-          if (loja) {
-            lojaId = loja.id
-          } else {
+          if (lojaError) {
             detalhes.push(`❌ Loja ${usuario.loja_codigo} não encontrada para ${usuario.email}`)
             erro++
             continue
           }
+          
+          if (loja) {
+            lojaId = loja.id
+          }
         }
 
-        // 2. Verificar se usuário já existe no Auth
-        const { data: existingUser } = await supabase.auth.admin.getUserByEmail(usuario.email)
-        
-        let userId = existingUser?.user?.id
-        
-        // 3. Se não existe, criar no Auth
-        if (!userId) {
-          const { data: newUser, error: signUpError } = await supabase.auth.admin.createUser({
-            email: usuario.email,
-            password: usuario.password,
-            email_confirm: true,
-            user_metadata: { nome: usuario.nome, cargo: usuario.cargo }
-          })
-          
-          if (signUpError) throw signUpError
-          userId = newUser.user.id
-        }
-        
-        // 4. Inserir/Atualizar na tabela usuarios_internos
-        const { error: upsertError } = await supabase
+        // 2. Verificar se usuário já existe
+        const { data: existingUser, error: searchError } = await supabase
           .from('usuarios_internos')
-          .upsert({
-            id: userId,
-            nome: usuario.nome,
-            email: usuario.email,
-            cargo: usuario.cargo,
-            loja_id: lojaId,
-            status: 'ativo',
-            updated_at: new Date().toISOString()
-          })
+          .select('id')
+          .eq('email', usuario.email)
+          .single()
         
-        if (upsertError) throw upsertError
+        let userId = existingUser?.id
+        
+        // 3. Se não existe, criar na tabela usuarios_internos
+        if (!userId) {
+          const { data: newUser, error: insertError } = await supabase
+            .from('usuarios_internos')
+            .insert({
+              nome: usuario.nome,
+              email: usuario.email,
+              cargo: usuario.cargo,
+              loja_id: lojaId,
+              status: 'ativo',
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+            .select()
+            .single()
+          
+          if (insertError) throw insertError
+          userId = newUser.id
+        }
         
         sucesso++
         detalhes.push(`✅ ${usuario.nome} (${usuario.email}) - ${usuario.cargo}${usuario.loja_codigo ? ` - Loja ${usuario.loja_codigo}` : ''} - Senha: ${usuario.password}`)
@@ -141,6 +202,7 @@ REGIONAL|Claudia Honda|claudia.honda@sumireonline.com.br|regional`
       } catch (error: any) {
         erro++
         detalhes.push(`❌ Erro ao criar ${usuario.email}: ${error.message}`)
+        console.error('Erro detalhado:', error)
       }
     }
     
@@ -173,6 +235,8 @@ REGIONAL|Claudia Honda|claudia.honda@sumireonline.com.br|regional`
             Cargos: <strong>admin, regional, gestor, apoio</strong>
             <br />
             Para regionais, use <code>REGIONAL</code> no lugar do código da loja
+            <br />
+            <span className="text-red-500">Importante: O email deve conter @</span>
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -192,7 +256,7 @@ REGIONAL|Claudia Honda|claudia.honda@sumireonline.com.br|regional`
             </div>
             
             <Button
-              onClick={() => setDados(dadosExemplo)}
+              onClick={() => setDados(dadosCorrigidos)}
               variant="outline"
               size="sm"
             >
