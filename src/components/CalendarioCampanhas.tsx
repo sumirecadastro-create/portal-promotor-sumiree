@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -78,6 +79,7 @@ export function CalendarioCampanhas() {
     try {
       setLoading(true)
       console.log('🚀 Iniciando loadData...')
+      console.log('👤 isAdmin:', isAdmin, 'userLojaId:', userLojaId)
       
       // Buscar lojas
       let lojasQuery = supabase
@@ -99,10 +101,34 @@ export function CalendarioCampanhas() {
       setLojas(lojasData || [])
       console.log(`✅ ${lojasData?.length || 0} lojas carregadas`)
       
-      // Buscar TODAS as campanhas
-      const { data: campanhasData, error: campanhasError } = await supabase
-        .from('campanhas')
-        .select('*')
+      // 🔥 FILTRAR CAMPANHAS POR LOJA - Se não for admin
+      let campanhasQuery = supabase.from('campanhas').select('*')
+      
+      if (!isAdmin && userLojaId) {
+        // Buscar IDs das campanhas que incluem a loja do usuário
+        const { data: campanhasComLoja, error: filterError } = await supabase
+          .from('lojas_campanhas')
+          .select('campanha_id')
+          .eq('loja_id', userLojaId)
+        
+        if (filterError) {
+          console.error('Erro ao filtrar campanhas por loja:', filterError)
+        }
+        
+        const campanhaIds = campanhasComLoja?.map(c => c.campanha_id) || []
+        
+        if (campanhaIds.length > 0) {
+          campanhasQuery = campanhasQuery.in('id', campanhaIds)
+          console.log(`🔍 Filtrando ${campanhaIds.length} campanhas para a loja ${userLojaId}`)
+        } else {
+          console.log('⚠️ Nenhuma campanha encontrada para esta loja')
+          setCampanhas([])
+          setLoading(false)
+          return
+        }
+      }
+      
+      const { data: campanhasData, error: campanhasError } = await campanhasQuery
       
       if (campanhasError) {
         console.error('Erro ao buscar campanhas:', campanhasError)
@@ -155,7 +181,7 @@ export function CalendarioCampanhas() {
         }
       })
       
-      // Formatar campanhas (incluindo campanhas sem lojas)
+      // Formatar campanhas
       const campanhasFormatadas = campanhasData.map(camp => ({
         ...camp,
         lojas: lojasPorCampanha[camp.id] || []
@@ -408,24 +434,32 @@ export function CalendarioCampanhas() {
     return days
   }
 
-  // FUNÇÃO CORRIGIDA - Versão SIMPLIFICADA E GARANTIDA
+  // FUNÇÃO CORRIGIDA - Filtrar campanhas por data e por loja do usuário
   const getCampanhasForDay = (date: Date) => {
-    // Formatar data no formato YYYY-MM-DD
     const year = date.getFullYear()
     const month = String(date.getMonth() + 1).padStart(2, '0')
     const day = String(date.getDate()).padStart(2, '0')
     const dateStr = `${year}-${month}-${day}`
     
-    // Filtrar campanhas pela data
-    const campanhasNoDia = campanhas.filter(campanha => {
-      // Campanha sem lojas não exibe
+    // Primeiro filtrar pela data
+    let campanhasNoDia = campanhas.filter(campanha => {
       if (!campanha.lojas || campanha.lojas.length === 0) return false
-      
-      // Verificar se a data está dentro do período
-      const dentroPeriodo = dateStr >= campanha.data_inicio && dateStr <= campanha.data_fim
-      
-      return dentroPeriodo
+      return dateStr >= campanha.data_inicio && dateStr <= campanha.data_fim
     })
+    
+    // Se não for admin, filtrar apenas campanhas que incluem a loja do usuário
+    if (!isAdmin && userLojaId) {
+      campanhasNoDia = campanhasNoDia.filter(campanha => {
+        return campanha.lojas?.some(loja => loja.id === userLojaId)
+      })
+    }
+    
+    // Aplicar filtro de lojas do calendário (se houver)
+    if (filterLojas.length > 0) {
+      campanhasNoDia = campanhasNoDia.filter(campanha => {
+        return campanha.lojas?.some(loja => filterLojas.includes(loja.id))
+      })
+    }
     
     return campanhasNoDia
   }
@@ -515,6 +549,11 @@ export function CalendarioCampanhas() {
                 </li>
               ))}
             </ul>
+          </div>
+        )}
+        {!isAdmin && userLojaId && (
+          <div className="mt-3 p-2 bg-green-100 rounded text-green-800 text-sm">
+            📍 Visualizando apenas campanhas da sua loja (ID: {userLojaId.substring(0, 8)})
           </div>
         )}
       </div>
