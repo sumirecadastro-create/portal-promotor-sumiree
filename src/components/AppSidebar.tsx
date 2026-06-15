@@ -37,6 +37,7 @@ const allItems = [
   { title: 'Ações', url: '/acoes', icon: Target },
   { title: 'Campanhas', url: '/campanhas', icon: Calendar },
   { title: 'Relatórios', url: '/relatorios', icon: BarChart3 },
+  { title: 'Importar Usuários', url: '/importar-usuarios', icon: Upload },
 ]
 
 export function AppSidebar() {
