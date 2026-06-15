@@ -18,7 +18,7 @@ import Configuracoes from './pages/Configuracoes'  // ← ADICIONE ESTA LINHA
 import NotFound from './pages/NotFound'
 import Login from './pages/Login'
 import { AuthProvider } from './hooks/use-auth'
-
+import ImportarUsuarios from './pages/ImportarUsuarios'
 const App = () => (
   <BrowserRouter>
     <AuthProvider>
@@ -40,6 +40,7 @@ const App = () => (
             <Route path="/relatorios" element={<Relatorios />} />
             <Route path="/campanhas" element={<Campanhas />} />
             <Route path="/configuracoes" element={<Configuracoes />} />  {/* ← ADICIONE ESTA LINHA */}
+            <Route path="/importar-usuarios" element={<ImportarUsuarios />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
