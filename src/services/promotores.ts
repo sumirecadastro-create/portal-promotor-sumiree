@@ -26,6 +26,7 @@ export interface Promotor {
     id: string
     nome_loja: string
     cod_loja: string
+    numero_loja?: string  // Adicionado campo numero_loja
   }[]
   gerentes?: {
     id: string
@@ -150,18 +151,30 @@ export async function getPromotores(): Promise<Promotor[]> {
     const todosLojasIds = [...new Set(Object.values(lojasIdsPorPromotor).flat())]
     let lojasData: any[] = []
     if (todosLojasIds.length > 0) {
+      // CORREÇÃO: Buscar também o campo numero_loja
       const { data: lojas } = await supabase
         .from('lojas')
-        .select('id, nome_loja, cod_loja')
+        .select('id, nome_loja, cod_loja, numero_loja')
         .in('id', todosLojasIds)
-      lojasData = lojas || []
+      
+      // CORREÇÃO: Garantir que nome_loja tenha um valor significativo
+      lojasData = (lojas || []).map(loja => ({
+        ...loja,
+        // Se nome_loja estiver vazio ou for igual ao código, usar numero_loja
+        nome_loja: (!loja.nome_loja || loja.nome_loja === loja.cod_loja) && loja.numero_loja 
+          ? loja.numero_loja 
+          : loja.nome_loja
+      }))
     }
     const lojasMap = new Map(lojasData.map(l => [l.id, l]))
 
     // Organizar lojas completas por promotor
     const lojasPorPromotor: Record<string, any[]> = {}
     Object.entries(lojasIdsPorPromotor).forEach(([promotorId, lojaIds]) => {
-      lojasPorPromotor[promotorId] = lojaIds.map(id => lojasMap.get(id)).filter(Boolean)
+      lojasPorPromotor[promotorId] = lojaIds
+        .map(id => lojasMap.get(id))
+        .filter(Boolean)
+        .filter(loja => loja !== undefined) // Filtrar lojas que existem
     })
 
     // Buscar todas as cartas de uma vez
@@ -200,10 +213,16 @@ export async function getPromotores(): Promise<Promotor[]> {
           gerente = gerenteData
         }
 
+        // CORREÇÃO: Log para debug
+        const lojasDoPromotor = lojasPorPromotor[promotor.id] || []
+        if (lojasDoPromotor.length === 0 && lojasIdsPorPromotor[promotor.id]?.length > 0) {
+          console.warn(`⚠️ Promotor ${promotor.promotor_nome} tem ${lojasIdsPorPromotor[promotor.id].length} loja(s) vinculada(s) mas nenhuma foi encontrada na tabela lojas`)
+        }
+
         return {
           ...promotor,
           loja_ids: lojasIdsPorPromotor[promotor.id] || [],
-          lojas: lojasPorPromotor[promotor.id] || [],
+          lojas: lojasDoPromotor,
           gerentes: gerente,
           marcas: marcasPorPromotor[promotor.id] || [],
           carta: cartasPorPromotor[promotor.id] || null
@@ -213,9 +232,10 @@ export async function getPromotores(): Promise<Promotor[]> {
 
     const promotoresComLojas = promotoresComDados.filter(p => p.lojas && p.lojas.length > 0).length
     const promotoresComMarcas = promotoresComDados.filter(p => p.marcas && p.marcas.length > 0).length
+    const totalVinculosLojas = promotoresComDados.reduce((sum, p) => sum + (p.loja_ids?.length || 0), 0)
     
     console.log(`✅ ${promotoresComDados.length} promotores carregados`)
-    console.log(`   - ${promotoresComLojas} com lojas vinculadas`)
+    console.log(`   - ${promotoresComLojas} com lojas vinculadas (${totalVinculosLojas} vínculos totais)`)
     console.log(`   - ${promotoresComMarcas} com marcas vinculadas`)
     
     return promotoresComDados
@@ -255,11 +275,19 @@ export async function getPromotorById(id: string): Promise<Promotor | null> {
     
     let lojasData: any[] = []
     if (lojaIds.length > 0) {
+      // CORREÇÃO: Buscar também o campo numero_loja
       const { data: lojas } = await supabase
         .from('lojas')
-        .select('id, nome_loja, cod_loja')
+        .select('id, nome_loja, cod_loja, numero_loja')
         .in('id', lojaIds)
-      lojasData = lojas || []
+      
+      // CORREÇÃO: Garantir que nome_loja tenha um valor significativo
+      lojasData = (lojas || []).map(loja => ({
+        ...loja,
+        nome_loja: (!loja.nome_loja || loja.nome_loja === loja.cod_loja) && loja.numero_loja 
+          ? loja.numero_loja 
+          : loja.nome_loja
+      }))
     }
 
     // Buscar marcas do promotor
@@ -349,11 +377,12 @@ export async function getMarcasDisponiveis(): Promise<Marca[]> {
 }
 
 // Buscar todas as lojas disponíveis para vinculação
-export async function getLojasDisponiveis(): Promise<{ id: string; cod_loja: string; nome_loja: string }[]> {
+// CORREÇÃO: Adicionar numero_loja ao retorno
+export async function getLojasDisponiveis(): Promise<{ id: string; cod_loja: string; nome_loja: string; numero_loja: string }[]> {
   try {
     const { data, error } = await supabase
       .from('lojas')
-      .select('id, cod_loja, nome_loja')
+      .select('id, cod_loja, nome_loja, numero_loja')
       .order('cod_loja')
 
     if (error) {
@@ -361,7 +390,15 @@ export async function getLojasDisponiveis(): Promise<{ id: string; cod_loja: str
       throw error
     }
 
-    return data || []
+    // CORREÇÃO: Garantir que nome_loja tenha um valor significativo
+    const lojasCorrigidas = (data || []).map(loja => ({
+      ...loja,
+      nome_loja: (!loja.nome_loja || loja.nome_loja === loja.cod_loja) && loja.numero_loja 
+        ? loja.numero_loja 
+        : loja.nome_loja
+    }))
+
+    return lojasCorrigidas
   } catch (error) {
     console.error('Erro inesperado em getLojasDisponiveis:', error)
     return []
