@@ -71,6 +71,7 @@ import {
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/hooks/use-auth'
 
 // Interfaces
 interface Loja {
@@ -112,7 +113,7 @@ function getLastDayOfMonth(year: number, month: number): string {
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 }
 
-// Configuração de status (sem prioridade)
+// Configuração de status
 const getStatusConfig = (status: string) => {
   switch (status) {
     case 'concluida':
@@ -171,7 +172,6 @@ async function atualizarStatusAcoes() {
     const hoje = new Date().toISOString().split('T')[0]
     console.log('📅 Atualizando status das ações... Data atual:', hoje)
     
-    // Buscar todas as ações que não estão concluídas
     const { data: acoes, error } = await supabase
       .from('acoes')
       .select('id, data_inicio, data_fim, status')
@@ -211,7 +211,7 @@ async function atualizarStatusAcoes() {
   }
 }
 
-// Componente de Detalhes da Ação (sem prioridade)
+// Componente de Detalhes da Ação
 function DetalhesAcao({ 
   acao, 
   open, 
@@ -359,17 +359,20 @@ function DetalhesAcao({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Fechar
           </Button>
-          <Button onClick={handleEditar} style={{ background: PRIMARY_COLOR }}>
-            <Edit className="h-4 w-4 mr-2" />
-            Editar Ação
-          </Button>
+          {/* 🔥 Botão Editar - apenas ADMIN pode editar */}
+          {isAdmin && (
+            <Button onClick={handleEditar} style={{ background: PRIMARY_COLOR }}>
+              <Edit className="h-4 w-4 mr-2" />
+              Editar Ação
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
   )
 }
 
-// Componente de Tooltip da Ação (sem prioridade)
+// Componente de Tooltip da Ação
 function AcaoTooltip({ acao, children }: { acao: Acao; children: React.ReactNode }) {
   const statusConfig = getStatusConfig(acao.status)
   const tipoConfig = getTipoConfig(acao.tipo)
@@ -402,6 +405,9 @@ function AcaoTooltip({ acao, children }: { acao: Acao; children: React.ReactNode
 }
 
 export default function Acoes() {
+  // 🔥 CONTROLE DE ACESSO
+  const { isAdmin, isGerente, userLojaId, loading: authLoading } = useAuth()
+  
   // Estados principais
   const [mesAtual, setMesAtual] = useState(new Date())
   const [lojaFiltroNome, setLojaFiltroNome] = useState('')
@@ -423,7 +429,7 @@ export default function Acoes() {
   const [filtroTipo, setFiltroTipo] = useState<string>('todos')
   const [lojasSelecionadas, setLojasSelecionadas] = useState<string[]>([])
   
-  // Estado da nova ação (sem prioridade)
+  // Estado da nova ação
   const [novaAcao, setNovaAcao] = useState({
     nome: '',
     loja_ids: [] as string[],
@@ -451,23 +457,19 @@ export default function Acoes() {
   const hoje = new Date()
   hoje.setHours(0, 0, 0, 0)
 
-  // Data atual no formato YYYY-MM-DD para comparação
   const hojeStr = formatLocalDate(hoje)
 
-  // Abrir modal de detalhes
   const abrirDetalhes = (acao: Acao) => {
     setAcaoSelecionada(acao)
     setShowDetalhesModal(true)
   }
 
-  // Abrir modal de edição
   const abrirEdicao = (acao: Acao) => {
     setEditandoAcao({ ...acao })
     setSelectedLojasEdit(acao.lojas?.map(l => l.id) || [])
     setShowEditModal(true)
   }
 
-  // Funções do Popover
   const abrirSelecionarLojas = () => {
     setLojasSelecionadasTemp([...novaAcao.loja_ids])
     setBuscaLojasTemp('')
@@ -483,13 +485,20 @@ export default function Acoes() {
     setLojasPopoverOpen(false)
   }
 
-  // Buscar lojas do Supabase
+  // 🔥 Buscar lojas com filtro por permissão do gerente
   async function carregarLojas() {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('lojas')
         .select('*')
         .order('nome_loja', { ascending: true })
+      
+      // Se for gerente (não admin), filtrar apenas a loja dele
+      if (isGerente && !isAdmin && userLojaId) {
+        query = query.eq('id', userLojaId)
+      }
+      
+      const { data, error } = await query
       
       if (error) throw error
       
@@ -500,19 +509,34 @@ export default function Acoes() {
       }))
       
       setLojas(lojasFormatadas)
+      
+      // Se for gerente e tem apenas uma loja, auto-selecionar
+      if (isGerente && !isAdmin && userLojaId && lojasFormatadas.length === 1) {
+        setLojasSelecionadas([userLojaId])
+      }
     } catch (err) {
       console.error('Erro ao carregar lojas:', err)
       setError('Não foi possível carregar as lojas')
     }
   }
 
-  // Buscar ações do Supabase com suas lojas
+  // 🔥 Buscar ações com filtro por permissão do gerente
   async function carregarAcoes() {
     try {
       const startDate = getFirstDayOfMonth(ano, mes)
       const endDate = getLastDayOfMonth(ano, mes)
       
-      console.log('📅 Buscando ações que cruzam o período:', startDate, 'até:', endDate)
+      // Buscar IDs das lojas permitidas para o gerente
+      let lojasPermitidasIds: string[] = []
+      
+      if (isGerente && !isAdmin) {
+        if (userLojaId) {
+          lojasPermitidasIds = [userLojaId]
+        } else {
+          const { data: lojasData } = await supabase.from('lojas').select('id')
+          lojasPermitidasIds = lojasData?.map(l => l.id) || []
+        }
+      }
       
       let query = supabase
         .from('acoes')
@@ -540,7 +564,15 @@ export default function Acoes() {
           .eq('acao_id', acao.id)
         
         if (relacoes && relacoes.length > 0) {
-          const lojaIds = relacoes.map(r => r.loja_id)
+          let lojaIds = relacoes.map(r => r.loja_id)
+          
+          // 🔥 Se for gerente, filtrar apenas lojas permitidas
+          if (isGerente && !isAdmin && lojasPermitidasIds.length > 0) {
+            lojaIds = lojaIds.filter(id => lojasPermitidasIds.includes(id))
+          }
+          
+          if (lojaIds.length === 0) return null
+          
           const { data: lojasData } = await supabase
             .from('lojas')
             .select('id, nome_loja, cod_loja')
@@ -553,14 +585,11 @@ export default function Acoes() {
           }
         }
         
-        return { 
-          ...acao, 
-          loja_ids: [],
-          lojas: []
-        }
+        return null
       }))
       
-      setAcoes(acoesComLojas)
+      const acoesFiltradas = acoesComLojas.filter(acao => acao !== null)
+      setAcoes(acoesFiltradas as Acao[])
     } catch (err) {
       console.error('Erro ao carregar ações:', err)
     }
@@ -573,18 +602,16 @@ export default function Acoes() {
     setLoading(false)
   }
 
-  // useEffect com atualização automática de status
   useEffect(() => {
     const init = async () => {
-      // Primeiro atualiza os status automaticamente
-      await atualizarStatusAcoes()
-      // Depois carrega os dados
-      await carregarDados()
+      if (!authLoading) {
+        await atualizarStatusAcoes()
+        await carregarDados()
+      }
     }
     init()
-  }, [mesAtual, filtroStatus, filtroTipo])
+  }, [mesAtual, filtroStatus, filtroTipo, authLoading, isGerente, isAdmin, userLojaId])
 
-  // Filtrar lojas
   const lojasFiltradas = lojas.filter(loja => {
     const matchNome = loja.nome_loja.toLowerCase().includes(lojaFiltroNome.toLowerCase()) ||
       (loja.codigo && loja.codigo.toLowerCase().includes(lojaFiltroNome.toLowerCase()))
@@ -594,7 +621,6 @@ export default function Acoes() {
     return matchNome && matchSelecao
   })
 
-  // Função para obter ações do dia (sem ordenação por prioridade)
   function getAcoesDoDia(lojaId: string, dia: number) {
     const dateStr = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(dia).padStart(2, '0')}`
     
@@ -782,7 +808,18 @@ export default function Acoes() {
                         (filtroTipo !== 'todos' ? 1 : 0) + 
                         (lojasSelecionadas.length > 0 ? 1 : 0)
 
-  if (loading) {
+  const tiposAcao = [
+    { value: 'compre_ganhe', label: '🎁 Compre e Ganhe', description: 'Promoção onde o cliente compra e ganha brindes' },
+    { value: 'compre_aplique', label: '🛍️ Compre e Aplique', description: 'Promoção onde o cliente compra e aplica o produto' },
+    { value: 'compre_concorra', label: '🎫 Compre e Concorra', description: 'Promoção onde o cliente compra e concorre a prêmios' },
+    { value: 'estouro_balão', label: '🎈 Estouro de Balão', description: 'Dinâmica de estouro de balões com prêmios' },
+    { value: 'roleta_premiada', label: '✨ Roleta Premiada', description: 'Dinâmica de roleta para clientes' },
+    { value: 'analise_capilar', label: '🔬 Análise Capilar', description: 'Análise e diagnóstico capilar personalizado' },
+    { value: 'abordagem', label: '📢 Abordagem', description: 'Abordagem ativa de clientes' }
+  ]
+
+  // 🔥 VERIFICAÇÃO DE CARREGAMENTO
+  if (authLoading || loading) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
@@ -793,16 +830,18 @@ export default function Acoes() {
     )
   }
 
-  // Lista de tipos de ação
-  const tiposAcao = [
-    { value: 'compre_ganhe', label: '🎁 Compre e Ganhe', description: 'Promoção onde o cliente compra e ganha brindes' },
-    { value: 'compre_aplique', label: '🛍️ Compre e Aplique', description: 'Promoção onde o cliente compra e aplica o produto' },
-    { value: 'compre_concorra', label: '🎫 Compre e Concorra', description: 'Promoção onde o cliente compra e concorre a prêmios' },
-    { value: 'estouro_balão', label: '🎈 Estouro de Balão', description: 'Dinâmica de estouro de balões com prêmios' },
-    { value: 'roleta_premiada', label: '✨ Roleta Premiada', description: 'Dinâmica de roleta para clientes' },
-    { value: 'analise_capilar', label: '🔬 Análise Capilar', description: 'Análise e diagnóstico capilar personalizado' },
-    { value: 'abordagem', label: '📢 Abordagem', description: 'Abordagem ativa de clientes' }
-  ]
+  // 🔥 VERIFICAÇÃO DE PERMISSÃO - Apenas ADMIN e GERENTE podem acessar
+  if (!isAdmin && !isGerente) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <div className="text-red-500 text-6xl mb-4">🔒</div>
+          <h2 className="text-xl font-semibold mb-2">Acesso Restrito</h2>
+          <p className="text-gray-500">Você não tem permissão para visualizar esta página.</p>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <TooltipProvider>
@@ -835,16 +874,19 @@ export default function Acoes() {
                   </Badge>
                 )}
               </Button>
-              <Button 
-                variant="default" 
-                size="sm" 
-                style={{ background: 'white', color: PRIMARY_COLOR }} 
-                className="hover:bg-gray-100"
-                onClick={() => setShowNovaAcaoModal(true)}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Nova Ação
-              </Button>
+              {/* 🔥 Botão Nova Ação - apenas ADMIN pode criar */}
+              {isAdmin && (
+                <Button 
+                  variant="default" 
+                  size="sm" 
+                  style={{ background: 'white', color: PRIMARY_COLOR }} 
+                  className="hover:bg-gray-100"
+                  onClick={() => setShowNovaAcaoModal(true)}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Nova Ação
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -1029,155 +1071,157 @@ export default function Acoes() {
           onEditar={abrirEdicao}
         />
 
-        {/* Modal de Edição */}
-        <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-          <DialogContent className="sm:max-w-[550px]">
-            <DialogHeader>
-              <DialogTitle>Editar Ação</DialogTitle>
-              <DialogDescription>
-                Altere os dados da ação. <span className="text-red-500">*</span> Campos obrigatórios.
-              </DialogDescription>
-            </DialogHeader>
-            
-            {editandoAcao && (
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label>Nome da Ação <span className="text-red-500">*</span></Label>
-                  <Input
-                    value={editandoAcao.nome}
-                    onChange={(e) => setEditandoAcao({ ...editandoAcao, nome: e.target.value })}
-                    placeholder="Ex: Promoção de Verão"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Lojas <span className="text-red-500">*</span></Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-full justify-between">
-                        {selectedLojasEdit.length === 0 ? "Selecione as lojas..." : `${selectedLojasEdit.length} loja(s) selecionada(s)`}
-                        <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[400px] p-0" align="start">
-                      <div className="p-2 border-b">
-                        <Input placeholder="Buscar loja..." className="h-8" />
-                      </div>
-                      <div className="max-h-[300px] overflow-y-auto p-2">
-                        {lojas.map((loja) => (
-                          <div
-                            key={loja.id}
-                            className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
-                            onClick={() => {
-                              setSelectedLojasEdit(prev =>
-                                prev.includes(loja.id)
-                                  ? prev.filter(id => id !== loja.id)
-                                  : [...prev, loja.id]
-                              )
-                            }}
-                          >
-                            <Checkbox checked={selectedLojasEdit.includes(loja.id)} />
-                            <Label className="cursor-pointer flex-1">
-                              {loja.codigo} - {loja.nome_loja}
-                            </Label>
-                          </div>
-                        ))}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Data Início <span className="text-red-500">*</span></Label>
-                    <Input
-                      type="date"
-                      value={editandoAcao.data_inicio}
-                      onChange={(e) => setEditandoAcao({ ...editandoAcao, data_inicio: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Data Fim <span className="text-red-500">*</span></Label>
-                    <Input
-                      type="date"
-                      value={editandoAcao.data_fim}
-                      onChange={(e) => setEditandoAcao({ ...editandoAcao, data_fim: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Tipo</Label>
-                    <Select 
-                      value={editandoAcao.tipo} 
-                      onValueChange={(value) => setEditandoAcao({ ...editandoAcao, tipo: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {tiposAcao.map(tipo => (
-                          <SelectItem key={tipo.value} value={tipo.value}>
-                            {tipo.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label>Status</Label>
-                    <Select 
-                      value={editandoAcao.status} 
-                      onValueChange={(value) => setEditandoAcao({ ...editandoAcao, status: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="pendente">⏳ Pendente</SelectItem>
-                        <SelectItem value="em_andamento">⚡ Em Andamento</SelectItem>
-                        <SelectItem value="agendada">📅 Agendada</SelectItem>
-                        <SelectItem value="concluida">✅ Concluída</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Descrição</Label>
-                  <textarea
-                    className="w-full min-h-[80px] p-2 border rounded-md text-sm"
-                    value={editandoAcao.descricao || ''}
-                    onChange={(e) => setEditandoAcao({ ...editandoAcao, descricao: e.target.value })}
-                    placeholder="Descrição detalhada da ação..."
-                  />
-                </div>
-              </div>
-            )}
-            
-            <DialogFooter>
+        {/* Modal de Edição - apenas ADMIN */}
+        {isAdmin && (
+          <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+            <DialogContent className="sm:max-w-[550px]">
+              <DialogHeader>
+                <DialogTitle>Editar Ação</DialogTitle>
+                <DialogDescription>
+                  Altere os dados da ação. <span className="text-red-500">*</span> Campos obrigatórios.
+                </DialogDescription>
+              </DialogHeader>
+              
               {editandoAcao && (
-                <Button 
-                  variant="destructive" 
-                  onClick={() => excluirAcao(editandoAcao.id, editandoAcao.nome)}
-                  className="mr-auto"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Excluir
-                </Button>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label>Nome da Ação <span className="text-red-500">*</span></Label>
+                    <Input
+                      value={editandoAcao.nome}
+                      onChange={(e) => setEditandoAcao({ ...editandoAcao, nome: e.target.value })}
+                      placeholder="Ex: Promoção de Verão"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Lojas <span className="text-red-500">*</span></Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-between">
+                          {selectedLojasEdit.length === 0 ? "Selecione as lojas..." : `${selectedLojasEdit.length} loja(s) selecionada(s)`}
+                          <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[400px] p-0" align="start">
+                        <div className="p-2 border-b">
+                          <Input placeholder="Buscar loja..." className="h-8" />
+                        </div>
+                        <div className="max-h-[300px] overflow-y-auto p-2">
+                          {lojas.map((loja) => (
+                            <div
+                              key={loja.id}
+                              className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
+                              onClick={() => {
+                                setSelectedLojasEdit(prev =>
+                                  prev.includes(loja.id)
+                                    ? prev.filter(id => id !== loja.id)
+                                    : [...prev, loja.id]
+                                )
+                              }}
+                            >
+                              <Checkbox checked={selectedLojasEdit.includes(loja.id)} />
+                              <Label className="cursor-pointer flex-1">
+                                {loja.codigo} - {loja.nome_loja}
+                              </Label>
+                            </div>
+                          ))}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Data Início <span className="text-red-500">*</span></Label>
+                      <Input
+                        type="date"
+                        value={editandoAcao.data_inicio}
+                        onChange={(e) => setEditandoAcao({ ...editandoAcao, data_inicio: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Data Fim <span className="text-red-500">*</span></Label>
+                      <Input
+                        type="date"
+                        value={editandoAcao.data_fim}
+                        onChange={(e) => setEditandoAcao({ ...editandoAcao, data_fim: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Tipo</Label>
+                      <Select 
+                        value={editandoAcao.tipo} 
+                        onValueChange={(value) => setEditandoAcao({ ...editandoAcao, tipo: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {tiposAcao.map(tipo => (
+                            <SelectItem key={tipo.value} value={tipo.value}>
+                              {tipo.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label>Status</Label>
+                      <Select 
+                        value={editandoAcao.status} 
+                        onValueChange={(value) => setEditandoAcao({ ...editandoAcao, status: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pendente">⏳ Pendente</SelectItem>
+                          <SelectItem value="em_andamento">⚡ Em Andamento</SelectItem>
+                          <SelectItem value="agendada">📅 Agendada</SelectItem>
+                          <SelectItem value="concluida">✅ Concluída</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Descrição</Label>
+                    <textarea
+                      className="w-full min-h-[80px] p-2 border rounded-md text-sm"
+                      value={editandoAcao.descricao || ''}
+                      onChange={(e) => setEditandoAcao({ ...editandoAcao, descricao: e.target.value })}
+                      placeholder="Descrição detalhada da ação..."
+                    />
+                  </div>
+                </div>
               )}
-              <Button variant="outline" onClick={() => setShowEditModal(false)}>
-                Cancelar
-              </Button>
-              <Button onClick={atualizarAcao} disabled={salvando} style={{ background: PRIMARY_COLOR }}>
-                {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                Salvar alterações
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              
+              <DialogFooter>
+                {editandoAcao && (
+                  <Button 
+                    variant="destructive" 
+                    onClick={() => excluirAcao(editandoAcao.id, editandoAcao.nome)}
+                    className="mr-auto"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Excluir
+                  </Button>
+                )}
+                <Button variant="outline" onClick={() => setShowEditModal(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={atualizarAcao} disabled={salvando} style={{ background: PRIMARY_COLOR }}>
+                  {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                  Salvar alterações
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
 
         {/* Modal de Filtro */}
         <Dialog open={showFilterModal} onOpenChange={setShowFilterModal}>
@@ -1299,213 +1343,215 @@ export default function Acoes() {
           </DialogContent>
         </Dialog>
 
-        {/* Modal de Nova Ação */}
-        <Dialog open={showNovaAcaoModal} onOpenChange={setShowNovaAcaoModal}>
-          <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader>
-              <DialogTitle>Criar Nova Ação</DialogTitle>
-              <DialogDescription>
-                Preencha os dados da ação. Os campos com * são obrigatórios.
-              </DialogDescription>
-            </DialogHeader>
-            
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label>Nome da Ação *</Label>
-                <Input
-                  value={novaAcao.nome}
-                  onChange={(e) => setNovaAcao({ ...novaAcao, nome: e.target.value })}
-                  placeholder="Ex: Promoção de Verão"
-                />
-              </div>
+        {/* Modal de Nova Ação - apenas ADMIN */}
+        {isAdmin && (
+          <Dialog open={showNovaAcaoModal} onOpenChange={setShowNovaAcaoModal}>
+            <DialogContent className="sm:max-w-[500px]">
+              <DialogHeader>
+                <DialogTitle>Criar Nova Ação</DialogTitle>
+                <DialogDescription>
+                  Preencha os dados da ação. Os campos com * são obrigatórios.
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Nome da Ação *</Label>
+                  <Input
+                    value={novaAcao.nome}
+                    onChange={(e) => setNovaAcao({ ...novaAcao, nome: e.target.value })}
+                    placeholder="Ex: Promoção de Verão"
+                  />
+                </div>
 
-              <div className="space-y-2">
-                <Label>Lojas *</Label>
-                <Popover open={lojasPopoverOpen} onOpenChange={setLojasPopoverOpen}>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      role="combobox"
-                      className="w-full justify-between h-auto min-h-[40px]"
-                      onClick={abrirSelecionarLojas}
-                    >
-                      <div className="flex flex-wrap gap-1">
-                        {novaAcao.loja_ids.length === 0 ? (
-                          <span className="text-muted-foreground">Selecione as lojas...</span>
-                        ) : (
-                          <>
-                            <Badge variant="secondary" className="text-xs">
-                              📦 {novaAcao.loja_ids.length} loja(s) selecionada(s)
-                            </Badge>
-                            {novaAcao.loja_ids.slice(0, 3).map(lojaId => {
-                              const loja = lojas.find(l => l.id === lojaId)
-                              return loja ? (
-                                <Badge key={lojaId} variant="outline" className="text-xs">
-                                  {loja.codigo}
-                                </Badge>
-                              ) : null
-                            })}
-                            {novaAcao.loja_ids.length > 3 && (
-                              <Badge variant="outline" className="text-xs">
-                                +{novaAcao.loja_ids.length - 3}
+                <div className="space-y-2">
+                  <Label>Lojas *</Label>
+                  <Popover open={lojasPopoverOpen} onOpenChange={setLojasPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        className="w-full justify-between h-auto min-h-[40px]"
+                        onClick={abrirSelecionarLojas}
+                      >
+                        <div className="flex flex-wrap gap-1">
+                          {novaAcao.loja_ids.length === 0 ? (
+                            <span className="text-muted-foreground">Selecione as lojas...</span>
+                          ) : (
+                            <>
+                              <Badge variant="secondary" className="text-xs">
+                                📦 {novaAcao.loja_ids.length} loja(s) selecionada(s)
                               </Badge>
-                            )}
-                          </>
-                        )}
-                      </div>
-                      <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-[400px] p-0" align="start">
-                    <div className="p-2 border-b">
-                      <Input
-                        placeholder="🔍 Buscar loja por nome ou código..."
-                        value={buscaLojasTemp}
-                        onChange={(e) => setBuscaLojasTemp(e.target.value)}
-                        className="h-8"
-                      />
-                    </div>
-                    
-                    <div className="max-h-[300px] overflow-y-auto p-2">
-                      <div className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer border-b pb-2 mb-1">
-                        <Checkbox
-                          checked={lojasSelecionadasTemp.length === lojas.length && lojas.length > 0}
-                          onCheckedChange={() => {
-                            if (lojasSelecionadasTemp.length === lojas.length) {
-                              setLojasSelecionadasTemp([])
-                            } else {
-                              setLojasSelecionadasTemp(lojas.map(l => l.id))
-                            }
-                          }}
+                              {novaAcao.loja_ids.slice(0, 3).map(lojaId => {
+                                const loja = lojas.find(l => l.id === lojaId)
+                                return loja ? (
+                                  <Badge key={lojaId} variant="outline" className="text-xs">
+                                    {loja.codigo}
+                                  </Badge>
+                                ) : null
+                              })}
+                              {novaAcao.loja_ids.length > 3 && (
+                                <Badge variant="outline" className="text-xs">
+                                  +{novaAcao.loja_ids.length - 3}
+                                </Badge>
+                              )}
+                            </>
+                          )}
+                        </div>
+                        <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[400px] p-0" align="start">
+                      <div className="p-2 border-b">
+                        <Input
+                          placeholder="🔍 Buscar loja por nome ou código..."
+                          value={buscaLojasTemp}
+                          onChange={(e) => setBuscaLojasTemp(e.target.value)}
+                          className="h-8"
                         />
-                        <Label className="cursor-pointer font-semibold flex-1">
-                          Selecionar todas as lojas ({lojas.length})
-                        </Label>
                       </div>
                       
-                      {lojas
-                        .filter(loja => {
-                          const busca = buscaLojasTemp.toLowerCase()
-                          return loja.nome_loja.toLowerCase().includes(busca) ||
-                                 (loja.codigo && loja.codigo.toLowerCase().includes(busca))
-                        })
-                        .map((loja) => (
-                          <div
-                            key={loja.id}
-                            className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
-                            onClick={() => {
-                              setLojasSelecionadasTemp(prev =>
-                                prev.includes(loja.id)
-                                  ? prev.filter(id => id !== loja.id)
-                                  : [...prev, loja.id]
-                              )
+                      <div className="max-h-[300px] overflow-y-auto p-2">
+                        <div className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer border-b pb-2 mb-1">
+                          <Checkbox
+                            checked={lojasSelecionadasTemp.length === lojas.length && lojas.length > 0}
+                            onCheckedChange={() => {
+                              if (lojasSelecionadasTemp.length === lojas.length) {
+                                setLojasSelecionadasTemp([])
+                              } else {
+                                setLojasSelecionadasTemp(lojas.map(l => l.id))
+                              }
                             }}
-                          >
-                            <Checkbox
-                              checked={lojasSelecionadasTemp.includes(loja.id)}
-                              onCheckedChange={() => {}}
-                            />
-                            <Label className="cursor-pointer flex-1">
-                              <span className="font-mono text-xs">{loja.codigo}</span> - {loja.nome_loja}
-                            </Label>
-                          </div>
-                        ))}
-                    </div>
-                    
-                    <div className="p-2 border-t flex justify-between">
-                      <Button variant="ghost" size="sm" onClick={() => setLojasSelecionadasTemp([])}>
-                        Limpar tudo
-                      </Button>
-                      <div className="flex gap-2">
-                        <Button variant="outline" size="sm" onClick={cancelarSelecaoLojas}>
-                          Cancelar
-                        </Button>
-                        <Button size="sm" onClick={aplicarSelecaoLojas} style={{ background: PRIMARY_COLOR }}>
-                          Aplicar ({lojasSelecionadasTemp.length})
-                        </Button>
+                          />
+                          <Label className="cursor-pointer font-semibold flex-1">
+                            Selecionar todas as lojas ({lojas.length})
+                          </Label>
+                        </div>
+                        
+                        {lojas
+                          .filter(loja => {
+                            const busca = buscaLojasTemp.toLowerCase()
+                            return loja.nome_loja.toLowerCase().includes(busca) ||
+                                   (loja.codigo && loja.codigo.toLowerCase().includes(busca))
+                          })
+                          .map((loja) => (
+                            <div
+                              key={loja.id}
+                              className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
+                              onClick={() => {
+                                setLojasSelecionadasTemp(prev =>
+                                  prev.includes(loja.id)
+                                    ? prev.filter(id => id !== loja.id)
+                                    : [...prev, loja.id]
+                                )
+                              }}
+                            >
+                              <Checkbox
+                                checked={lojasSelecionadasTemp.includes(loja.id)}
+                                onCheckedChange={() => {}}
+                              />
+                              <Label className="cursor-pointer flex-1">
+                                <span className="font-mono text-xs">{loja.codigo}</span> - {loja.nome_loja}
+                              </Label>
+                            </div>
+                          ))}
                       </div>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-                <p className="text-xs text-muted-foreground">
-                  Clique para selecionar uma ou mais lojas
-                </p>
-              </div>
+                      
+                      <div className="p-2 border-t flex justify-between">
+                        <Button variant="ghost" size="sm" onClick={() => setLojasSelecionadasTemp([])}>
+                          Limpar tudo
+                        </Button>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" onClick={cancelarSelecaoLojas}>
+                            Cancelar
+                          </Button>
+                          <Button size="sm" onClick={aplicarSelecaoLojas} style={{ background: PRIMARY_COLOR }}>
+                            Aplicar ({lojasSelecionadasTemp.length})
+                          </Button>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                  <p className="text-xs text-muted-foreground">
+                    Clique para selecionar uma ou mais lojas
+                  </p>
+                </div>
 
-              <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Data Início *</Label>
+                    <Input
+                      type="date"
+                      value={novaAcao.data_inicio}
+                      onChange={(e) => setNovaAcao({ ...novaAcao, data_inicio: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Data Fim *</Label>
+                    <Input
+                      type="date"
+                      value={novaAcao.data_fim}
+                      onChange={(e) => setNovaAcao({ ...novaAcao, data_fim: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Tipo</Label>
+                    <Select value={novaAcao.tipo} onValueChange={(value) => setNovaAcao({ ...novaAcao, tipo: value })}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {tiposAcao.map(tipo => (
+                          <SelectItem key={tipo.value} value={tipo.value}>
+                            {tipo.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label>Status</Label>
+                    <Select value={novaAcao.status} onValueChange={(value: any) => setNovaAcao({ ...novaAcao, status: value })}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pendente">⏳ Pendente</SelectItem>
+                        <SelectItem value="em_andamento">⚡ Em Andamento</SelectItem>
+                        <SelectItem value="agendada">📅 Agendada</SelectItem>
+                        <SelectItem value="concluida">✅ Concluída</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
                 <div className="space-y-2">
-                  <Label>Data Início *</Label>
-                  <Input
-                    type="date"
-                    value={novaAcao.data_inicio}
-                    onChange={(e) => setNovaAcao({ ...novaAcao, data_inicio: e.target.value })}
+                  <Label>Descrição</Label>
+                  <textarea
+                    className="w-full min-h-[80px] p-2 border rounded-md text-sm"
+                    value={novaAcao.descricao}
+                    onChange={(e) => setNovaAcao({ ...novaAcao, descricao: e.target.value })}
+                    placeholder="Descrição detalhada da ação..."
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label>Data Fim *</Label>
-                  <Input
-                    type="date"
-                    value={novaAcao.data_fim}
-                    onChange={(e) => setNovaAcao({ ...novaAcao, data_fim: e.target.value })}
-                  />
-                </div>
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Tipo</Label>
-                  <Select value={novaAcao.tipo} onValueChange={(value) => setNovaAcao({ ...novaAcao, tipo: value })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {tiposAcao.map(tipo => (
-                        <SelectItem key={tipo.value} value={tipo.value}>
-                          {tipo.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label>Status</Label>
-                  <Select value={novaAcao.status} onValueChange={(value: any) => setNovaAcao({ ...novaAcao, status: value })}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pendente">⏳ Pendente</SelectItem>
-                      <SelectItem value="em_andamento">⚡ Em Andamento</SelectItem>
-                      <SelectItem value="agendada">📅 Agendada</SelectItem>
-                      <SelectItem value="concluida">✅ Concluída</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Descrição</Label>
-                <textarea
-                  className="w-full min-h-[80px] p-2 border rounded-md text-sm"
-                  value={novaAcao.descricao}
-                  onChange={(e) => setNovaAcao({ ...novaAcao, descricao: e.target.value })}
-                  placeholder="Descrição detalhada da ação..."
-                />
-              </div>
-            </div>
-            
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setShowNovaAcaoModal(false)}>
-                Cancelar
-              </Button>
-              <Button onClick={criarNovaAcao} disabled={salvando} style={{ background: PRIMARY_COLOR }}>
-                {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                Salvar ação
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowNovaAcaoModal(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={criarNovaAcao} disabled={salvando} style={{ background: PRIMARY_COLOR }}>
+                  {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                  Salvar ação
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
     </TooltipProvider>
   )
