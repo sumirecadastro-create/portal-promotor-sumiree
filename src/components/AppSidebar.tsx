@@ -44,7 +44,7 @@ export function AppSidebar() {
   const navigate = useNavigate()
   const { user, signOut, loading } = useAuth()
 
-  // 🔥 Pega o role do usuário da tabela usuarios_internos
+  // Pega o role do usuário da tabela usuarios_internos
   const role = user?.app_role || 'promotor'
 
   // Se ainda estiver carregando, mostra um placeholder
@@ -61,18 +61,18 @@ export function AppSidebar() {
     )
   }
 
-  // 🔥 Filtro de menu baseado no perfil
+  // 🔥 FILTRO DE MENU BASEADO NO PERFIL (CORRIGIDO)
   const items = allItems.filter((item) => {
-    // ADMIN: vê tudo (incluindo Cadastro de Usuários)
+    // ADMIN: vê tudo
     if (role === 'admin') return true
     
-    // GESTOR: NÃO vê Cadastro de Usuários
+    // GESTOR: NÃO vê Cadastro de Usuários e Marcas
     if (role === 'gestor')
       return ['Dashboard', 'Lojas', 'Promotores', 'Ações', 'Campanhas', 'Relatórios'].includes(item.title)
     
-    // GERENTE DE LOJA: vê apenas Dashboard, Check-in, Relatórios
+    // 🔥 GERENTE DE LOJA: vê Dashboard, Check-in, Ações, Campanhas e Relatórios
     if (role === 'gerente')
-      return ['Dashboard', 'Check-in (Operação)', 'Relatórios'].includes(item.title)
+      return ['Dashboard', 'Check-in (Operação)', 'Ações', 'Campanhas', 'Relatórios'].includes(item.title)
     
     // PROMOTOR: vê apenas Dashboard e Check-in
     if (role === 'promotor') 
