@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { ChevronLeft, ChevronRight, CalendarDays, Plus, Filter, X, Edit, Trash2, Loader2, RefreshCw } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CalendarDays, Plus, Filter, X, Edit, Trash2, Loader2, RefreshCw, Eye, List } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/hooks/use-auth'
@@ -31,6 +31,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from '@/components/ui/hover-card'
 
 interface Campanha {
   id: string
@@ -49,6 +54,97 @@ interface Loja {
   nome_loja: string
 }
 
+// Componente para exibir todas as campanhas em um dia
+function DayCampanhasModal({ 
+  open, 
+  onOpenChange, 
+  campanhas, 
+  date 
+}: { 
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  campanhas: Campanha[]
+  date: Date
+}) {
+  const { isAdmin } = useAuth()
+  
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <CalendarDays className="h-5 w-5 text-primary" />
+            Campanhas em {date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+          </DialogTitle>
+          <DialogDescription>
+            {campanhas.length} campanha(s) neste dia
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 py-4">
+          {campanhas.map((camp) => (
+            <div 
+              key={camp.id} 
+              className="p-3 rounded-lg border border-border hover:shadow-md transition-shadow"
+              style={{ borderLeftColor: camp.cor || '#FF1686', borderLeftWidth: '4px' }}
+            >
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <h4 className="font-semibold text-sm">{camp.nome}</h4>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {camp.descricao || 'Sem descrição'}
+                  </p>
+                  <div className="flex flex-wrap gap-1 mt-2">
+                    <Badge variant="outline" className="text-[10px]">
+                      {new Date(camp.data_inicio).toLocaleDateString('pt-BR')} → {new Date(camp.data_fim).toLocaleDateString('pt-BR')}
+                    </Badge>
+                    <Badge 
+                      variant="secondary" 
+                      className="text-[10px]"
+                      style={{ 
+                        backgroundColor: camp.status === 'ativa' ? '#d1fae5' : 
+                                      camp.status === 'pendente' ? '#fef3c7' : '#dbeafe',
+                        color: camp.status === 'ativa' ? '#065f46' : 
+                               camp.status === 'pendente' ? '#92400e' : '#1e40af'
+                      }}
+                    >
+                      {camp.status === 'ativa' ? '⚡ Ativa' : 
+                       camp.status === 'pendente' ? '⏳ Pendente' : '✅ Concluída'}
+                    </Badge>
+                  </div>
+                </div>
+                {camp.lojas && camp.lojas.length > 0 && (
+                  <Badge variant="outline" className="text-[10px] ml-2 shrink-0">
+                    {camp.lojas.length} loja(s)
+                  </Badge>
+                )}
+              </div>
+              {camp.lojas && camp.lojas.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {camp.lojas.slice(0, 5).map(loja => (
+                    <Badge key={loja.id} variant="outline" className="text-[9px] bg-muted/50">
+                      {loja.cod_loja}
+                    </Badge>
+                  ))}
+                  {camp.lojas.length > 5 && (
+                    <Badge variant="outline" className="text-[9px] bg-muted/50">
+                      +{camp.lojas.length - 5}
+                    </Badge>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Fechar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export function CalendarioCampanhas() {
   const { isAdmin, userLojaId } = useAuth()
   const [campanhas, setCampanhas] = useState<Campanha[]>([])
@@ -62,6 +158,9 @@ export function CalendarioCampanhas() {
   const [selectedLojas, setSelectedLojas] = useState<string[]>([])
   const [filterLojas, setFilterLojas] = useState<string[]>([])
   const [showFilter, setShowFilter] = useState(false)
+  const [modalCampanhas, setModalCampanhas] = useState<Campanha[]>([])
+  const [modalDate, setModalDate] = useState<Date>(new Date())
+  const [modalOpen, setModalOpen] = useState(false)
   const { toast } = useToast()
 
   const [newCampanha, setNewCampanha] = useState({
@@ -77,7 +176,6 @@ export function CalendarioCampanhas() {
     try {
       setLoading(true)
       console.log('🚀 Iniciando loadData...')
-      console.log('👤 isAdmin:', isAdmin, 'userLojaId:', userLojaId)
       
       // Buscar lojas
       let lojasQuery = supabase
@@ -116,7 +214,6 @@ export function CalendarioCampanhas() {
         
         if (campanhaIds.length > 0) {
           campanhasQuery = campanhasQuery.in('id', campanhaIds)
-          console.log(`🔍 Filtrando ${campanhaIds.length} campanhas para a loja ${userLojaId}`)
         } else {
           console.log('⚠️ Nenhuma campanha encontrada para esta loja')
           setCampanhas([])
@@ -131,8 +228,6 @@ export function CalendarioCampanhas() {
         console.error('Erro ao buscar campanhas:', campanhasError)
         throw campanhasError
       }
-      
-      console.log(`📊 ${campanhasData?.length || 0} campanhas encontradas no banco`)
       
       if (!campanhasData || campanhasData.length === 0) {
         setCampanhas([])
@@ -152,7 +247,6 @@ export function CalendarioCampanhas() {
         console.error('Erro ao buscar lojas_campanhas:', lojasRelError)
       }
       
-      // Buscar dados completos das lojas
       const todosLojasIds = [...new Set(lojasRel?.map(r => r.loja_id) || [])]
       
       let lojasCompletas: any[] = []
@@ -166,7 +260,6 @@ export function CalendarioCampanhas() {
       
       const lojasMap = new Map(lojasCompletas.map(l => [l.id, l]))
       
-      // Organizar lojas por campanha
       const lojasPorCampanha: Record<string, any[]> = {}
       lojasRel?.forEach(rel => {
         if (!lojasPorCampanha[rel.campanha_id]) {
@@ -178,13 +271,10 @@ export function CalendarioCampanhas() {
         }
       })
       
-      // Formatar campanhas
       const campanhasFormatadas = campanhasData.map(camp => ({
         ...camp,
         lojas: lojasPorCampanha[camp.id] || []
       }))
-      
-      console.log('✅ Campanhas formatadas:', campanhasFormatadas.length)
       
       setCampanhas(campanhasFormatadas)
       
@@ -392,6 +482,13 @@ export function CalendarioCampanhas() {
   const forceRefresh = () => {
     console.log('🔄 Forçando atualização manual...')
     loadData()
+  }
+
+  const openDayModal = (campanhasDoDia: Campanha[], date: Date) => {
+    if (campanhasDoDia.length === 0) return
+    setModalCampanhas(campanhasDoDia)
+    setModalDate(date)
+    setModalOpen(true)
   }
 
   const getDaysInMonth = (date: Date) => {
@@ -871,25 +968,37 @@ export function CalendarioCampanhas() {
             {days.map((day, idx) => {
               const campanhasDoDia = getCampanhasForDay(day.date)
               const isToday = day.date.toDateString() === new Date().toDateString()
+              const hasCampanhas = campanhasDoDia.length > 0
               
               return (
                 <div
                   key={idx}
-                  className={`min-h-[120px] border rounded-lg p-1 transition-all ${
+                  className={`min-h-[120px] border rounded-lg p-1 transition-all cursor-pointer ${
                     day.isCurrentMonth ? 'bg-background' : 'bg-muted/30 text-muted-foreground'
-                  } ${isToday ? 'border-primary shadow-sm' : 'border-border'}`}
+                  } ${isToday ? 'border-primary shadow-sm' : 'border-border'}
+                  ${hasCampanhas ? 'hover:shadow-md hover:border-primary/50' : ''}
+                  ${campanhasDoDia.length > 2 ? 'bg-gradient-to-b from-background to-muted/20' : ''}`}
+                  onClick={() => openDayModal(campanhasDoDia, day.date)}
                 >
                   <div className={`text-right text-sm p-1 ${isToday ? 'font-bold text-primary' : ''}`}>
                     {day.date.getDate()}
+                    {campanhasDoDia.length > 0 && (
+                      <span className="ml-1 text-[10px] text-muted-foreground">
+                        ({campanhasDoDia.length})
+                      </span>
+                    )}
                   </div>
-                  <div className="space-y-1">
-                    {campanhasDoDia.slice(0, 2).map(camp => (
+                  <div className="space-y-1 max-h-[70px] overflow-hidden">
+                    {campanhasDoDia.slice(0, 3).map(camp => (
                       <Tooltip key={camp.id}>
                         <TooltipTrigger asChild>
                           <div
-                            className="text-xs rounded px-1 py-0.5 truncate cursor-pointer hover:opacity-80"
+                            className="text-[10px] rounded px-1 py-0.5 truncate hover:opacity-80 transition-opacity"
                             style={{ backgroundColor: camp.cor || '#FF1686', color: '#fff' }}
-                            onClick={() => isAdmin && openEditDialog(camp)}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (isAdmin) openEditDialog(camp)
+                            }}
                           >
                             {camp.nome}
                           </div>
@@ -902,9 +1011,14 @@ export function CalendarioCampanhas() {
                         </TooltipContent>
                       </Tooltip>
                     ))}
-                    {campanhasDoDia.length > 2 && (
-                      <div className="text-xs text-muted-foreground text-center">
-                        +{campanhasDoDia.length - 2}
+                    {campanhasDoDia.length > 3 && (
+                      <div className="text-[10px] text-center text-muted-foreground font-medium bg-muted/50 rounded py-0.5 hover:bg-muted transition-colors">
+                        +{campanhasDoDia.length - 3} mais • Clique para ver todas
+                      </div>
+                    )}
+                    {campanhasDoDia.length === 0 && (
+                      <div className="text-center text-gray-300 text-xs h-full flex items-center justify-center min-h-[60px]">
+                        —
                       </div>
                     )}
                   </div>
@@ -914,6 +1028,14 @@ export function CalendarioCampanhas() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Modal para ver todas as campanhas do dia */}
+      <DayCampanhasModal
+        open={modalOpen}
+        onOpenChange={setModalOpen}
+        campanhas={modalCampanhas}
+        date={modalDate}
+      />
     </TooltipProvider>
   )
 }
