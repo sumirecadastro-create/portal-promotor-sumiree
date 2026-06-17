@@ -51,14 +51,6 @@ import { useToast } from '@/hooks/use-toast'
 
 const PRIMARY_COLOR = '#FF1686'
 
-// Opções de prioridade
-const PRIORIDADES = [
-  { value: 'baixa', label: 'Baixa', color: 'bg-blue-100 text-blue-700' },
-  { value: 'media', label: 'Média', color: 'bg-yellow-100 text-yellow-700' },
-  { value: 'alta', label: 'Alta', color: 'bg-orange-100 text-orange-700' },
-  { value: 'urgente', label: 'Urgente', color: 'bg-red-100 text-red-700' },
-]
-
 // Opções de tipo
 const TIPOS_SOLICITACAO = [
   { value: 'novo', label: 'Novo Promotor', icon: UserPlus },
@@ -91,7 +83,6 @@ export function SolicitacoesPromotores() {
     loja_id: '',
     tipo_solicitacao: 'novo' as const,
     motivo: '',
-    prioridade: 'media' as const,
     promotor_atual_id: '',
     promotor_sugerido_id: '',
     observacoes: '',
@@ -156,7 +147,10 @@ export function SolicitacoesPromotores() {
 
     setSaving(true)
     try {
-      const result = await createSolicitacao(novaSolicitacao)
+      const result = await createSolicitacao({
+        ...novaSolicitacao,
+        prioridade: 'media' // valor padrão
+      })
       if (result) {
         toast({
           title: 'Sucesso',
@@ -200,7 +194,6 @@ export function SolicitacoesPromotores() {
       loja_id: '',
       tipo_solicitacao: 'novo',
       motivo: '',
-      prioridade: 'media',
       promotor_atual_id: '',
       promotor_sugerido_id: '',
       observacoes: '',
@@ -230,15 +223,6 @@ export function SolicitacoesPromotores() {
       <Badge className={statusInfo?.color || 'bg-gray-100'}>
         {getStatusIcon(status)}
         <span className="ml-1">{statusInfo?.label || status}</span>
-      </Badge>
-    )
-  }
-
-  const getPrioridadeBadge = (prioridade: string) => {
-    const prio = PRIORIDADES.find(p => p.value === prioridade)
-    return (
-      <Badge variant="outline" className={prio?.color}>
-        {prio?.label || prioridade}
       </Badge>
     )
   }
@@ -335,37 +319,14 @@ export function SolicitacoesPromotores() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="prioridade">Prioridade</Label>
-                      <Select 
-                        value={novaSolicitacao.prioridade} 
-                        onValueChange={(value: any) => setNovaSolicitacao({ ...novaSolicitacao, prioridade: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione a prioridade" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {PRIORIDADES.map(prio => (
-                            <SelectItem key={prio.value} value={prio.value}>
-                              <div className="flex items-center gap-2">
-                                <div className={`w-2 h-2 rounded-full ${prio.color.split(' ')[0]}`} />
-                                {prio.label}
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="data_necessidade">Data Necessidade *</Label>
-                      <Input
-                        id="data_necessidade"
-                        type="date"
-                        value={novaSolicitacao.data_necessidade}
-                        onChange={(e) => setNovaSolicitacao({ ...novaSolicitacao, data_necessidade: e.target.value })}
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="data_necessidade">Data Necessidade *</Label>
+                    <Input
+                      id="data_necessidade"
+                      type="date"
+                      value={novaSolicitacao.data_necessidade}
+                      onChange={(e) => setNovaSolicitacao({ ...novaSolicitacao, data_necessidade: e.target.value })}
+                    />
                   </div>
 
                   <div className="space-y-2">
@@ -512,7 +473,6 @@ export function SolicitacoesPromotores() {
                         <Badge variant="outline" className="font-medium">
                           {solicitacao.loja?.cod_loja} - {solicitacao.loja?.nome_loja}
                         </Badge>
-                        {getPrioridadeBadge(solicitacao.prioridade)}
                         {getStatusBadge(solicitacao.status)}
                         <Badge variant="secondary">
                           {getTipoLabel(solicitacao.tipo_solicitacao)}
@@ -614,3 +574,5 @@ export function SolicitacoesPromotores() {
     </TooltipProvider>
   )
 }
+
+export default SolicitacoesPromotores
