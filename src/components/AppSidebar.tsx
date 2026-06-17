@@ -12,6 +12,7 @@ import {
   User,
   Calendar,
   Target,
+  UserPlus,  // 🔥 ADICIONE ESTA LINHA
 } from 'lucide-react'
 import {
   Sidebar,
@@ -71,16 +72,14 @@ export function AppSidebar() {
     if (role === 'gestor')
       return ['Dashboard', 'Lojas', 'Promotores', 'Ações', 'Campanhas', 'Relatórios'].includes(item.title)
     
-    // 🔥 GERENTE DE LOJA: vê Dashboard, Check-in, Ações, Campanhas e Relatórios
+    // 🔥 GERENTE DE LOJA: vê Dashboard, Check-in, Ações, Campanhas, Solicitações e Relatórios
     if (role === 'gerente')
-      return ['Dashboard', 'Check-in (Operação)', 'Ações', 'Campanhas', 'Relatórios'].includes(item.title)
+      return ['Dashboard', 'Check-in (Operação)', 'Ações', 'Campanhas', 'Solicitações de Promotores', 'Relatórios'].includes(item.title)
     
     // PROMOTOR: vê apenas Dashboard e Check-in
     if (role === 'promotor') 
       return ['Dashboard', 'Check-in (Operação)'].includes(item.title)
-    // E no filtro de permissões:
-if (role === 'gerente' || role === 'regional')
-  return ['Dashboard', 'Check-in (Operação)', 'Ações', 'Campanhas', 'Solicitações de Promotores', 'Relatórios'].includes(item.title)
+    
     return false
   })
 
