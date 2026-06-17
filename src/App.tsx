@@ -15,7 +15,7 @@ import Acoes from './pages/Acoes'
 import Relatorios from './pages/Relatorios'
 import Campanhas from './pages/Campanhas'
 import Configuracoes from './pages/Configuracoes'
-import { SolicitacoesPromotores } from './components/SolicitacoesPromotores'  // 🔥 ADICIONE ESTA LINHA
+import { SolicitacoesPromotores } from './pages/SolicitacoesPromotores'  // 🔥 ADICIONE ESTA LINHA
 import NotFound from './pages/NotFound'
 import Login from './pages/Login'
 import { AuthProvider } from './hooks/use-auth'
