@@ -37,6 +37,7 @@ const allItems = [
   { title: 'Ações', url: '/acoes', icon: Target },
   { title: 'Campanhas', url: '/campanhas', icon: Calendar },
   { title: 'Relatórios', url: '/relatorios', icon: BarChart3 },
+  { title: 'Solicitações de Promotores', url: '/solicitacoes-promotores', icon: UserPlus },
 ]
 
 export function AppSidebar() {
@@ -77,7 +78,9 @@ export function AppSidebar() {
     // PROMOTOR: vê apenas Dashboard e Check-in
     if (role === 'promotor') 
       return ['Dashboard', 'Check-in (Operação)'].includes(item.title)
-    
+    // E no filtro de permissões:
+if (role === 'gerente' || role === 'regional')
+  return ['Dashboard', 'Check-in (Operação)', 'Ações', 'Campanhas', 'Solicitações de Promotores', 'Relatórios'].includes(item.title)
     return false
   })
 
