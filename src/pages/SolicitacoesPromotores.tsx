@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { 
   Plus, 
-  Eye, 
   CheckCircle2, 
   XCircle, 
   Clock,
@@ -9,17 +8,14 @@ import {
   Loader2,
   Search,
   Filter,
-  ChevronDown,
   UserPlus,
-  UserMinus,
-  Repeat,
   Calendar,
   MessageSquare
 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { supabase } from '@/lib/supabase'
 import { getSolicitacoes, createSolicitacao, updateSolicitacaoStatus, SolicitacaoPromotor } from '@/services/solicitacoes'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -51,14 +47,6 @@ import { useToast } from '@/hooks/use-toast'
 
 const PRIMARY_COLOR = '#FF1686'
 
-// Opções de tipo
-const TIPOS_SOLICITACAO = [
-  { value: 'novo', label: 'Novo Promotor', icon: UserPlus },
-  { value: 'reposicao', label: 'Reposição', icon: UserMinus },
-  { value: 'transferencia', label: 'Transferência', icon: Repeat },
-  { value: 'temporario', label: 'Temporário', icon: Clock },
-]
-
 // Mapeamento de status
 const STATUS_MAP = {
   pendente: { label: 'Pendente', color: 'bg-yellow-100 text-yellow-700', icon: Clock },
@@ -69,7 +57,7 @@ const STATUS_MAP = {
 }
 
 export function SolicitacoesPromotores() {
-  const { isAdmin, user } = useAuth()
+  const { isAdmin } = useAuth()
   const { toast } = useToast()
   const [solicitacoes, setSolicitacoes] = useState<SolicitacaoPromotor[]>([])
   const [loading, setLoading] = useState(true)
@@ -81,10 +69,7 @@ export function SolicitacoesPromotores() {
   // Dados para nova solicitação
   const [novaSolicitacao, setNovaSolicitacao] = useState({
     loja_id: '',
-    tipo_solicitacao: 'novo' as const,
     motivo: '',
-    promotor_atual_id: '',
-    promotor_sugerido_id: '',
     observacoes: '',
     dias_semana_sugerido: '',
     contato_responsavel: '',
@@ -93,7 +78,6 @@ export function SolicitacoesPromotores() {
 
   // Dados para lojas
   const [lojas, setLojas] = useState<any[]>([])
-  const [promotores, setPromotores] = useState<any[]>([])
 
   const loadData = async () => {
     setLoading(true)
@@ -101,7 +85,6 @@ export function SolicitacoesPromotores() {
       const data = await getSolicitacoes()
       setSolicitacoes(data)
       await loadLojas()
-      await loadPromotores()
     } catch (error) {
       console.error('Erro ao carregar dados:', error)
       toast({
@@ -122,15 +105,6 @@ export function SolicitacoesPromotores() {
     setLojas(data || [])
   }
 
-  const loadPromotores = async () => {
-    const { data } = await supabase
-      .from('promotores')
-      .select('id, promotor_nome, status')
-      .eq('status', 'ativo')
-      .order('promotor_nome')
-    setPromotores(data || [])
-  }
-
   useEffect(() => {
     loadData()
   }, [])
@@ -148,8 +122,14 @@ export function SolicitacoesPromotores() {
     setSaving(true)
     try {
       const result = await createSolicitacao({
-        ...novaSolicitacao,
-        prioridade: 'media' // valor padrão
+        loja_id: novaSolicitacao.loja_id,
+        tipo_solicitacao: 'novo',
+        motivo: novaSolicitacao.motivo,
+        prioridade: 'media',
+        observacoes: novaSolicitacao.observacoes,
+        dias_semana_sugerido: novaSolicitacao.dias_semana_sugerido,
+        contato_responsavel: novaSolicitacao.contato_responsavel,
+        data_necessidade: novaSolicitacao.data_necessidade,
       })
       if (result) {
         toast({
@@ -192,10 +172,7 @@ export function SolicitacoesPromotores() {
   const resetForm = () => {
     setNovaSolicitacao({
       loja_id: '',
-      tipo_solicitacao: 'novo',
       motivo: '',
-      promotor_atual_id: '',
-      promotor_sugerido_id: '',
       observacoes: '',
       dias_semana_sugerido: '',
       contato_responsavel: '',
@@ -227,11 +204,6 @@ export function SolicitacoesPromotores() {
     )
   }
 
-  const getTipoLabel = (tipo: string) => {
-    const tipoInfo = TIPOS_SOLICITACAO.find(t => t.value === tipo)
-    return tipoInfo?.label || tipo
-  }
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -255,7 +227,7 @@ export function SolicitacoesPromotores() {
                 Solicitação de Promotores
               </h1>
               <p className="text-pink-100 text-sm mt-1">
-                Gerencie as solicitações de novos promotores para as lojas
+                Solicite um novo promotor para uma loja
               </p>
             </div>
             
@@ -274,49 +246,23 @@ export function SolicitacoesPromotores() {
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="loja">Loja *</Label>
-                      <Select 
-                        value={novaSolicitacao.loja_id} 
-                        onValueChange={(value) => setNovaSolicitacao({ ...novaSolicitacao, loja_id: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione a loja" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {lojas.map(loja => (
-                            <SelectItem key={loja.id} value={loja.id}>
-                              {loja.cod_loja} - {loja.nome_loja}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="tipo">Tipo de Solicitação *</Label>
-                      <Select 
-                        value={novaSolicitacao.tipo_solicitacao} 
-                        onValueChange={(value: any) => setNovaSolicitacao({ ...novaSolicitacao, tipo_solicitacao: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione o tipo" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {TIPOS_SOLICITACAO.map(tipo => {
-                            const Icon = tipo.icon
-                            return (
-                              <SelectItem key={tipo.value} value={tipo.value}>
-                                <div className="flex items-center gap-2">
-                                  <Icon className="h-4 w-4" />
-                                  {tipo.label}
-                                </div>
-                              </SelectItem>
-                            )
-                          })}
-                        </SelectContent>
-                      </Select>
-                    </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="loja">Loja *</Label>
+                    <Select 
+                      value={novaSolicitacao.loja_id} 
+                      onValueChange={(value) => setNovaSolicitacao({ ...novaSolicitacao, loja_id: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione a loja" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {lojas.map(loja => (
+                          <SelectItem key={loja.id} value={loja.id}>
+                            {loja.cod_loja} - {loja.nome_loja}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   <div className="space-y-2">
@@ -330,55 +276,14 @@ export function SolicitacoesPromotores() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="motivo">Motivo *</Label>
+                    <Label htmlFor="motivo">Motivo da Solicitação *</Label>
                     <Textarea
                       id="motivo"
-                      placeholder="Descreva o motivo da solicitação..."
+                      placeholder="Descreva o motivo da solicitação (ex: crescimento da loja, necessidade de suporte, etc.)"
                       value={novaSolicitacao.motivo}
                       onChange={(e) => setNovaSolicitacao({ ...novaSolicitacao, motivo: e.target.value })}
                       className="min-h-[80px]"
                     />
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="promotor_atual">Promotor Atual (opcional)</Label>
-                      <Select 
-                        value={novaSolicitacao.promotor_atual_id} 
-                        onValueChange={(value) => setNovaSolicitacao({ ...novaSolicitacao, promotor_atual_id: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione o promotor" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="">Nenhum</SelectItem>
-                          {promotores.map(p => (
-                            <SelectItem key={p.id} value={p.id}>
-                              {p.promotor_nome}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="promotor_sugerido">Promotor Sugerido (opcional)</Label>
-                      <Select 
-                        value={novaSolicitacao.promotor_sugerido_id} 
-                        onValueChange={(value) => setNovaSolicitacao({ ...novaSolicitacao, promotor_sugerido_id: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione o promotor" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="">Nenhum</SelectItem>
-                          {promotores.map(p => (
-                            <SelectItem key={p.id} value={p.id}>
-                              {p.promotor_nome}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -460,105 +365,98 @@ export function SolicitacoesPromotores() {
 
         {/* Lista de Solicitações */}
         <div className="space-y-4">
-          {filteredSolicitacoes.map((solicitacao) => {
-            const statusInfo = STATUS_MAP[solicitacao.status as keyof typeof STATUS_MAP]
-            
-            return (
-              <Card key={solicitacao.id} className="hover:shadow-md transition-shadow">
-                <CardContent className="p-4">
-                  <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-                    {/* Informações principais */}
-                    <div className="flex-1 space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant="outline" className="font-medium">
-                          {solicitacao.loja?.cod_loja} - {solicitacao.loja?.nome_loja}
-                        </Badge>
-                        {getStatusBadge(solicitacao.status)}
-                        <Badge variant="secondary">
-                          {getTipoLabel(solicitacao.tipo_solicitacao)}
-                        </Badge>
-                      </div>
+          {filteredSolicitacoes.map((solicitacao) => (
+            <Card key={solicitacao.id} className="hover:shadow-md transition-shadow">
+              <CardContent className="p-4">
+                <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                  {/* Informações principais */}
+                  <div className="flex-1 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline" className="font-medium">
+                        {solicitacao.loja?.cod_loja} - {solicitacao.loja?.nome_loja}
+                      </Badge>
+                      {getStatusBadge(solicitacao.status)}
+                    </div>
 
-                      <p className="text-sm text-muted-foreground">
-                        <strong>Motivo:</strong> {solicitacao.motivo}
-                      </p>
+                    <p className="text-sm text-muted-foreground">
+                      <strong>Motivo:</strong> {solicitacao.motivo}
+                    </p>
 
-                      <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                    <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                      <span>
+                        📅 Necessidade: {new Date(solicitacao.data_necessidade).toLocaleDateString('pt-BR')}
+                      </span>
+                      <span>
+                        📝 Criado: {new Date(solicitacao.created_at).toLocaleDateString('pt-BR')}
+                      </span>
+                      {solicitacao.solicitante?.nome && (
                         <span>
-                          📅 Necessidade: {new Date(solicitacao.data_necessidade).toLocaleDateString('pt-BR')}
+                          👤 {solicitacao.solicitante.nome}
                         </span>
-                        <span>
-                          📝 Criado: {new Date(solicitacao.created_at).toLocaleDateString('pt-BR')}
-                        </span>
-                        {solicitacao.solicitante?.nome && (
-                          <span>
-                            👤 {solicitacao.solicitante.nome}
-                          </span>
-                        )}
-                        {solicitacao.dias_semana_sugerido && (
-                          <span>
-                            📆 {solicitacao.dias_semana_sugerido}
-                          </span>
-                        )}
-                      </div>
-
-                      {solicitacao.observacoes && (
-                        <p className="text-sm text-muted-foreground bg-muted/50 p-2 rounded">
-                          <MessageSquare className="h-3 w-3 inline mr-1" />
-                          {solicitacao.observacoes}
-                        </p>
                       )}
-
-                      {solicitacao.motivo_reprovacao && (
-                        <p className="text-sm text-red-600 bg-red-50 p-2 rounded">
-                          <XCircle className="h-3 w-3 inline mr-1" />
-                          Motivo da reprovação: {solicitacao.motivo_reprovacao}
-                        </p>
+                      {solicitacao.dias_semana_sugerido && (
+                        <span>
+                          📆 {solicitacao.dias_semana_sugerido}
+                        </span>
                       )}
                     </div>
 
-                    {/* Ações */}
-                    <div className="flex flex-wrap gap-2 md:flex-col">
-                      {isAdmin && solicitacao.status === 'pendente' && (
-                        <>
-                          <Button
-                            size="sm"
-                            className="bg-green-500 hover:bg-green-600 text-white"
-                            onClick={() => handleStatusUpdate(solicitacao.id, 'aprovado')}
-                          >
-                            <CheckCircle2 className="h-4 w-4 mr-1" />
-                            Aprovar
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => {
-                              const motivo = prompt('Informe o motivo da reprovação:')
-                              if (motivo !== null) {
-                                handleStatusUpdate(solicitacao.id, 'reprovado', motivo || 'Sem motivo informado')
-                              }
-                            }}
-                          >
-                            <XCircle className="h-4 w-4 mr-1" />
-                            Reprovar
-                          </Button>
-                        </>
-                      )}
-                      {solicitacao.status === 'pendente' && !isAdmin && (
+                    {solicitacao.observacoes && (
+                      <p className="text-sm text-muted-foreground bg-muted/50 p-2 rounded">
+                        <MessageSquare className="h-3 w-3 inline mr-1" />
+                        {solicitacao.observacoes}
+                      </p>
+                    )}
+
+                    {solicitacao.motivo_reprovacao && (
+                      <p className="text-sm text-red-600 bg-red-50 p-2 rounded">
+                        <XCircle className="h-3 w-3 inline mr-1" />
+                        Motivo da reprovação: {solicitacao.motivo_reprovacao}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Ações */}
+                  <div className="flex flex-wrap gap-2 md:flex-col">
+                    {isAdmin && solicitacao.status === 'pendente' && (
+                      <>
                         <Button
                           size="sm"
-                          variant="outline"
-                          onClick={() => handleStatusUpdate(solicitacao.id, 'cancelado')}
+                          className="bg-green-500 hover:bg-green-600 text-white"
+                          onClick={() => handleStatusUpdate(solicitacao.id, 'aprovado')}
                         >
-                          Cancelar
+                          <CheckCircle2 className="h-4 w-4 mr-1" />
+                          Aprovar
                         </Button>
-                      )}
-                    </div>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => {
+                            const motivo = prompt('Informe o motivo da reprovação:')
+                            if (motivo !== null) {
+                              handleStatusUpdate(solicitacao.id, 'reprovado', motivo || 'Sem motivo informado')
+                            }
+                          }}
+                        >
+                          <XCircle className="h-4 w-4 mr-1" />
+                          Reprovar
+                        </Button>
+                      </>
+                    )}
+                    {solicitacao.status === 'pendente' && !isAdmin && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleStatusUpdate(solicitacao.id, 'cancelado')}
+                      >
+                        Cancelar
+                      </Button>
+                    )}
                   </div>
-                </CardContent>
-              </Card>
-            )
-          })}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
 
           {filteredSolicitacoes.length === 0 && (
             <div className="text-center py-12">
