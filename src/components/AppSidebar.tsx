@@ -12,6 +12,7 @@ import {
   User,
   Calendar,
   Target,
+  UserPlus,  // 🔥 ADICIONE ESTA LINHA
 } from 'lucide-react'
 import {
   Sidebar,
@@ -37,6 +38,7 @@ const allItems = [
   { title: 'Ações', url: '/acoes', icon: Target },
   { title: 'Campanhas', url: '/campanhas', icon: Calendar },
   { title: 'Relatórios', url: '/relatorios', icon: BarChart3 },
+  { title: 'Solicitações de Promotores', url: '/solicitacoes-promotores', icon: UserPlus },
 ]
 
 export function AppSidebar() {
@@ -70,9 +72,9 @@ export function AppSidebar() {
     if (role === 'gestor')
       return ['Dashboard', 'Lojas', 'Promotores', 'Ações', 'Campanhas', 'Relatórios'].includes(item.title)
     
-    // 🔥 GERENTE DE LOJA: vê Dashboard, Check-in, Ações, Campanhas e Relatórios
+    // 🔥 GERENTE DE LOJA: vê Dashboard, Check-in, Ações, Campanhas, Solicitações e Relatórios
     if (role === 'gerente')
-      return ['Dashboard', 'Check-in (Operação)', 'Ações', 'Campanhas', 'Relatórios'].includes(item.title)
+      return ['Dashboard', 'Check-in (Operação)', 'Ações', 'Campanhas', 'Solicitações de Promotores', 'Relatórios'].includes(item.title)
     
     // PROMOTOR: vê apenas Dashboard e Check-in
     if (role === 'promotor') 
