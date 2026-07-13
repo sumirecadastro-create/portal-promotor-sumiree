@@ -63,12 +63,13 @@ export function SidebarMenuItems() {
       icon: BarChart3,
       permissions: ['admin', 'gestor', 'gerente', 'regional', 'gerente_regional']
     },
-    { 
-      href: '/solicitacoes-promotores', 
-      label: 'Solicitações de Promotores', 
-      icon: UserPlus,
-      permissions: ['admin', 'gerente', 'regional', 'gerente_regional']
-    },
+    // 🔥 OPÇÃO "Solicitações de Promotores" REMOVIDA TEMPORARIAMENTE
+    // { 
+    //   href: '/solicitacoes-promotores', 
+    //   label: 'Solicitações de Promotores', 
+    //   icon: UserPlus,
+    //   permissions: ['admin', 'gerente', 'regional', 'gerente_regional']
+    // },
   ]
 
   // 🔥 FUNÇÃO PARA VERIFICAR SE O USUÁRIO TEM PERMISSÃO
