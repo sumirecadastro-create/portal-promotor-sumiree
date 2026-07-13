@@ -57,7 +57,8 @@ const STATUS_MAP = {
 }
 
 export function SolicitacoesPromotores() {
-  const { isAdmin } = useAuth()
+  // 🔥 CORRIGIDO: PEGAR O USER TAMBÉM
+  const { user, isAdmin } = useAuth()
   const { toast } = useToast()
   const [solicitacoes, setSolicitacoes] = useState<SolicitacaoPromotor[]>([])
   const [loading, setLoading] = useState(true)
@@ -82,7 +83,15 @@ export function SolicitacoesPromotores() {
   const loadData = async () => {
     setLoading(true)
     try {
-      const data = await getSolicitacoes()
+      // 🔥 CORRIGIDO: PASSAR user.id E isAdmin
+      if (!user?.id) {
+        console.warn('⚠️ Usuário não autenticado')
+        setLoading(false)
+        return
+      }
+      
+      console.log('👤 Carregando solicitações - user:', user.id, 'isAdmin:', isAdmin)
+      const data = await getSolicitacoes(user.id, isAdmin)
       setSolicitacoes(data)
       await loadLojas()
     } catch (error) {
@@ -106,8 +115,10 @@ export function SolicitacoesPromotores() {
   }
 
   useEffect(() => {
-    loadData()
-  }, [])
+    if (user?.id) {
+      loadData()
+    }
+  }, [user?.id])
 
   const handleCreateSolicitacao = async () => {
     if (!novaSolicitacao.loja_id || !novaSolicitacao.motivo || !novaSolicitacao.data_necessidade) {
@@ -119,18 +130,33 @@ export function SolicitacoesPromotores() {
       return
     }
 
+    if (!user?.id) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Usuário não autenticado',
+      })
+      return
+    }
+
     setSaving(true)
     try {
-      const result = await createSolicitacao({
-        loja_id: novaSolicitacao.loja_id,
-        tipo_solicitacao: 'novo',
-        motivo: novaSolicitacao.motivo,
-        prioridade: 'media',
-        observacoes: novaSolicitacao.observacoes,
-        dias_semana_sugerido: novaSolicitacao.dias_semana_sugerido,
-        contato_responsavel: novaSolicitacao.contato_responsavel,
-        data_necessidade: novaSolicitacao.data_necessidade,
-      })
+      // 🔥 CORRIGIDO: PASSAR user.id E isAdmin
+      const result = await createSolicitacao(
+        {
+          loja_id: novaSolicitacao.loja_id,
+          tipo_solicitacao: 'novo',
+          motivo: novaSolicitacao.motivo,
+          prioridade: 'media',
+          observacoes: novaSolicitacao.observacoes,
+          dias_semana_sugerido: novaSolicitacao.dias_semana_sugerido,
+          contato_responsavel: novaSolicitacao.contato_responsavel,
+          data_necessidade: novaSolicitacao.data_necessidade,
+        },
+        user.id,
+        isAdmin
+      )
+      
       if (result) {
         toast({
           title: 'Sucesso',
@@ -139,33 +165,53 @@ export function SolicitacoesPromotores() {
         setOpenModal(false)
         resetForm()
         await loadData()
+      } else {
+        throw new Error('Falha ao criar solicitação')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao criar solicitação:', error)
       toast({
         variant: 'destructive',
         title: 'Erro',
-        description: 'Não foi possível criar a solicitação',
+        description: error.message || 'Não foi possível criar a solicitação',
       })
     } finally {
       setSaving(false)
     }
   }
 
-  const handleStatusUpdate = async (id: string, status: 'aprovado' | 'reprovado', motivo?: string) => {
+  const handleStatusUpdate = async (id: string, status: 'aprovado' | 'reprovado' | 'cancelado', motivo?: string) => {
+    if (!user?.id) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Usuário não autenticado',
+      })
+      return
+    }
+
     const confirmMessage = status === 'aprovado' 
       ? 'Deseja realmente aprovar esta solicitação?' 
-      : 'Deseja realmente reprovar esta solicitação?'
+      : status === 'reprovado'
+      ? 'Deseja realmente reprovar esta solicitação?'
+      : 'Deseja realmente cancelar esta solicitação?'
     
     if (!confirm(confirmMessage)) return
 
-    const success = await updateSolicitacaoStatus(id, status, motivo)
+    // 🔥 CORRIGIDO: PASSAR user.id E isAdmin
+    const success = await updateSolicitacaoStatus(id, status, user.id, isAdmin, motivo)
     if (success) {
       toast({
         title: 'Sucesso',
-        description: `Solicitação ${status === 'aprovado' ? 'aprovada' : 'reprovada'} com sucesso!`,
+        description: `Solicitação ${status === 'aprovado' ? 'aprovada' : status === 'reprovado' ? 'reprovada' : 'cancelada'} com sucesso!`,
       })
       await loadData()
+    } else {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Não foi possível atualizar o status',
+      })
     }
   }
 
@@ -279,7 +325,7 @@ export function SolicitacoesPromotores() {
                     <Label htmlFor="motivo">Motivo da Solicitação *</Label>
                     <Textarea
                       id="motivo"
-                      placeholder="Descreva o motivo da solicitação (ex: crescimento da loja, necessidade de suporte, etc.)"
+                      placeholder="Descreva o motivo da solicitação..."
                       value={novaSolicitacao.motivo}
                       onChange={(e) => setNovaSolicitacao({ ...novaSolicitacao, motivo: e.target.value })}
                       className="min-h-[80px]"
