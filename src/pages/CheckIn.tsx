@@ -2,12 +2,12 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { Input } from '@/components/ui/input'  // 🔥 ADICIONADO
+import { Input } from '@/components/ui/input'
 import { useToast } from '@/hooks/use-toast'
 import { createVisit, updateVisit, getActiveVisitsByDay, Visita } from '@/services/visitas'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/use-auth'
-import { MapPin, User, Store, Clock, Calendar, XCircle, Package, Search } from 'lucide-react'  // 🔥 ADICIONADO Search
+import { MapPin, User, Store, Clock, Calendar, XCircle, Package, Search } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import {
   Select,
@@ -40,7 +40,7 @@ interface VisitaAtiva extends Visita {
 }
 
 export default function CheckIn() {
-  const { user } = useAuth()
+  const { user, isAdmin, isGerente, isRegional, userLojaId } = useAuth()
   const { toast } = useToast()
 
   const [promotores, setPromotores] = useState<Promotor[]>([])
@@ -51,7 +51,6 @@ export default function CheckIn() {
   const [selectedLojaId, setSelectedLojaId] = useState<string>('')
   const [observacoes, setObservacoes] = useState('')
   
-  // 🔥 NOVOS ESTADOS PARA PESQUISA
   const [searchPromotor, setSearchPromotor] = useState('')
   const [searchLoja, setSearchLoja] = useState('')
   
@@ -64,14 +63,40 @@ export default function CheckIn() {
       const hoje = new Date().toISOString().split('T')[0]
       console.log('📅 Data de hoje:', hoje)
       
-      // 1. Buscar promotores
+      // 🔥 1. Buscar promotores (filtrados pela loja do gerente)
       let promotoresData = []
       try {
         console.log('🔍 Buscando promotores...')
-        const { data, error } = await supabase
+        
+        let query = supabase
           .from('promotores')
           .select('id, promotor_nome, marca_produto, status')
+          .eq('status', 'ativo')
           .order('promotor_nome')
+        
+        // 🔥 Se for gerente, filtrar promotores da sua loja
+        if (isGerente && !isAdmin && userLojaId) {
+          // Buscar promotores vinculados à loja do gerente
+          const { data: promotoresLojas } = await supabase
+            .from('promotores_lojas')
+            .select('promotor_id')
+            .eq('loja_id', userLojaId)
+          
+          const promotorIds = promotoresLojas?.map(p => p.promotor_id) || []
+          
+          if (promotorIds.length > 0) {
+            query = query.in('id', promotorIds)
+          } else {
+            // Se não houver promotores na loja, retorna vazio
+            setPromotores([])
+            setLojas([])
+            setVisitasAtivas([])
+            setLoading(false)
+            return
+          }
+        }
+        
+        const { data, error } = await query
         
         if (error) throw error
         promotoresData = data || []
@@ -81,14 +106,34 @@ export default function CheckIn() {
       }
       setPromotores(promotoresData)
 
-      // 2. Buscar lojas
+      // 🔥 2. Buscar lojas (apenas a loja do gerente)
       let lojasData = []
       try {
         console.log('🔍 Buscando lojas...')
-        const { data, error } = await supabase
+        
+        let query = supabase
           .from('lojas')
           .select('id, cod_loja, nome_loja, endereco')
           .order('nome_loja')
+        
+        // 🔥 Se for gerente, mostrar apenas a loja dele
+        if (isGerente && !isAdmin && userLojaId) {
+          query = query.eq('id', userLojaId)
+        }
+        // 🔥 Se for Regional, mostrar todas as lojas que ele gerencia (ou todas se for admin)
+        // else if (isRegional && !isAdmin) {
+        //   // Buscar lojas do regional
+        //   const { data: lojasRegional } = await supabase
+        //     .from('gerentes_regionais_lojas')
+        //     .select('loja_id')
+        //     .eq('gerente_regional_id', userLojaId)
+        //   const lojaIds = lojasRegional?.map(l => l.loja_id) || []
+        //   if (lojaIds.length > 0) {
+        //     query = query.in('id', lojaIds)
+        //   }
+        // }
+        
+        const { data, error } = await query
         
         if (error) throw error
         lojasData = data || []
@@ -98,18 +143,39 @@ export default function CheckIn() {
       }
       setLojas(lojasData)
 
-      // 3. Buscar visitas ativas de hoje
+      // 🔥 3. Auto-selecionar a loja se for gerente e tiver apenas uma
+      if (isGerente && !isAdmin && lojasData.length === 1) {
+        setSelectedLojaId(lojasData[0].id)
+        console.log('🔒 Loja auto-selecionada:', lojasData[0].nome_loja)
+      }
+
+      // 4. Buscar visitas ativas de hoje (filtradas pela loja)
       let visitasData = []
       try {
         console.log('🔍 Buscando visitas ativas...')
-        visitasData = await getActiveVisitsByDay(hoje)
+        
+        let query = supabase
+          .from('visitas')
+          .select('*')
+          .gte('check_in', hoje)
+          .order('check_in', { ascending: false })
+        
+        // 🔥 Filtrar visitas pela loja do gerente
+        if (isGerente && !isAdmin && userLojaId) {
+          query = query.eq('loja_id', userLojaId)
+        }
+        
+        const { data, error } = await query
+        
+        if (error) throw error
+        visitasData = data || []
         console.log('✅ Visitas ativas encontradas:', visitasData.length)
       } catch (err) {
         console.error('❌ Erro ao carregar visitas:', err)
         visitasData = []
       }
       
-      // 4. Buscar nomes dos promotores e lojas para as visitas ativas
+      // 5. Buscar nomes dos promotores e lojas para as visitas ativas
       const visitasComNomes = await Promise.all(
         (visitasData || []).map(async (visita) => {
           try {
@@ -169,13 +235,13 @@ export default function CheckIn() {
     return visitasAtivas.some(v => v.promotor_id === promotorId)
   }
 
-  // 🔥 FILTRAR PROMOTORES PELA PESQUISA
+  // Filtrar promotores pela pesquisa
   const promotoresFiltrados = promotores.filter(p =>
     p.promotor_nome.toLowerCase().includes(searchPromotor.toLowerCase()) ||
     (p.marca_produto && p.marca_produto.toLowerCase().includes(searchPromotor.toLowerCase()))
   )
 
-  // 🔥 FILTRAR LOJAS PELA PESQUISA
+  // Filtrar lojas pela pesquisa
   const lojasFiltradas = lojas.filter(l =>
     l.nome_loja.toLowerCase().includes(searchLoja.toLowerCase()) ||
     l.cod_loja.toLowerCase().includes(searchLoja.toLowerCase())
@@ -213,10 +279,8 @@ export default function CheckIn() {
       await loadData()
       
       setSelectedPromotorId('')
-      setSelectedLojaId('')
       setObservacoes('')
-      setSearchPromotor('')  // 🔥 LIMPAR PESQUISA
-      setSearchLoja('')      // 🔥 LIMPAR PESQUISA
+      setSearchPromotor('')
       
       toast({
         title: 'Check-in realizado!',
@@ -311,6 +375,12 @@ export default function CheckIn() {
         <p className="text-muted-foreground">
           Gerencie as visitas dos promotores nas lojas.
         </p>
+        {isGerente && !isAdmin && lojas.length === 1 && (
+          <Badge variant="outline" className="mt-2 text-sm bg-primary/5">
+            <Store className="h-3 w-3 mr-1" />
+            Loja: {lojas[0]?.cod_loja} - {lojas[0]?.nome_loja}
+          </Badge>
+        )}
       </div>
 
       {/* Card de Check-in */}
@@ -321,19 +391,18 @@ export default function CheckIn() {
             Iniciar Nova Visita
           </CardTitle>
           <CardDescription>
-            Selecione o promotor e a loja para iniciar uma visita.
+            Selecione o promotor para iniciar uma visita na sua loja.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
-            {/* 🔥 PROMOTOR COM BARRA DE PESQUISA */}
+            {/* PROMOTOR COM BARRA DE PESQUISA */}
             <div className="space-y-2">
               <label className="text-sm font-medium flex items-center gap-2">
                 <User className="h-4 w-4" />
                 Promotor
               </label>
               
-              {/* 🔥 BARRA DE PESQUISA DE PROMOTORES */}
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -385,50 +454,66 @@ export default function CheckIn() {
               </p>
             </div>
 
-            {/* 🔥 LOJA COM BARRA DE PESQUISA */}
+            {/* LOJA - AUTO-SELECIONADA PARA GERENTE */}
             <div className="space-y-2">
               <label className="text-sm font-medium flex items-center gap-2">
                 <Store className="h-4 w-4" />
                 Loja
               </label>
               
-              {/* 🔥 BARRA DE PESQUISA DE LOJAS */}
-              <div className="relative">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="🔍 Buscar loja por nome ou código..."
-                  value={searchLoja}
-                  onChange={(e) => setSearchLoja(e.target.value)}
-                  className="pl-8 mb-2"
-                />
-              </div>
-              
-              <Select value={selectedLojaId} onValueChange={setSelectedLojaId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione uma loja" />
-                </SelectTrigger>
-                <SelectContent className="max-h-[300px]">
-                  {lojasFiltradas.length > 0 ? (
-                    lojasFiltradas.map((loja) => (
-                      <SelectItem key={loja.id} value={loja.id}>
-                        <div className="flex items-center justify-between w-full">
-                          <span>{loja.cod_loja} - {loja.nome_loja}</span>
+              {isGerente && !isAdmin && lojas.length === 1 ? (
+                // 🔥 Gerente: mostra a loja fixa, sem select
+                <div className="p-3 border rounded-md bg-muted/50 flex items-center gap-2">
+                  <Store className="h-4 w-4 text-primary" />
+                  <span className="font-medium">{lojas[0]?.cod_loja}</span>
+                  <span className="text-muted-foreground">-</span>
+                  <span className="text-muted-foreground">{lojas[0]?.nome_loja}</span>
+                  <Badge variant="secondary" className="ml-auto text-xs">Sua loja</Badge>
+                </div>
+              ) : (
+                // Admin ou Regional: mostra select com todas as lojas
+                <>
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="🔍 Buscar loja por nome ou código..."
+                      value={searchLoja}
+                      onChange={(e) => setSearchLoja(e.target.value)}
+                      className="pl-8 mb-2"
+                    />
+                  </div>
+                  
+                  <Select value={selectedLojaId} onValueChange={setSelectedLojaId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione uma loja" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[300px]">
+                      {lojasFiltradas.length > 0 ? (
+                        lojasFiltradas.map((loja) => (
+                          <SelectItem key={loja.id} value={loja.id}>
+                            <div className="flex items-center justify-between w-full">
+                              <span>{loja.cod_loja} - {loja.nome_loja}</span>
+                            </div>
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <div className="p-2 text-center text-muted-foreground text-sm">
+                          Nenhuma loja encontrada
                         </div>
-                      </SelectItem>
-                    ))
-                  ) : (
-                    <div className="p-2 text-center text-muted-foreground text-sm">
-                      Nenhuma loja encontrada
-                    </div>
-                  )}
-                </SelectContent>
-              </Select>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  
+                  <p className="text-xs text-muted-foreground">
+                    {lojasFiltradas.length} loja(s) encontrada(s)
+                  </p>
+                </>
+              )}
               
               <p className="text-xs text-muted-foreground">
-                {lojasFiltradas.length} loja(s) encontrada(s)
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Uma loja pode receber múltiplos promotores de marcas diferentes.
+                {isGerente && !isAdmin 
+                  ? 'Você só pode fazer check-in na sua loja.' 
+                  : 'Uma loja pode receber múltiplos promotores de marcas diferentes.'}
               </p>
             </div>
           </div>
@@ -461,7 +546,7 @@ export default function CheckIn() {
         </CardContent>
       </Card>
 
-      {/* Lista de Visitas Ativas - Agrupada por Loja */}
+      {/* Lista de Visitas Ativas */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
