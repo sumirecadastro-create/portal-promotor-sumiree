@@ -406,9 +406,11 @@ function AcaoTooltip({ acao, children }: { acao: Acao; children: React.ReactNode
 }
 
 export default function Acoes() {
+  // 🔥 ADICIONADO isRegional
   const { 
     isAdmin, 
-    isGerente, 
+    isGerente,
+    isRegional, 
     userLojaId, 
     loading: authLoading 
   } = useAuth()
@@ -490,6 +492,7 @@ export default function Acoes() {
     setLojasPopoverOpen(false)
   }
 
+  // 🔥 CORRIGIDO: carregarLojas com suporte a Regional
   async function carregarLojas() {
     try {
       let query = supabase
@@ -497,8 +500,25 @@ export default function Acoes() {
         .select('*')
         .order('nome_loja', { ascending: true })
       
+      // Se for gerente (não admin), filtrar apenas a loja dele
       if (isGerente && !isAdmin && userLojaId) {
         query = query.eq('id', userLojaId)
+      }
+      // 🔥 Se for Regional, filtrar apenas as lojas que ele gerencia
+      else if (isRegional && !isAdmin && userLojaId) {
+        const { data: lojasData } = await supabase
+          .from('gerentes_regionais_lojas')
+          .select('loja_id')
+          .eq('gerente_regional_id', userLojaId)
+        
+        const lojaIds = lojasData?.map(l => l.loja_id) || []
+        if (lojaIds.length > 0) {
+          query = query.in('id', lojaIds)
+        } else {
+          // Se não tem lojas, retorna vazio
+          setLojas([])
+          return
+        }
       }
       
       const { data, error } = await query
@@ -522,6 +542,7 @@ export default function Acoes() {
     }
   }
 
+  // 🔥 CORRIGIDO: carregarAcoes com suporte a Regional
   async function carregarAcoes() {
     try {
       const startDate = getFirstDayOfMonth(ano, mes)
@@ -536,6 +557,13 @@ export default function Acoes() {
           const { data: lojasData } = await supabase.from('lojas').select('id')
           lojasPermitidasIds = lojasData?.map(l => l.id) || []
         }
+      } else if (isRegional && !isAdmin) {
+        // 🔥 REGIONAL: buscar lojas que ele gerencia
+        const { data: lojasData } = await supabase
+          .from('gerentes_regionais_lojas')
+          .select('loja_id')
+          .eq('gerente_regional_id', userLojaId)
+        lojasPermitidasIds = lojasData?.map(l => l.loja_id) || []
       }
       
       let query = supabase
@@ -565,7 +593,8 @@ export default function Acoes() {
         if (relacoes && relacoes.length > 0) {
           let lojaIds = relacoes.map(r => r.loja_id)
           
-          if (isGerente && !isAdmin && lojasPermitidasIds.length > 0) {
+          // Se for gerente ou regional, filtrar apenas lojas permitidas
+          if ((isGerente || isRegional) && !isAdmin && lojasPermitidasIds.length > 0) {
             lojaIds = lojaIds.filter(id => lojasPermitidasIds.includes(id))
           }
           
@@ -600,6 +629,7 @@ export default function Acoes() {
     setLoading(false)
   }
 
+  // 🔥 ADICIONADO isRegional no useEffect
   useEffect(() => {
     const init = async () => {
       if (!authLoading) {
@@ -608,7 +638,7 @@ export default function Acoes() {
       }
     }
     init()
-  }, [mesAtual, filtroStatus, filtroTipo, authLoading, isGerente, isAdmin, userLojaId])
+  }, [mesAtual, filtroStatus, filtroTipo, authLoading, isGerente, isAdmin, isRegional, userLojaId])
 
   const lojasFiltradas = lojas.filter(loja => {
     const matchNome = loja.nome_loja.toLowerCase().includes(lojaFiltroNome.toLowerCase()) ||
@@ -828,8 +858,8 @@ export default function Acoes() {
     )
   }
 
-  // Verificação de permissão
-  const hasAccess = isAdmin === true || isGerente === true
+  // 🔥 CORRIGIDO: Verificação de permissão com isRegional
+  const hasAccess = isAdmin === true || isGerente === true || isRegional === true
   
   if (!hasAccess) {
     return (
