@@ -276,10 +276,8 @@ function CampanhaTooltip({ campanha, children }: { campanha: Campanha; children:
 }
 
 export default function Campanhas() {
-  // 🔥 Autenticação - ADICIONADO isRegional
   const { isAdmin, isGerente, isRegional, userLojaId, loading: authLoading } = useAuth()
   
-  // Estados principais
   const [mesAtual, setMesAtual] = useState(new Date())
   const [lojaFiltroNome, setLojaFiltroNome] = useState('')
   const [lojas, setLojas] = useState<Loja[]>([])
@@ -288,7 +286,6 @@ export default function Campanhas() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   
-  // Estados dos modais
   const [showFilterModal, setShowFilterModal] = useState(false)
   const [showNovaCampanhaModal, setShowNovaCampanhaModal] = useState(false)
   const [showDetalhesModal, setShowDetalhesModal] = useState(false)
@@ -296,12 +293,10 @@ export default function Campanhas() {
   const [campanhaSelecionada, setCampanhaSelecionada] = useState<Campanha | null>(null)
   const [editandoCampanha, setEditandoCampanha] = useState<Campanha | null>(null)
   
-  // Estado dos filtros
   const [filtroStatus, setFiltroStatus] = useState<string>('todos')
   const [lojasSelecionadas, setLojasSelecionadas] = useState<string[]>([])
   const [buscaLojaFiltro, setBuscaLojaFiltro] = useState('')
   
-  // Estado da nova campanha
   const [novaCampanha, setNovaCampanha] = useState({
     nome: '',
     loja_ids: [] as string[],
@@ -313,12 +308,10 @@ export default function Campanhas() {
   })
   const [salvando, setSalvando] = useState(false)
   
-  // Estados do Popover de Lojas (Nova Campanha)
   const [lojasPopoverOpen, setLojasPopoverOpen] = useState(false)
   const [buscaLojasTemp, setBuscaLojasTemp] = useState('')
   const [lojasSelecionadasTemp, setLojasSelecionadasTemp] = useState<string[]>([])
   
-  // Estados do Popover de Promotores (Nova Campanha)
   const [promotoresPopoverOpen, setPromotoresPopoverOpen] = useState(false)
   const [buscaPromotoresTemp, setBuscaPromotoresTemp] = useState('')
   const [promotoresSelecionadosTemp, setPromotoresSelecionadosTemp] = useState<string[]>([])
@@ -331,13 +324,11 @@ export default function Campanhas() {
   const hoje = new Date()
   hoje.setHours(0, 0, 0, 0)
 
-  // Abrir modal de detalhes
   const abrirDetalhes = (campanha: Campanha) => {
     setCampanhaSelecionada(campanha)
     setShowDetalhesModal(true)
   }
 
-  // Abrir modal de edição
   const abrirEdicao = (campanha: Campanha) => {
     setEditandoCampanha({ ...campanha })
     setSelectedLojasEdit(campanha.lojas?.map(l => l.id) || [])
@@ -345,11 +336,9 @@ export default function Campanhas() {
     setShowEditModal(true)
   }
 
-  // Estado para edição
   const [selectedLojasEdit, setSelectedLojasEdit] = useState<string[]>([])
   const [selectedPromotoresEdit, setSelectedPromotoresEdit] = useState<string[]>([])
 
-  // Funções do Popover de Lojas
   const abrirSelecionarLojas = () => {
     setLojasSelecionadasTemp([...novaCampanha.loja_ids])
     setBuscaLojasTemp('')
@@ -365,7 +354,6 @@ export default function Campanhas() {
     setLojasPopoverOpen(false)
   }
 
-  // Funções do Popover de Promotores
   const abrirSelecionarPromotores = () => {
     setPromotoresSelecionadosTemp([...novaCampanha.promotor_ids])
     setBuscaPromotoresTemp('')
@@ -381,7 +369,17 @@ export default function Campanhas() {
     setPromotoresPopoverOpen(false)
   }
 
-  // Buscar lojas do Supabase com filtro por permissão
+  // 🔥 FUNÇÃO PARA BUSCAR LOJAS DO REGIONAL
+  const getLojasRegional = async () => {
+    if (!isRegional || !userLojaId) return []
+    const { data } = await supabase
+      .from('gerentes_regionais_lojas')
+      .select('loja_id')
+      .eq('gerente_regional_id', userLojaId)
+    return data?.map(l => l.loja_id) || []
+  }
+
+  // 🔥 BUSCAR LOJAS COM FILTRO REGIONAL
   async function carregarLojas() {
     try {
       let query = supabase
@@ -392,6 +390,16 @@ export default function Campanhas() {
       // Se for gerente (não admin), filtrar apenas a loja dele
       if (isGerente && !isAdmin && userLojaId) {
         query = query.eq('id', userLojaId)
+      }
+      // 🔥 Se for Regional, filtrar apenas as lojas que ele gerencia
+      else if (isRegional && !isAdmin && userLojaId) {
+        const lojaIds = await getLojasRegional()
+        if (lojaIds.length > 0) {
+          query = query.in('id', lojaIds)
+        } else {
+          setLojas([])
+          return
+        }
       }
       
       const { data, error } = await query
@@ -406,7 +414,6 @@ export default function Campanhas() {
       
       setLojas(lojasFormatadas)
       
-      // Se for gerente e tem apenas uma loja, auto-selecionar
       if (isGerente && !isAdmin && userLojaId && lojasFormatadas.length === 1) {
         setLojasSelecionadas([userLojaId])
       }
@@ -432,28 +439,21 @@ export default function Campanhas() {
     }
   }
 
-  // Buscar campanhas do Supabase com filtro por permissão
+  // 🔥 BUSCAR CAMPANHAS COM FILTRO REGIONAL
   async function carregarCampanhas() {
     try {
       const startDate = `${ano}-${String(mes + 1).padStart(2, '0')}-01`
       const lastDay = new Date(ano, mes + 1, 0).getDate()
       const endDate = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
       
-      // Buscar IDs das lojas permitidas
       let lojasPermitidasIds: string[] = []
       
       if (isGerente && !isAdmin && userLojaId) {
         lojasPermitidasIds = [userLojaId]
       } else if (isRegional && !isAdmin) {
-        // 🔥 REGIONAL: buscar lojas que ele gerencia
-        const { data: lojasData } = await supabase
-          .from('gerentes_regionais_lojas')
-          .select('loja_id')
-          .eq('gerente_regional_id', userLojaId)
-        lojasPermitidasIds = lojasData?.map(l => l.loja_id) || []
+        lojasPermitidasIds = await getLojasRegional()
       }
       
-      // Buscar campanhas
       let query = supabase
         .from('campanhas')
         .select('*')
@@ -475,13 +475,11 @@ export default function Campanhas() {
       
       const campanhaIds = campanhasData.map(c => c.id)
       
-      // Buscar relações com lojas
       let lojasRelQuery = supabase
         .from('lojas_campanhas')
         .select('campanha_id, loja_id')
         .in('campanha_id', campanhaIds)
       
-      // Se for gerente ou regional, filtrar apenas as lojas permitidas
       if ((isGerente || isRegional) && !isAdmin && lojasPermitidasIds.length > 0) {
         lojasRelQuery = lojasRelQuery.in('loja_id', lojasPermitidasIds)
       }
@@ -490,11 +488,9 @@ export default function Campanhas() {
       
       if (lojasRelError) console.error('Erro ao buscar relações com lojas:', lojasRelError)
       
-      // Filtrar apenas campanhas que têm pelo menos uma loja permitida
       const campanhaIdsPermitidas = new Set(lojasRel?.map(rel => rel.campanha_id) || [])
       const campanhasFiltradas = campanhasData.filter(c => campanhaIdsPermitidas.has(c.id))
       
-      // Buscar relações com promotores
       const { data: promotoresRel, error: promotoresRelError } = await supabase
         .from('promotores_campanhas')
         .select('campanha_id, promotor_id')
@@ -573,7 +569,6 @@ export default function Campanhas() {
     }
   }, [mesAtual, filtroStatus, authLoading, isGerente, isAdmin, isRegional, userLojaId])
 
-  // Filtrar lojas
   const lojasFiltradas = lojas.filter(loja => {
     const matchNome = loja.nome_loja.toLowerCase().includes(lojaFiltroNome.toLowerCase()) ||
       (loja.codigo && loja.codigo.toLowerCase().includes(lojaFiltroNome.toLowerCase()))
@@ -810,7 +805,6 @@ export default function Campanhas() {
   const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
   const filtrosAtivos = (filtroStatus !== 'todos' ? 1 : 0) + (lojasSelecionadas.length > 0 ? 1 : 0)
 
-  // 🔥 Verificar permissão de acesso - ADICIONADO isRegional
   if (authLoading || loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -822,7 +816,6 @@ export default function Campanhas() {
     )
   }
 
-  // 🔥 Se não for admin, gerente ou regional, mostrar acesso negado
   if (!isAdmin && !isGerente && !isRegional) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -838,7 +831,6 @@ export default function Campanhas() {
   return (
     <TooltipProvider>
       <div className="space-y-6">
-        {/* Cabeçalho */}
         <div className="rounded-lg p-6 text-white" style={{ background: `linear-gradient(135deg, ${PRIMARY_COLOR} 0%, #cc1168 100%)` }}>
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
@@ -852,7 +844,6 @@ export default function Campanhas() {
             </div>
             
             <div className="flex gap-2">
-              {/* Botão de filtro */}
               <Button 
                 variant="secondary" 
                 size="sm" 
@@ -868,7 +859,6 @@ export default function Campanhas() {
                 )}
               </Button>
               
-              {/* 🔥 Botão de nova campanha - apenas admin pode criar */}
               {isAdmin && (
                 <Button 
                   variant="default" 
@@ -885,7 +875,6 @@ export default function Campanhas() {
           </div>
         </div>
 
-        {/* Controles do mês */}
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => mudarMes(-1)}>
@@ -910,7 +899,6 @@ export default function Campanhas() {
           </div>
         </div>
 
-        {/* Legenda */}
         <div className="flex flex-wrap gap-4 text-sm bg-gray-50 p-3 rounded-lg">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full" style={{ background: PRIMARY_COLOR }}></div>
@@ -947,7 +935,6 @@ export default function Campanhas() {
           </div>
         </div>
 
-        {/* Calendário */}
         <Card className="overflow-hidden shadow-lg border-0">
           <CardContent className="p-0 overflow-x-auto">
             <div className="min-w-[1200px]">
@@ -1046,7 +1033,6 @@ export default function Campanhas() {
           </CardContent>
         </Card>
 
-        {/* Modal de Detalhes da Campanha */}
         <DetalhesCampanha 
           campanha={campanhaSelecionada}
           open={showDetalhesModal}
@@ -1055,162 +1041,162 @@ export default function Campanhas() {
           isAdmin={isAdmin}
         />
 
-        {/* Modal de Edição de Campanha - apenas admin */}
-        <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
-          <DialogContent className="sm:max-w-[550px]">
-            <DialogHeader>
-              <DialogTitle>Editar Campanha</DialogTitle>
-              <DialogDescription>
-                Altere os dados da campanha. <span className="text-red-500">*</span> Campos obrigatórios.
-              </DialogDescription>
-            </DialogHeader>
-            
-            {editandoCampanha && (
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label>Nome da Campanha <span className="text-red-500">*</span></Label>
-                  <Input
-                    value={editandoCampanha.nome}
-                    onChange={(e) => setEditandoCampanha({ ...editandoCampanha, nome: e.target.value })}
-                    placeholder="Ex: Promoção de Verão"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Lojas <span className="text-red-500">*</span></Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-full justify-between">
-                        {selectedLojasEdit.length === 0 ? "Selecione as lojas..." : `${selectedLojasEdit.length} loja(s) selecionada(s)`}
-                        <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[400px] p-0" align="start">
-                      <div className="p-2 border-b">
-                        <Input placeholder="Buscar loja..." className="h-8" />
-                      </div>
-                      <div className="max-h-[300px] overflow-y-auto p-2">
-                        {lojas.map((loja) => (
-                          <div
-                            key={loja.id}
-                            className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
-                            onClick={() => {
-                              setSelectedLojasEdit(prev =>
-                                prev.includes(loja.id)
-                                  ? prev.filter(id => id !== loja.id)
-                                  : [...prev, loja.id]
-                              )
-                            }}
-                          >
-                            <Checkbox checked={selectedLojasEdit.includes(loja.id)} />
-                            <Label className="cursor-pointer flex-1">
-                              {loja.codigo} - {loja.nome_loja}
-                            </Label>
-                          </div>
-                        ))}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Promotores <span className="text-gray-400 text-xs">(opcional)</span></Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-full justify-between">
-                        {selectedPromotoresEdit.length === 0 ? "Nenhum promotor selecionado" : `${selectedPromotoresEdit.length} promotor(es) selecionado(s)`}
-                        <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[400px] p-0" align="start">
-                      <div className="p-2 border-b">
-                        <Input placeholder="Buscar promotor..." className="h-8" />
-                      </div>
-                      <div className="max-h-[300px] overflow-y-auto p-2">
-                        {promotores.map((promotor) => (
-                          <div
-                            key={promotor.id}
-                            className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
-                            onClick={() => {
-                              setSelectedPromotoresEdit(prev =>
-                                prev.includes(promotor.id)
-                                  ? prev.filter(id => id !== promotor.id)
-                                  : [...prev, promotor.id]
-                              )
-                            }}
-                          >
-                            <Checkbox checked={selectedPromotoresEdit.includes(promotor.id)} />
-                            <Label className="cursor-pointer flex-1">{promotor.promotor_nome}</Label>
-                          </div>
-                        ))}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
+        {isAdmin && (
+          <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+            <DialogContent className="sm:max-w-[550px]">
+              <DialogHeader>
+                <DialogTitle>Editar Campanha</DialogTitle>
+                <DialogDescription>
+                  Altere os dados da campanha. <span className="text-red-500">*</span> Campos obrigatórios.
+                </DialogDescription>
+              </DialogHeader>
+              
+              {editandoCampanha && (
+                <div className="space-y-4 py-4">
                   <div className="space-y-2">
-                    <Label>Data Início <span className="text-red-500">*</span></Label>
+                    <Label>Nome da Campanha <span className="text-red-500">*</span></Label>
                     <Input
-                      type="date"
-                      value={editandoCampanha.data_inicio}
-                      onChange={(e) => setEditandoCampanha({ ...editandoCampanha, data_inicio: e.target.value })}
+                      value={editandoCampanha.nome}
+                      onChange={(e) => setEditandoCampanha({ ...editandoCampanha, nome: e.target.value })}
+                      placeholder="Ex: Promoção de Verão"
                     />
                   </div>
+
                   <div className="space-y-2">
-                    <Label>Data Fim <span className="text-red-500">*</span></Label>
-                    <Input
-                      type="date"
-                      value={editandoCampanha.data_fim}
-                      onChange={(e) => setEditandoCampanha({ ...editandoCampanha, data_fim: e.target.value })}
-                    />
+                    <Label>Lojas <span className="text-red-500">*</span></Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-between">
+                          {selectedLojasEdit.length === 0 ? "Selecione as lojas..." : `${selectedLojasEdit.length} loja(s) selecionada(s)`}
+                          <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[400px] p-0" align="start">
+                        <div className="p-2 border-b">
+                          <Input placeholder="Buscar loja..." className="h-8" />
+                        </div>
+                        <div className="max-h-[300px] overflow-y-auto p-2">
+                          {lojas.map((loja) => (
+                            <div
+                              key={loja.id}
+                              className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
+                              onClick={() => {
+                                setSelectedLojasEdit(prev =>
+                                  prev.includes(loja.id)
+                                    ? prev.filter(id => id !== loja.id)
+                                    : [...prev, loja.id]
+                                )
+                              }}
+                            >
+                              <Checkbox checked={selectedLojasEdit.includes(loja.id)} />
+                              <Label className="cursor-pointer flex-1">
+                                {loja.codigo} - {loja.nome_loja}
+                              </Label>
+                            </div>
+                          ))}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Promotores <span className="text-gray-400 text-xs">(opcional)</span></Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-between">
+                          {selectedPromotoresEdit.length === 0 ? "Nenhum promotor selecionado" : `${selectedPromotoresEdit.length} promotor(es) selecionado(s)`}
+                          <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[400px] p-0" align="start">
+                        <div className="p-2 border-b">
+                          <Input placeholder="Buscar promotor..." className="h-8" />
+                        </div>
+                        <div className="max-h-[300px] overflow-y-auto p-2">
+                          {promotores.map((promotor) => (
+                            <div
+                              key={promotor.id}
+                              className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
+                              onClick={() => {
+                                setSelectedPromotoresEdit(prev =>
+                                  prev.includes(promotor.id)
+                                    ? prev.filter(id => id !== promotor.id)
+                                    : [...prev, promotor.id]
+                                )
+                              }}
+                            >
+                              <Checkbox checked={selectedPromotoresEdit.includes(promotor.id)} />
+                              <Label className="cursor-pointer flex-1">{promotor.promotor_nome}</Label>
+                            </div>
+                          ))}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Data Início <span className="text-red-500">*</span></Label>
+                      <Input
+                        type="date"
+                        value={editandoCampanha.data_inicio}
+                        onChange={(e) => setEditandoCampanha({ ...editandoCampanha, data_inicio: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Data Fim <span className="text-red-500">*</span></Label>
+                      <Input
+                        type="date"
+                        value={editandoCampanha.data_fim}
+                        onChange={(e) => setEditandoCampanha({ ...editandoCampanha, data_fim: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Status</Label>
+                    <Select 
+                      value={editandoCampanha.status} 
+                      onValueChange={(value) => setEditandoCampanha({ ...editandoCampanha, status: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pendente">⏳ Pendente</SelectItem>
+                        <SelectItem value="ativa">⚡ Ativa</SelectItem>
+                        <SelectItem value="concluida">✅ Concluída</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
-
-                <div className="space-y-2">
-                  <Label>Status</Label>
-                  <Select 
-                    value={editandoCampanha.status} 
-                    onValueChange={(value) => setEditandoCampanha({ ...editandoCampanha, status: value })}
+              )}
+              
+              <DialogFooter>
+                {editandoCampanha && isAdmin && (
+                  <Button 
+                    variant="destructive" 
+                    onClick={() => excluirCampanha(editandoCampanha.id, editandoCampanha.nome)}
+                    className="mr-auto"
                   >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="pendente">⏳ Pendente</SelectItem>
-                      <SelectItem value="ativa">⚡ Ativa</SelectItem>
-                      <SelectItem value="concluida">✅ Concluída</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            )}
-            
-            <DialogFooter>
-              {editandoCampanha && isAdmin && (
-                <Button 
-                  variant="destructive" 
-                  onClick={() => excluirCampanha(editandoCampanha.id, editandoCampanha.nome)}
-                  className="mr-auto"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Excluir
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Excluir
+                  </Button>
+                )}
+                <Button variant="outline" onClick={() => setShowEditModal(false)}>
+                  Cancelar
                 </Button>
-              )}
-              <Button variant="outline" onClick={() => setShowEditModal(false)}>
-                Cancelar
-              </Button>
-              {isAdmin && (
-                <Button onClick={atualizarCampanha} disabled={salvando} style={{ background: PRIMARY_COLOR }}>
-                  {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
-                  Salvar alterações
-                </Button>
-              )}
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+                {isAdmin && (
+                  <Button onClick={atualizarCampanha} disabled={salvando} style={{ background: PRIMARY_COLOR }}>
+                    {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                    Salvar alterações
+                  </Button>
+                )}
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
 
-        {/* Modal de Filtro */}
         <Dialog open={showFilterModal} onOpenChange={setShowFilterModal}>
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
@@ -1282,7 +1268,6 @@ export default function Campanhas() {
           </DialogContent>
         </Dialog>
 
-        {/* Modal de Nova Campanha - apenas admin */}
         {isAdmin && (
           <Dialog open={showNovaCampanhaModal} onOpenChange={setShowNovaCampanhaModal}>
             <DialogContent className="sm:max-w-[550px]">
