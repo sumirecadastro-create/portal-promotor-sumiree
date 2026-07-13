@@ -57,13 +57,30 @@ export default function CheckIn() {
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
 
+  // 🔥 FUNÇÃO PARA BUSCAR LOJAS DO REGIONAL
+  const getLojasRegional = async () => {
+    if (!isRegional || !userLojaId) return []
+    const { data } = await supabase
+      .from('gerentes_regionais_lojas')
+      .select('loja_id')
+      .eq('gerente_regional_id', userLojaId)
+    return data?.map(l => l.loja_id) || []
+  }
+
   // Carregar dados iniciais
   const loadData = async () => {
     try {
       const hoje = new Date().toISOString().split('T')[0]
       console.log('📅 Data de hoje:', hoje)
       
-      // 🔥 1. Buscar promotores (filtrados pela loja do gerente)
+      // 🔥 BUSCAR LOJAS DO REGIONAL
+      let lojaIdsPermitidas: string[] = []
+      if (isRegional && userLojaId) {
+        lojaIdsPermitidas = await getLojasRegional()
+        console.log('🏪 Lojas do regional (check-in):', lojaIdsPermitidas.length)
+      }
+
+      // 1. Buscar promotores
       let promotoresData = []
       try {
         console.log('🔍 Buscando promotores...')
@@ -74,20 +91,35 @@ export default function CheckIn() {
           .eq('status', 'ativo')
           .order('promotor_nome')
         
-        // 🔥 Se for gerente, filtrar promotores da sua loja
-        if (isGerente && !isAdmin && userLojaId) {
-          // Buscar promotores vinculados à loja do gerente
+        // 🔥 Se for regional, filtrar promotores das lojas permitidas
+        if (isRegional && lojaIdsPermitidas.length > 0) {
+          const { data: promotoresLojas } = await supabase
+            .from('promotores_lojas')
+            .select('promotor_id')
+            .in('loja_id', lojaIdsPermitidas)
+          
+          const promotorIds = promotoresLojas?.map(p => p.promotor_id) || []
+          if (promotorIds.length > 0) {
+            query = query.in('id', promotorIds)
+          } else {
+            setPromotores([])
+            setLojas([])
+            setVisitasAtivas([])
+            setLoading(false)
+            return
+          }
+        }
+        // 🔥 Se for gerente, filtrar promotores da loja dele
+        else if (isGerente && userLojaId) {
           const { data: promotoresLojas } = await supabase
             .from('promotores_lojas')
             .select('promotor_id')
             .eq('loja_id', userLojaId)
           
           const promotorIds = promotoresLojas?.map(p => p.promotor_id) || []
-          
           if (promotorIds.length > 0) {
             query = query.in('id', promotorIds)
           } else {
-            // Se não houver promotores na loja, retorna vazio
             setPromotores([])
             setLojas([])
             setVisitasAtivas([])
@@ -106,7 +138,7 @@ export default function CheckIn() {
       }
       setPromotores(promotoresData)
 
-      // 🔥 2. Buscar lojas (apenas a loja do gerente)
+      // 2. Buscar lojas
       let lojasData = []
       try {
         console.log('🔍 Buscando lojas...')
@@ -116,22 +148,14 @@ export default function CheckIn() {
           .select('id, cod_loja, nome_loja, endereco')
           .order('nome_loja')
         
-        // 🔥 Se for gerente, mostrar apenas a loja dele
-        if (isGerente && !isAdmin && userLojaId) {
+        // 🔥 Se for regional, filtrar apenas as lojas que ele gerencia
+        if (isRegional && lojaIdsPermitidas.length > 0) {
+          query = query.in('id', lojaIdsPermitidas)
+        }
+        // 🔥 Se for gerente, filtrar apenas a loja dele
+        else if (isGerente && userLojaId) {
           query = query.eq('id', userLojaId)
         }
-        // 🔥 Se for Regional, mostrar todas as lojas que ele gerencia (ou todas se for admin)
-        // else if (isRegional && !isAdmin) {
-        //   // Buscar lojas do regional
-        //   const { data: lojasRegional } = await supabase
-        //     .from('gerentes_regionais_lojas')
-        //     .select('loja_id')
-        //     .eq('gerente_regional_id', userLojaId)
-        //   const lojaIds = lojasRegional?.map(l => l.loja_id) || []
-        //   if (lojaIds.length > 0) {
-        //     query = query.in('id', lojaIds)
-        //   }
-        // }
         
         const { data, error } = await query
         
@@ -143,13 +167,18 @@ export default function CheckIn() {
       }
       setLojas(lojasData)
 
-      // 🔥 3. Auto-selecionar a loja se for gerente e tiver apenas uma
-      if (isGerente && !isAdmin && lojasData.length === 1) {
+      // 🔥 Auto-selecionar a loja se for gerente e tiver apenas uma
+      if (isGerente && lojasData.length === 1) {
+        setSelectedLojaId(lojasData[0].id)
+        console.log('🔒 Loja auto-selecionada:', lojasData[0].nome_loja)
+      }
+      // 🔥 Auto-selecionar a primeira loja se for regional e tiver apenas uma
+      else if (isRegional && lojasData.length === 1) {
         setSelectedLojaId(lojasData[0].id)
         console.log('🔒 Loja auto-selecionada:', lojasData[0].nome_loja)
       }
 
-      // 4. Buscar visitas ativas de hoje (filtradas pela loja)
+      // 3. Buscar visitas ativas de hoje
       let visitasData = []
       try {
         console.log('🔍 Buscando visitas ativas...')
@@ -160,9 +189,11 @@ export default function CheckIn() {
           .gte('check_in', hoje)
           .order('check_in', { ascending: false })
         
-        // 🔥 Filtrar visitas pela loja do gerente
-        if (isGerente && !isAdmin && userLojaId) {
+        // 🔥 Filtrar visitas pela loja do gerente/regional
+        if (isGerente && userLojaId) {
           query = query.eq('loja_id', userLojaId)
+        } else if (isRegional && lojaIdsPermitidas.length > 0) {
+          query = query.in('loja_id', lojaIdsPermitidas)
         }
         
         const { data, error } = await query
@@ -175,7 +206,7 @@ export default function CheckIn() {
         visitasData = []
       }
       
-      // 5. Buscar nomes dos promotores e lojas para as visitas ativas
+      // 4. Buscar nomes dos promotores e lojas para as visitas ativas
       const visitasComNomes = await Promise.all(
         (visitasData || []).map(async (visita) => {
           try {
@@ -228,7 +259,7 @@ export default function CheckIn() {
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [userLojaId, isRegional, isGerente])
 
   // Verificar se promotor já tem visita ativa hoje
   const promotorTemVisitaAtiva = (promotorId: string) => {
@@ -375,7 +406,12 @@ export default function CheckIn() {
         <p className="text-muted-foreground">
           Gerencie as visitas dos promotores nas lojas.
         </p>
-        {isGerente && !isAdmin && lojas.length === 1 && (
+        {isRegional && lojas.length > 0 && (
+          <p className="text-sm text-muted-foreground">
+            🏪 {lojas.length} loja(s) da sua região
+          </p>
+        )}
+        {isGerente && lojas.length === 1 && (
           <Badge variant="outline" className="mt-2 text-sm bg-primary/5">
             <Store className="h-3 w-3 mr-1" />
             Loja: {lojas[0]?.cod_loja} - {lojas[0]?.nome_loja}
@@ -391,7 +427,7 @@ export default function CheckIn() {
             Iniciar Nova Visita
           </CardTitle>
           <CardDescription>
-            Selecione o promotor para iniciar uma visita na sua loja.
+            Selecione o promotor e a loja para iniciar uma visita.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -454,64 +490,49 @@ export default function CheckIn() {
               </p>
             </div>
 
-            {/* LOJA - AUTO-SELECIONADA PARA GERENTE */}
+            {/* LOJA COM BARRA DE PESQUISA */}
             <div className="space-y-2">
               <label className="text-sm font-medium flex items-center gap-2">
                 <Store className="h-4 w-4" />
                 Loja
               </label>
               
-              {isGerente && !isAdmin && lojas.length === 1 ? (
-                // 🔥 Gerente: mostra a loja fixa, sem select
-                <div className="p-3 border rounded-md bg-muted/50 flex items-center gap-2">
-                  <Store className="h-4 w-4 text-primary" />
-                  <span className="font-medium">{lojas[0]?.cod_loja}</span>
-                  <span className="text-muted-foreground">-</span>
-                  <span className="text-muted-foreground">{lojas[0]?.nome_loja}</span>
-                  <Badge variant="secondary" className="ml-auto text-xs">Sua loja</Badge>
-                </div>
-              ) : (
-                // Admin ou Regional: mostra select com todas as lojas
-                <>
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="🔍 Buscar loja por nome ou código..."
-                      value={searchLoja}
-                      onChange={(e) => setSearchLoja(e.target.value)}
-                      className="pl-8 mb-2"
-                    />
-                  </div>
-                  
-                  <Select value={selectedLojaId} onValueChange={setSelectedLojaId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione uma loja" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-[300px]">
-                      {lojasFiltradas.length > 0 ? (
-                        lojasFiltradas.map((loja) => (
-                          <SelectItem key={loja.id} value={loja.id}>
-                            <div className="flex items-center justify-between w-full">
-                              <span>{loja.cod_loja} - {loja.nome_loja}</span>
-                            </div>
-                          </SelectItem>
-                        ))
-                      ) : (
-                        <div className="p-2 text-center text-muted-foreground text-sm">
-                          Nenhuma loja encontrada
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="🔍 Buscar loja por nome ou código..."
+                  value={searchLoja}
+                  onChange={(e) => setSearchLoja(e.target.value)}
+                  className="pl-8 mb-2"
+                />
+              </div>
+              
+              <Select value={selectedLojaId} onValueChange={setSelectedLojaId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione uma loja" />
+                </SelectTrigger>
+                <SelectContent className="max-h-[300px]">
+                  {lojasFiltradas.length > 0 ? (
+                    lojasFiltradas.map((loja) => (
+                      <SelectItem key={loja.id} value={loja.id}>
+                        <div className="flex items-center justify-between w-full">
+                          <span>{loja.cod_loja} - {loja.nome_loja}</span>
                         </div>
-                      )}
-                    </SelectContent>
-                  </Select>
-                  
-                  <p className="text-xs text-muted-foreground">
-                    {lojasFiltradas.length} loja(s) encontrada(s)
-                  </p>
-                </>
-              )}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <div className="p-2 text-center text-muted-foreground text-sm">
+                      Nenhuma loja encontrada
+                    </div>
+                  )}
+                </SelectContent>
+              </Select>
               
               <p className="text-xs text-muted-foreground">
-                {isGerente && !isAdmin 
+                {lojasFiltradas.length} loja(s) encontrada(s)
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {isGerente 
                   ? 'Você só pode fazer check-in na sua loja.' 
                   : 'Uma loja pode receber múltiplos promotores de marcas diferentes.'}
               </p>
@@ -546,7 +567,7 @@ export default function CheckIn() {
         </CardContent>
       </Card>
 
-      {/* Lista de Visitas Ativas */}
+      {/* Lista de Visitas Ativas - Agrupada por Loja */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
