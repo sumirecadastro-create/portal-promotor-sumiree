@@ -19,7 +19,8 @@ import { useAuth } from '@/hooks/use-auth'
 
 export default function Index() {
   const navigate = useNavigate()
-  const { user, isAdmin, userLojaId } = useAuth()
+  // 🔥 ADICIONAR isRegional
+  const { user, isAdmin, isRegional, userLojaId } = useAuth()
   const [stats, setStats] = useState<DashboardStats | undefined>()
   const [recentVisits, setRecentVisits] = useState<RecentVisit[]>([])
   const [coberturaMarcas, setCoberturaMarcas] = useState<any[]>([])
@@ -27,11 +28,12 @@ export default function Index() {
 
   const loadData = async () => {
     setLoading(true)
-    const data = await getDashboardData(userLojaId, isAdmin)
+    // 🔥 PASSAR isRegional
+    const data = await getDashboardData(userLojaId, isAdmin, isRegional)
     setStats(data.stats)
     setRecentVisits(data.recentVisits)
     
-    const marcas = await getCoberturaPorMarcaComLojas(userLojaId, isAdmin)
+    const marcas = await getCoberturaPorMarcaComLojas(userLojaId, isAdmin, isRegional)
     setCoberturaMarcas(marcas)
     
     setLoading(false)
@@ -39,7 +41,7 @@ export default function Index() {
 
   useEffect(() => {
     loadData()
-  }, [userLojaId, isAdmin])
+  }, [userLojaId, isAdmin, isRegional])
 
   const formatTime = (dateString: string) => {
     if (!dateString) return '--:--'
@@ -65,7 +67,7 @@ export default function Index() {
           Visão geral da operação de promotores na rede Sumirê.
           {!isAdmin && userLojaId && (
             <span className="ml-2 text-primary font-medium">
-              (Filtrado para sua loja)
+              {isRegional ? '(Filtrado para sua região)' : '(Filtrado para sua loja)'}
             </span>
           )}
         </p>
@@ -173,4 +175,3 @@ export default function Index() {
     </div>
   )
 }
-// 🔥 NÃO COLOQUE OUTRO export default AQUI!
