@@ -32,7 +32,7 @@ import {
 } from '@/components/ui/popover'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-import { ImportarPromotoresExcel } from '@/components/ImportarPromotoresExcel'
+// 🔥 REMOVIDO: import { ImportarPromotoresExcel } from '@/components/ImportarPromotoresExcel'
 
 interface Loja {
   id: string
@@ -83,10 +83,8 @@ export default function Promotores() {
   const [uploadingCarta, setUploadingCarta] = useState(false)
   const { toast } = useToast()
 
-  // 🔥 Buscar permissões do usuário
   const { user, isAdmin, isGerente, isRegional } = useAuth() as any
 
-  // Formulário de novo promotor
   const [newPromotor, setNewPromotor] = useState({
     promotor_nome: '',
     loja_ids: [] as string[],
@@ -97,22 +95,18 @@ export default function Promotores() {
     status: 'ativo'
   })
 
-  // Estados para os popovers de seleção de lojas (Novo)
   const [lojasPopoverOpenNew, setLojasPopoverOpenNew] = useState(false)
   const [buscaLojasNew, setBuscaLojasNew] = useState('')
   const [lojasSelecionadasTempNew, setLojasSelecionadasTempNew] = useState<string[]>([])
 
-  // Estados para os popovers de seleção de lojas (Edição)
   const [lojasPopoverOpenEdit, setLojasPopoverOpenEdit] = useState(false)
   const [buscaLojasEdit, setBuscaLojasEdit] = useState('')
   const [lojasSelecionadasTempEdit, setLojasSelecionadasTempEdit] = useState<string[]>([])
 
-  // Estados para os popovers de seleção de gerentes (Novo)
   const [gerentesPopoverOpenNew, setGerentesPopoverOpenNew] = useState(false)
   const [buscaGerentesNew, setBuscaGerentesNew] = useState('')
   const [gerentesSelecionadosTempNew, setGerentesSelecionadosTempNew] = useState<string[]>([])
 
-  // Estados para os popovers de seleção de gerentes (Edição)
   const [gerentesPopoverOpenEdit, setGerentesPopoverOpenEdit] = useState(false)
   const [buscaGerentesEdit, setBuscaGerentesEdit] = useState('')
   const [gerentesSelecionadosTempEdit, setGerentesSelecionadosTempEdit] = useState<string[]>([])
@@ -160,7 +154,6 @@ export default function Promotores() {
     loadData()
   }, [])
 
-  // Funções do Popover de Lojas (Novo)
   const abrirSelecionarLojasNew = () => {
     setLojasSelecionadasTempNew([...newPromotor.loja_ids])
     setBuscaLojasNew('')
@@ -176,7 +169,6 @@ export default function Promotores() {
     setLojasPopoverOpenNew(false)
   }
 
-  // Funções do Popover de Lojas (Edição)
   const abrirSelecionarLojasEdit = () => {
     setLojasSelecionadasTempEdit(editingPromotor?.loja_ids || [])
     setBuscaLojasEdit('')
@@ -194,7 +186,6 @@ export default function Promotores() {
     setLojasPopoverOpenEdit(false)
   }
 
-  // Funções do Popover de Gerentes (Novo)
   const abrirSelecionarGerentesNew = () => {
     setGerentesSelecionadosTempNew([...newPromotor.gerente_ids])
     setBuscaGerentesNew('')
@@ -216,7 +207,6 @@ export default function Promotores() {
     setGerentesPopoverOpenNew(false)
   }
 
-  // Funções do Popover de Gerentes (Edição)
   const abrirSelecionarGerentesEdit = () => {
     setGerentesSelecionadosTempEdit(editingPromotor?.gerente_ids || [])
     setBuscaGerentesEdit('')
@@ -448,7 +438,6 @@ export default function Promotores() {
     setEditOpen(true)
   }
 
-  // Filtro seguro
   const filteredPromotores = Array.isArray(promotores) && promotores.length > 0
     ? promotores.filter((p) => {
         if (!p?.promotor_nome) return false
@@ -483,7 +472,6 @@ export default function Promotores() {
     )
   }
 
-  // Componente: GerentesMultiSelect
   const GerentesMultiSelect = ({
     selectedIds,
     onChange,
@@ -645,7 +633,6 @@ export default function Promotores() {
     )
   }
 
-  // Componente de multiselect para lojas
   const LojasMultiSelect = ({ 
     selectedIds, 
     onChange, 
@@ -784,7 +771,6 @@ export default function Promotores() {
     )
   }
 
-  // Componente de multiselect para marcas
   const MarcasMultiSelect = ({ 
     selectedIds, 
     onChange, 
@@ -899,7 +885,6 @@ export default function Promotores() {
     )
   }
 
-  // Tela de erro
   if (error) {
     return <ErrorFallback error={error} resetError={loadData} />
   }
@@ -918,10 +903,7 @@ export default function Promotores() {
         </div>
         
         <div className="flex gap-2">
-          {/* 🔥 BOTÃO DE IMPORTAÇÃO EXCEL - APENAS ADMIN */}
-          {isAdmin && (
-            <ImportarPromotoresExcel onImportComplete={loadData} />
-          )}
+          {/* 🔥 BOTÃO DE IMPORTAÇÃO REMOVIDO TEMPORARIAMENTE */}
           
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
@@ -1014,7 +996,6 @@ export default function Promotores() {
           </Dialog>
         </div>
 
-        {/* Dialog de Edição */}
         <Dialog open={editOpen} onOpenChange={setEditOpen}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
@@ -1111,7 +1092,6 @@ export default function Promotores() {
                   </Select>
                 </div>
 
-                {/* ÁREA DA CARTA DE APRESENTAÇÃO */}
                 <div className="space-y-2 pt-4 border-t">
                   <Label className="text-base font-semibold">Carta de Apresentação</Label>
                   
