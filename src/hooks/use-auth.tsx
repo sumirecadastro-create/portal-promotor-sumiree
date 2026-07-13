@@ -1,3 +1,4 @@
+// hooks/use-auth.ts
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { supabase } from '@/lib/supabase'
 import { User } from '@supabase/supabase-js'
@@ -56,27 +57,42 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           if (session?.user) {
             const { data: userData } = await supabase
               .from('usuarios_internos')
-              .select('role, nome, loja_id')
+              .select('id, role, nome, loja_id')
               .eq('email', session.user.email)
               .maybeSingle()
             
             const customUser = session.user as CustomUser
             const role = userData?.role || 'promotor'
             
+            // 🔥 SALVAR O ID INTERNO DO USUÁRIO
+            const internalUserId = userData?.id
+            
+            // 🔥 SOBRESCREVER O ID DO USUÁRIO COM O ID INTERNO
+            customUser.id = internalUserId
             customUser.app_role = role
             customUser.nome = userData?.nome || session.user.email?.split('@')[0]
             customUser.loja_id = userData?.loja_id || null
             
-            // 🔥 SETAR TODAS AS PERMISSÕES
+            // 🔥 SETAR PERMISSÕES
             setIsAdmin(role === 'admin')
             setIsGestor(role === 'gestor')
             setIsGerente(role === 'gerente')
             setIsRegional(role === 'regional' || role === 'gerente_regional')
             setIsSupervisor(role === 'supervisor')
             setIsPromotor(role === 'promotor')
-            setUserLojaId(userData?.loja_id || null)
             
-            console.log('✅ Usuário carregado:', customUser.email, 'Role:', role, 'Loja:', userData?.loja_id)
+            // 🔥 userLojaId DEVE SER O ID DO USUÁRIO PARA REGIONAL
+            if (role === 'regional' || role === 'gerente_regional') {
+              // Para regional, usar o ID do usuário (para buscar na tabela gerentes_regionais_lojas)
+              setUserLojaId(internalUserId)
+              console.log('🔑 Regional - userLojaId (ID do usuário):', internalUserId)
+            } else {
+              // Para outros perfis, usar a loja_id
+              setUserLojaId(userData?.loja_id || null)
+              console.log('🔑 userLojaId (loja_id):', userData?.loja_id)
+            }
+            
+            console.log('✅ Usuário carregado:', customUser.email, 'Role:', role, 'Internal ID:', internalUserId)
             setUser(customUser)
             setLoading(false)
             return
@@ -105,25 +121,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (session?.user) {
         const { data: userData } = await supabase
           .from('usuarios_internos')
-          .select('role, nome, loja_id')
+          .select('id, role, nome, loja_id')
           .eq('email', session.user.email)
           .maybeSingle()
         
         const customUser = session.user as CustomUser
         const role = userData?.role || 'promotor'
+        const internalUserId = userData?.id
         
+        customUser.id = internalUserId
         customUser.app_role = role
         customUser.nome = userData?.nome || session.user.email?.split('@')[0]
         customUser.loja_id = userData?.loja_id || null
         
-        // 🔥 SETAR TODAS AS PERMISSÕES
         setIsAdmin(role === 'admin')
         setIsGestor(role === 'gestor')
         setIsGerente(role === 'gerente')
         setIsRegional(role === 'regional' || role === 'gerente_regional')
         setIsSupervisor(role === 'supervisor')
         setIsPromotor(role === 'promotor')
-        setUserLojaId(userData?.loja_id || null)
+        
+        if (role === 'regional' || role === 'gerente_regional') {
+          setUserLojaId(internalUserId)
+          console.log('🔑 Regional - userLojaId (ID do usuário):', internalUserId)
+        } else {
+          setUserLojaId(userData?.loja_id || null)
+          console.log('🔑 userLojaId (loja_id):', userData?.loja_id)
+        }
         
         setUser(customUser)
       } else {
