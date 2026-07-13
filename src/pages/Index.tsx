@@ -1,177 +1,94 @@
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+// src/components/DashboardCards.tsx
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { DashboardCards } from '@/components/DashboardCards'
-import { DashboardChart } from '@/components/DashboardChart'
-import { CalendarioCampanhas } from '@/components/CalendarioCampanhas'
-import { getDashboardData, getCoberturaPorMarcaComLojas, DashboardStats } from '@/services/dashboard'
-import { RecentVisit } from '@/services/dashboard'
-import { useAuth } from '@/hooks/use-auth'
+import { Store, MapPin, Percent, Users } from 'lucide-react'
+import { DashboardStats } from '@/services/dashboard'
 
-export default function Index() {
-  const navigate = useNavigate()
-  // 🔥 ADICIONAR isRegional
-  const { user, isAdmin, isRegional, userLojaId } = useAuth()
-  const [stats, setStats] = useState<DashboardStats | undefined>()
-  const [recentVisits, setRecentVisits] = useState<RecentVisit[]>([])
-  const [coberturaMarcas, setCoberturaMarcas] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
+interface DashboardCardsProps {
+  stats?: DashboardStats
+  onLojasClick?: () => void
+  onCheckInClick?: () => void
+  onPromotoresClick?: () => void
+}
 
-  const loadData = async () => {
-    setLoading(true)
-    // 🔥 PASSAR isRegional
-    const data = await getDashboardData(userLojaId, isAdmin, isRegional)
-    setStats(data.stats)
-    setRecentVisits(data.recentVisits)
-    
-    const marcas = await getCoberturaPorMarcaComLojas(userLojaId, isAdmin, isRegional)
-    setCoberturaMarcas(marcas)
-    
-    setLoading(false)
+export function DashboardCards({ 
+  stats, 
+  onLojasClick, 
+  onCheckInClick, 
+  onPromotoresClick 
+}: DashboardCardsProps) {
+  // 🔥 LOG PARA VER O QUE ESTÁ CHEGANDO
+  console.log('📊 DashboardCards - stats recebido:', stats)
+
+  const data = stats || { 
+    totalLojas: 0, 
+    promotoresAtivos: 0, 
+    cobertura: 0, 
+    visitasHoje: 0 
   }
 
-  useEffect(() => {
-    loadData()
-  }, [userLojaId, isAdmin, isRegional])
-
-  const formatTime = (dateString: string) => {
-    if (!dateString) return '--:--'
-    return new Date(dateString).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-  }
-
-  const goToLojas = () => navigate('/lojas')
-  const goToCheckIn = () => navigate('/check-in')
-  const goToPromotores = () => navigate('/promotores')
-
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-96">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    )
-  }
+  const cards = [
+    {
+      title: 'Total Lojas',
+      value: data.totalLojas,
+      icon: Store,
+      description: 'Unidades cadastradas',
+      onClick: onLojasClick,
+      color: 'text-primary',
+      bgColor: 'bg-primary/10',
+      delay: 'delay-0',
+    },
+    {
+      title: 'Check-ins Hoje',
+      value: data.visitasHoje,
+      icon: MapPin,
+      description: 'Visitas registradas hoje',
+      onClick: onCheckInClick,
+      color: 'text-emerald-500',
+      bgColor: 'bg-emerald-500/10',
+      delay: 'delay-100',
+    },
+    {
+      title: 'Cobertura (Lojas c/ Promotor)',
+      value: `${data.cobertura}%`,
+      icon: Percent,
+      description: 'Da rede coberta',
+      onClick: onPromotoresClick,
+      color: 'text-amber-500',
+      bgColor: 'bg-amber-500/10',
+      delay: 'delay-200',
+    },
+    {
+      title: 'Promotores Ativos',
+      value: data.promotoresAtivos,
+      icon: Users,
+      description: 'Em operação',
+      onClick: onPromotoresClick,
+      color: 'text-indigo-500',
+      bgColor: 'bg-indigo-500/10',
+      delay: 'delay-300',
+    },
+  ]
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-2 md:flex-row md:items-center justify-between">
-        <p className="text-muted-foreground text-sm">
-          Visão geral da operação de promotores na rede Sumirê.
-          {!isAdmin && userLojaId && (
-            <span className="ml-2 text-primary font-medium">
-              {isRegional ? '(Filtrado para sua região)' : '(Filtrado para sua loja)'}
-            </span>
-          )}
-        </p>
-      </div>
-
-      <DashboardCards 
-        stats={stats} 
-        onLojasClick={goToLojas}
-        onCheckInClick={goToCheckIn}
-        onPromotoresClick={goToPromotores}
-      />
-
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
-        <div className="lg:col-span-4">
-          <DashboardChart />
-        </div>
-
-        <Card className="lg:col-span-3 animate-slide-up delay-200">
-          <CardHeader>
-            <CardTitle className="text-base">Atividade Recente (Hoje)</CardTitle>
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {cards.map((card) => (
+        <Card 
+          key={card.title}
+          className={`animate-slide-up ${card.delay} cursor-pointer hover:shadow-lg transition-all hover:scale-105`}
+          onClick={card.onClick}
+        >
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">{card.title}</CardTitle>
+            <div className={`p-1 rounded-full ${card.bgColor}`}>
+              <card.icon className={`h-4 w-4 ${card.color}`} />
+            </div>
           </CardHeader>
           <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Promotor</TableHead>
-                  <TableHead>Loja</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Hora</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {recentVisits.map((visit) => {
-                  const isEmAndamento = visit.status === 'em_andamento' || !visit.check_out
-                  return (
-                    <TableRow key={visit.id}>
-                      <TableCell className="font-medium text-xs truncate max-w-[120px]">
-                        {visit.promotor_nome || 'Desconhecido'}
-                      </TableCell>
-                      <TableCell className="text-xs truncate max-w-[120px]">
-                        {visit.loja_nome || 'Desconhecida'}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={isEmAndamento ? 'default' : 'secondary'}
-                          className={isEmAndamento ? 'bg-emerald-500 hover:bg-emerald-600' : ''}
-                        >
-                          {isEmAndamento ? 'Em Andamento' : 'Concluída'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right text-xs text-muted-foreground">
-                        {formatTime(visit.check_in)}
-                      </TableCell>
-                    </TableRow>
-                  )
-                })}
-                {recentVisits.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={4} className="text-center py-6 text-muted-foreground">
-                      Nenhuma visita recente
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
+            <div className="text-2xl font-bold">{card.value}</div>
+            <p className="text-xs text-muted-foreground">{card.description}</p>
           </CardContent>
         </Card>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Cobertura por Marca</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {coberturaMarcas.length > 0 ? (
-            <div className="space-y-3">
-              {coberturaMarcas.map((marca) => (
-                <div key={marca.nome_marca} className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex justify-between mb-1">
-                      <span className="text-sm font-medium">{marca.nome_marca}</span>
-                      <span className="text-sm text-muted-foreground">
-                        {marca.total_promotores} loja(s) · {marca.cobertura_percentual}%
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-primary rounded-full h-2"
-                        style={{ width: `${marca.cobertura_percentual}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-center text-muted-foreground py-6">
-              Nenhuma marca encontrada para sua loja
-            </p>
-          )}
-        </CardContent>
-      </Card>
-
-      <CalendarioCampanhas />
+      ))}
     </div>
   )
 }
