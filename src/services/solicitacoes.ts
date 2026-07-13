@@ -52,7 +52,35 @@ export interface CreateSolicitacaoData {
   data_necessidade: string
 }
 
-// 🔥 LISTAR SOLICITAÇÕES (RECEBE O USUÁRIO COMO PARÂMETRO)
+// 🔥 FUNÇÃO AUXILIAR: BUSCAR USUÁRIO POR EMAIL OU ID
+async function buscarUsuario(identifier: string): Promise<{ id: string; loja_id: string } | null> {
+  // Tentar buscar por ID (UUID) primeiro
+  const { data: byId, error: errorId } = await supabase
+    .from('usuarios_internos')
+    .select('id, loja_id')
+    .eq('id', identifier)
+    .maybeSingle()
+
+  if (byId) {
+    return byId
+  }
+
+  // Se não encontrou pelo ID, tentar por email
+  const { data: byEmail, error: errorEmail } = await supabase
+    .from('usuarios_internos')
+    .select('id, loja_id')
+    .eq('email', identifier)
+    .maybeSingle()
+
+  if (byEmail) {
+    return byEmail
+  }
+
+  console.error('❌ Usuário não encontrado:', identifier, 'Erro ID:', errorId, 'Erro Email:', errorEmail)
+  return null
+}
+
+// Listar solicitações
 export async function getSolicitacoes(userId: string, isAdmin: boolean): Promise<SolicitacaoPromotor[]> {
   try {
     console.log('👤 Buscando solicitações para usuário:', userId, 'isAdmin:', isAdmin)
@@ -68,9 +96,17 @@ export async function getSolicitacoes(userId: string, isAdmin: boolean): Promise
       `)
       .order('created_at', { ascending: false })
 
-    // Se não for admin, filtrar pelo usuário
-    if (!isAdmin) {
-      query = query.eq('solicitante_id', userId)
+    // 🔥 Se não for admin, buscar apenas as solicitações do usuário
+    if (!isAdmin && userId) {
+      // Buscar o ID correto do usuário
+      const userData = await buscarUsuario(userId)
+      if (userData) {
+        query = query.eq('solicitante_id', userData.id)
+        console.log('🔍 Filtrando por solicitante_id:', userData.id)
+      } else {
+        console.warn('⚠️ Usuário não encontrado, retornando lista vazia')
+        return []
+      }
     }
 
     const { data, error } = await query
@@ -88,7 +124,7 @@ export async function getSolicitacoes(userId: string, isAdmin: boolean): Promise
   }
 }
 
-// 🔥 CRIAR SOLICITAÇÃO (RECEBE O USUÁRIO COMO PARÂMETRO)
+// 🔥 CRIAR SOLICITAÇÃO (CORRIGIDO)
 export async function createSolicitacao(
   data: CreateSolicitacaoData,
   userId: string,
@@ -100,39 +136,57 @@ export async function createSolicitacao(
       throw new Error('Usuário não autenticado')
     }
 
-    console.log('👤 Criando solicitação para usuário:', userId)
+    console.log('👤 Criando solicitação - userId:', userId)
 
-    // 🔥 VERIFICAR SE O USUÁRIO TEM PERMISSÃO PARA CRIAR
-    // Gerentes só podem criar para sua própria loja
+    // 🔥 BUSCAR O USUÁRIO CORRETO
+    const userData = await buscarUsuario(userId)
+    
+    if (!userData) {
+      console.error('❌ Usuário não encontrado na tabela usuarios_internos')
+      throw new Error('Usuário não encontrado')
+    }
+
+    console.log('✅ Usuário encontrado - ID:', userData.id, 'Loja:', userData.loja_id)
+
+    // 🔥 DETERMINAR A LOJA
+    let lojaId = data.loja_id
+    
+    // Se não for admin, usar a loja do usuário
     if (!isAdmin) {
-      // Buscar a loja do gerente
-      const { data: userData } = await supabase
-        .from('usuarios_internos')
-        .select('loja_id')
-        .eq('id', userId)
-        .single()
-      
-      if (userData && userData.loja_id !== data.loja_id) {
-        throw new Error('Você só pode criar solicitações para sua própria loja')
+      if (userData.loja_id) {
+        lojaId = userData.loja_id
+        console.log('🔒 Usando loja do usuário:', lojaId)
+      } else {
+        throw new Error('Usuário não tem loja vinculada')
       }
     }
 
+    // 🔥 GARANTIR QUE A DATA ESTÁ NO FORMATO CORRETO
+    const dataNecessidade = typeof data.data_necessidade === 'string' 
+      ? data.data_necessidade 
+      : new Date(data.data_necessidade).toISOString().split('T')[0]
+
+    // 🔥 CONSTRUIR OBJETO DE INSERÇÃO
+    const insertData = {
+      loja_id: lojaId,
+      solicitante_id: userData.id,  // ← ID CORRETO DA TABELA usuarios_internos
+      tipo_solicitacao: data.tipo_solicitacao || 'novo',
+      motivo: data.motivo,
+      prioridade: data.prioridade || 'media',
+      status: 'pendente',
+      observacoes: data.observacoes || null,
+      dias_semana_sugerido: data.dias_semana_sugerido || null,
+      contato_responsavel: data.contato_responsavel || null,
+      data_necessidade: dataNecessidade,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }
+
+    console.log('📦 Dados a serem inseridos:', insertData)
+
     const { data: solicitacao, error } = await supabase
       .from('solicitacoes_promotores')
-      .insert({
-        loja_id: data.loja_id,
-        tipo_solicitacao: data.tipo_solicitacao || 'novo',
-        motivo: data.motivo,
-        prioridade: data.prioridade || 'media',
-        solicitante_id: userId,
-        status: 'pendente',
-        observacoes: data.observacoes || null,
-        dias_semana_sugerido: data.dias_semana_sugerido || null,
-        contato_responsavel: data.contato_responsavel || null,
-        data_necessidade: data.data_necessidade,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
+      .insert(insertData)
       .select()
       .single()
 
@@ -142,29 +196,15 @@ export async function createSolicitacao(
     }
 
     console.log('✅ Solicitação criada com sucesso:', solicitacao.id)
-
-    // Registrar no histórico (opcional)
-    try {
-      await supabase
-        .from('historico_solicitacoes')
-        .insert({
-          solicitacao_id: solicitacao.id,
-          usuario_id: userId,
-          acao: 'criacao',
-          descricao: `Solicitação de ${data.tipo_solicitacao} criada`
-        })
-    } catch (histError) {
-      console.warn('⚠️ Erro ao registrar histórico:', histError)
-    }
-
     return solicitacao
+
   } catch (error) {
     console.error('❌ Erro ao criar solicitação:', error)
     return null
   }
 }
 
-// 🔥 ATUALIZAR STATUS (RECEBE O USUÁRIO COMO PARÂMETRO)
+// Atualizar status da solicitação
 export async function updateSolicitacaoStatus(
   id: string,
   status: 'aprovado' | 'reprovado' | 'cancelado',
@@ -175,15 +215,23 @@ export async function updateSolicitacaoStatus(
   try {
     if (!userId) {
       console.error('❌ Usuário não autenticado')
-      throw new Error('Usuário não autenticado')
+      return false
     }
 
-    // Verificar permissão
     if (!isAdmin) {
-      throw new Error('Apenas administradores podem alterar o status')
+      console.error('❌ Apenas administradores podem alterar status')
+      return false
     }
 
     console.log('👤 Atualizando solicitação:', id, 'para status:', status)
+
+    // 🔥 BUSCAR O USUÁRIO CORRETO
+    const userData = await buscarUsuario(userId)
+    
+    if (!userData) {
+      console.error('❌ Usuário não encontrado')
+      return false
+    }
 
     const updateData: any = { 
       status,
@@ -191,10 +239,10 @@ export async function updateSolicitacaoStatus(
     }
     
     if (status === 'aprovado') {
-      updateData.aprovado_por = userId
+      updateData.aprovado_por = userData.id
       updateData.data_aprovacao = new Date().toISOString()
     } else if (status === 'reprovado') {
-      updateData.reprovado_por = userId
+      updateData.reprovado_por = userData.id
       updateData.data_reprovacao = new Date().toISOString()
       updateData.motivo_reprovacao = motivo || null
     }
@@ -206,25 +254,12 @@ export async function updateSolicitacaoStatus(
 
     if (error) {
       console.error('❌ Erro ao atualizar solicitação:', error)
-      throw error
-    }
-
-    // Registrar no histórico
-    try {
-      await supabase
-        .from('historico_solicitacoes')
-        .insert({
-          solicitacao_id: id,
-          usuario_id: userId,
-          acao: status,
-          descricao: `Status alterado para ${status}${motivo ? `: ${motivo}` : ''}`
-        })
-    } catch (histError) {
-      console.warn('⚠️ Erro ao registrar histórico:', histError)
+      return false
     }
 
     console.log('✅ Solicitação atualizada com sucesso')
     return true
+
   } catch (error) {
     console.error('❌ Erro ao atualizar solicitação:', error)
     return false
