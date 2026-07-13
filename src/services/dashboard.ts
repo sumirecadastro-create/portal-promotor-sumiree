@@ -1,89 +1,361 @@
-// src/pages/Lojas.tsx
-
-import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Search, Plus, Eye } from 'lucide-react'
+// src/services/dashboard.ts
 import { supabase } from '@/lib/supabase'
-import { useToast } from '@/hooks/use-toast'
-import { useAuth } from '@/hooks/use-auth'  // 🔥 ADICIONAR
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-} from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
 
-interface Loja {
-  id: string
-  cod_loja: string
-  nome_loja: string
+export interface DashboardStats {
+  totalLojas: number
+  promotoresAtivos: number
+  cobertura: number
+  visitasHoje: number
 }
 
-export default function Lojas() {
-  const { user, isAdmin, userLojaId, isRegional } = useAuth()  // 🔥 ADICIONAR
-  const [lojas, setLojas] = useState<Loja[]>([])
-  const [search, setSearch] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [open, setOpen] = useState(false)
-  const [newCodLoja, setNewCodLoja] = useState('')
-  const [newNomeLoja, setNewNomeLoja] = useState('')
-  const [saving, setSaving] = useState(false)
-  const navigate = useNavigate()
-  const { toast } = useToast()
+export interface RecentVisit {
+  id: string
+  promotor_nome?: string
+  loja_nome?: string
+  check_in: string
+  check_out?: string
+  status: string
+}
 
-  const loadData = async () => {
-    setLoading(true)
-    try {
-      // 🔥 BUSCAR LOJAS COM FILTRO POR REGIONAL
-      let query = supabase
-        .from('lojas')
-        .select('*')
-        .order('nome_loja')
+export interface MarcaCobertura {
+  nome_marca: string
+  total_promotores: number
+  cobertura_percentual: number
+}
 
-      // 🔥 Se for regional, filtrar apenas as lojas que ele gerencia
-      if (isRegional && userLojaId) {
+export async function getDashboardData(lojaId: string | null = null, isAdmin: boolean = true): Promise<{
+  stats: DashboardStats
+  recentVisits: RecentVisit[]
+}> {
+  try {
+    console.log('📊 Buscando dados do dashboard...', { lojaId, isAdmin })
+
+    let lojaIds: string[] = []
+    
+    if (!isAdmin && lojaId) {
+      const { data: userData } = await supabase
+        .from('usuarios_internos')
+        .select('role')
+        .eq('id', lojaId)
+        .single()
+      
+      if (userData?.role === 'regional' || userData?.role === 'gerente_regional') {
         const { data: lojasData } = await supabase
           .from('gerentes_regionais_lojas')
           .select('loja_id')
-          .eq('gerente_regional_id', userLojaId)
-        
-        const lojaIds = lojasData?.map(l => l.loja_id) || []
-        if (lojaIds.length > 0) {
-          query = query.in('id', lojaIds)
-        } else {
-          setLojas([])
-          setLoading(false)
-          return
-        }
+          .eq('gerente_regional_id', lojaId)
+        lojaIds = lojasData?.map(l => l.loja_id) || []
+      } else if (userData?.role === 'gerente') {
+        lojaIds = [lojaId]
+      } else {
+        const { data: lojas } = await supabase.from('lojas').select('id')
+        lojaIds = lojas?.map(l => l.id) || []
       }
-      // 🔥 Se for gerente, filtrar apenas a loja dele
-      else if (!isAdmin && userLojaId) {
-        query = query.eq('id', userLojaId)
-      }
+    } else {
+      const { data: lojas } = await supabase.from('lojas').select('id')
+      lojaIds = lojas?.map(l => l.id) || []
+    }
 
-      const { data, error } = await query
+    console.log('🏪 Lojas permitidas:', lojaIds.length)
+
+    const totalLojas = lojaIds.length
+
+    const { data: promotores, error: promotoresError } = await supabase
+      .from('promotores')
+      .select('id, loja_ids')
+      .eq('status', 'ativo')
+
+    if (promotoresError) {
+      console.error('❌ Erro ao buscar promotores:', promotoresError)
+    }
+
+    const promotoresFiltrados = (promotores || []).filter(p => {
+      if (!p.loja_ids) return false
+      return p.loja_ids.some((id: string) => lojaIds.includes(id))
+    })
+
+    const promotoresAtivos = promotoresFiltrados.length
+    console.log('👤 Promotores ativos:', promotoresAtivos)
+
+    const { data: promotoresLojas, error: plError } = await supabase
+      .from('promotores_lojas')
+      .select('loja_id')
+      .in('loja_id', lojaIds)
+
+    if (plError) {
+      console.error('❌ Erro ao buscar promotores_lojas:', plError)
+    }
+
+    const lojasComPromotor = new Set(promotoresLojas?.map(p => p.loja_id) || [])
+    const cobertura = totalLojas > 0 
+      ? Math.round((lojasComPromotor.size / totalLojas) * 100) 
+      : 0
+
+    console.log('📊 Cobertura:', cobertura, '%', 'Lojas cobertas:', lojasComPromotor.size, 'de', totalLojas)
+
+    const hoje = new Date().toISOString().split('T')[0]
+    
+    let visitasQuery = supabase
+      .from('check_ins')
+      .select(`
+        id,
+        check_in,
+        check_out,
+        status,
+        promotor_id,
+        loja_id,
+        promotores:promotor_id (promotor_nome),
+        lojas:loja_id (nome_loja, cod_loja)
+      `)
+      .gte('check_in', hoje)
+      .order('check_in', { ascending: false })
+      .limit(10)
+
+    let recentVisits: RecentVisit[] = []
+    let visitasHoje = 0
+
+    const { data: checkins, error: checkinsError } = await visitasQuery
+
+    if (checkinsError) {
+      console.log('Tabela check_ins não encontrada, tentando visitas...')
       
-      if (error) throw error
-      setLojas(data || [])
-    } catch (error) {
-      console.error('Erro ao carregar lojas:', error)
-      toast({
-        variant: 'destructive',
-        title: 'Erro',
-        description: 'Não foi possível carregar as lojas',
-      })
-    } finally {
-      setLoading(false)
+      const visitasQuery2 = supabase
+        .from('visitas')
+        .select(`
+          id,
+          check_in,
+          check_out,
+          status,
+          promotor_id,
+          loja_id,
+          promotores:promotor_id (promotor_nome),
+          lojas:loja_id (nome_loja, cod_loja)
+        `)
+        .gte('check_in', hoje)
+        .order('check_in', { ascending: false })
+        .limit(10)
+
+      const { data: visitas, error: visitasError } = await visitasQuery2
+
+      if (!visitasError && visitas) {
+        recentVisits = visitas.map((v: any) => ({
+          id: v.id,
+          promotor_nome: v.promotores?.promotor_nome || 'Desconhecido',
+          loja_nome: v.lojas?.cod_loja || v.lojas?.nome_loja || 'Desconhecida',
+          check_in: v.check_in,
+          check_out: v.check_out,
+          status: v.status || 'pendente'
+        }))
+        visitasHoje = visitas.length
+      }
+    } else if (checkins) {
+      recentVisits = checkins.map((v: any) => ({
+        id: v.id,
+        promotor_nome: v.promotores?.promotor_nome || 'Desconhecido',
+        loja_nome: v.lojas?.cod_loja || v.lojas?.nome_loja || 'Desconhecida',
+        check_in: v.check_in,
+        check_out: v.check_out,
+        status: v.status || 'pendente'
+      }))
+      visitasHoje = checkins.length
+    }
+
+    console.log('📋 Visitas hoje:', visitasHoje, 'Recentes:', recentVisits.length)
+
+    return {
+      stats: {
+        totalLojas,
+        promotoresAtivos,
+        cobertura,
+        visitasHoje,
+      },
+      recentVisits,
+    }
+  } catch (error) {
+    console.error('❌ Erro ao carregar dashboard:', error)
+    return {
+      stats: { totalLojas: 0, promotoresAtivos: 0, cobertura: 0, visitasHoje: 0 },
+      recentVisits: [],
     }
   }
+}
 
-  // ... resto do código
+export async function getCoberturaPorMarcaComLojas(lojaId: string | null = null, isAdmin: boolean = true): Promise<MarcaCobertura[]> {
+  try {
+    console.log('🔍 Buscando cobertura por marca...', { lojaId, isAdmin })
+
+    let lojaIds: string[] = []
+
+    if (!isAdmin && lojaId) {
+      const { data: userData } = await supabase
+        .from('usuarios_internos')
+        .select('role')
+        .eq('id', lojaId)
+        .single()
+
+      if (userData?.role === 'regional' || userData?.role === 'gerente_regional') {
+        const { data: lojasData } = await supabase
+          .from('gerentes_regionais_lojas')
+          .select('loja_id')
+          .eq('gerente_regional_id', lojaId)
+        lojaIds = lojasData?.map(l => l.loja_id) || []
+      } else if (userData?.role === 'gerente') {
+        lojaIds = [lojaId]
+      } else {
+        const { data: lojas } = await supabase.from('lojas').select('id')
+        lojaIds = lojas?.map(l => l.id) || []
+      }
+    } else {
+      const { data: lojas } = await supabase.from('lojas').select('id')
+      lojaIds = lojas?.map(l => l.id) || []
+    }
+
+    if (lojaIds.length === 0) {
+      console.log('⚠️ Nenhuma loja encontrada')
+      return []
+    }
+
+    const { data: promotoresLojas, error: plError } = await supabase
+      .from('promotores_lojas')
+      .select('promotor_id')
+      .in('loja_id', lojaIds)
+
+    if (plError) {
+      console.error('❌ Erro ao buscar promotores_lojas:', plError)
+      return []
+    }
+
+    const promotorIds = promotoresLojas?.map(p => p.promotor_id) || []
+
+    if (promotorIds.length === 0) {
+      console.log('⚠️ Nenhum promotor encontrado nas lojas')
+      return []
+    }
+
+    const { data: marcasData, error: marcasError } = await supabase
+      .from('promotores_marcas')
+      .select(`
+        marca_id,
+        marcas!inner (id, nome)
+      `)
+      .in('promotor_id', promotorIds)
+
+    if (marcasError) {
+      console.error('❌ Erro ao buscar marcas:', marcasError)
+      return []
+    }
+
+    const marcasCount: Record<string, { nome: string; count: number }> = {}
+
+    marcasData?.forEach((item: any) => {
+      const marcaNome = item.marcas?.nome || 'Desconhecida'
+      if (!marcasCount[marcaNome]) {
+        marcasCount[marcaNome] = { nome: marcaNome, count: 0 }
+      }
+      marcasCount[marcaNome].count++
+    })
+
+    const totalLojas = lojaIds.length
+
+    const resultado = Object.values(marcasCount)
+      .sort((a, b) => b.count - a.count)
+      .map(item => ({
+        nome_marca: item.nome,
+        total_promotores: item.count,
+        cobertura_percentual: totalLojas > 0 ? Math.round((item.count / totalLojas) * 100) : 0
+      }))
+
+    console.log(`📊 ${resultado.length} marcas encontradas`)
+    return resultado
+
+  } catch (error) {
+    console.error('❌ Erro ao buscar cobertura por marca:', error)
+    return []
+  }
+}
+
+export async function getCampanhasAtivas(lojaId: string | null = null, isAdmin: boolean = true): Promise<any[]> {
+  try {
+    const hoje = new Date().toISOString().split('T')[0]
+
+    const { data: campanhas, error } = await supabase
+      .from('campanhas')
+      .select('*')
+      .eq('status', 'ativa')
+      .lte('data_inicio', hoje)
+      .gte('data_fim', hoje)
+
+    if (error) {
+      console.error('Erro ao buscar campanhas ativas:', error)
+      return []
+    }
+
+    if (!campanhas || campanhas.length === 0) {
+      return []
+    }
+
+    const campanhaIds = campanhas.map(c => c.id)
+    const { data: lojasCampanhas } = await supabase
+      .from('lojas_campanhas')
+      .select('campanha_id, loja_id')
+      .in('campanha_id', campanhaIds)
+
+    const campanhaComLojas = campanhas.filter(campanha => {
+      const lojas = lojasCampanhas?.filter(lc => lc.campanha_id === campanha.id) || []
+      const lojaIdsCampanha = lojas.map(l => l.loja_id)
+      
+      if (!isAdmin && lojaId) {
+        return lojaIdsCampanha.includes(lojaId)
+      }
+      return true
+    })
+
+    return campanhaComLojas
+  } catch (error) {
+    console.error('Erro ao buscar campanhas ativas:', error)
+    return []
+  }
+}
+
+export async function getAcoesAtivas(lojaId: string | null = null, isAdmin: boolean = true): Promise<any[]> {
+  try {
+    const hoje = new Date().toISOString().split('T')[0]
+
+    const { data: acoes, error } = await supabase
+      .from('acoes')
+      .select('*')
+      .in('status', ['em_andamento', 'pendente'])
+      .lte('data_inicio', hoje)
+      .gte('data_fim', hoje)
+
+    if (error) {
+      console.error('Erro ao buscar ações ativas:', error)
+      return []
+    }
+
+    if (!acoes || acoes.length === 0) {
+      return []
+    }
+
+    const acaoIds = acoes.map(a => a.id)
+    const { data: lojasAcoes } = await supabase
+      .from('acoes_lojas')
+      .select('acao_id, loja_id')
+      .in('acao_id', acaoIds)
+
+    const acaoComLojas = acoes.filter(acao => {
+      const lojas = lojasAcoes?.filter(la => la.acao_id === acao.id) || []
+      const lojaIdsAcao = lojas.map(l => l.loja_id)
+      
+      if (!isAdmin && lojaId) {
+        return lojaIdsAcao.includes(lojaId)
+      }
+      return true
+    })
+
+    return acaoComLojas
+  } catch (error) {
+    console.error('Erro ao buscar ações ativas:', error)
+    return []
+  }
 }
