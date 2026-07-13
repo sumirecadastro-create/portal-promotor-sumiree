@@ -2,11 +2,12 @@ import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { Input } from '@/components/ui/input'  // 🔥 ADICIONADO
 import { useToast } from '@/hooks/use-toast'
 import { createVisit, updateVisit, getActiveVisitsByDay, Visita } from '@/services/visitas'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/use-auth'
-import { MapPin, User, Store, Clock, Calendar, XCircle, Package } from 'lucide-react'
+import { MapPin, User, Store, Clock, Calendar, XCircle, Package, Search } from 'lucide-react'  // 🔥 ADICIONADO Search
 import { Badge } from '@/components/ui/badge'
 import {
   Select,
@@ -49,6 +50,10 @@ export default function CheckIn() {
   const [selectedPromotorId, setSelectedPromotorId] = useState<string>('')
   const [selectedLojaId, setSelectedLojaId] = useState<string>('')
   const [observacoes, setObservacoes] = useState('')
+  
+  // 🔥 NOVOS ESTADOS PARA PESQUISA
+  const [searchPromotor, setSearchPromotor] = useState('')
+  const [searchLoja, setSearchLoja] = useState('')
   
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
@@ -164,6 +169,18 @@ export default function CheckIn() {
     return visitasAtivas.some(v => v.promotor_id === promotorId)
   }
 
+  // 🔥 FILTRAR PROMOTORES PELA PESQUISA
+  const promotoresFiltrados = promotores.filter(p =>
+    p.promotor_nome.toLowerCase().includes(searchPromotor.toLowerCase()) ||
+    (p.marca_produto && p.marca_produto.toLowerCase().includes(searchPromotor.toLowerCase()))
+  )
+
+  // 🔥 FILTRAR LOJAS PELA PESQUISA
+  const lojasFiltradas = lojas.filter(l =>
+    l.nome_loja.toLowerCase().includes(searchLoja.toLowerCase()) ||
+    l.cod_loja.toLowerCase().includes(searchLoja.toLowerCase())
+  )
+
   const handleCheckIn = async () => {
     if (!selectedPromotorId || !selectedLojaId) {
       toast({ 
@@ -198,6 +215,8 @@ export default function CheckIn() {
       setSelectedPromotorId('')
       setSelectedLojaId('')
       setObservacoes('')
+      setSearchPromotor('')  // 🔥 LIMPAR PESQUISA
+      setSearchLoja('')      // 🔥 LIMPAR PESQUISA
       
       toast({
         title: 'Check-in realizado!',
@@ -307,61 +326,107 @@ export default function CheckIn() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
+            {/* 🔥 PROMOTOR COM BARRA DE PESQUISA */}
             <div className="space-y-2">
               <label className="text-sm font-medium flex items-center gap-2">
                 <User className="h-4 w-4" />
                 Promotor
               </label>
+              
+              {/* 🔥 BARRA DE PESQUISA DE PROMOTORES */}
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="🔍 Buscar promotor por nome ou marca..."
+                  value={searchPromotor}
+                  onChange={(e) => setSearchPromotor(e.target.value)}
+                  className="pl-8 mb-2"
+                />
+              </div>
+              
               <Select value={selectedPromotorId} onValueChange={setSelectedPromotorId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione um promotor" />
                 </SelectTrigger>
-                <SelectContent>
-                  {promotores.map((promotor) => (
-                    <SelectItem 
-                      key={promotor.id} 
-                      value={promotor.id}
-                      disabled={promotorTemVisitaAtiva(promotor.id)}
-                    >
-                      <div className="flex items-center justify-between w-full gap-2">
-                        <span>{promotor.promotor_nome}</span>
-                        {promotor.marca_produto && (
-                          <Badge variant="outline" className="text-xs">
-                            <Package className="h-3 w-3 mr-1" />
-                            {promotor.marca_produto}
-                          </Badge>
-                        )}
-                        {promotorTemVisitaAtiva(promotor.id) && (
-                          <Badge variant="secondary" className="text-xs bg-yellow-500">
-                            Em visita
-                          </Badge>
-                        )}
-                      </div>
-                    </SelectItem>
-                  ))}
+                <SelectContent className="max-h-[300px]">
+                  {promotoresFiltrados.length > 0 ? (
+                    promotoresFiltrados.map((promotor) => (
+                      <SelectItem 
+                        key={promotor.id} 
+                        value={promotor.id}
+                        disabled={promotorTemVisitaAtiva(promotor.id)}
+                      >
+                        <div className="flex items-center justify-between w-full gap-2">
+                          <span>{promotor.promotor_nome}</span>
+                          {promotor.marca_produto && (
+                            <Badge variant="outline" className="text-xs">
+                              <Package className="h-3 w-3 mr-1" />
+                              {promotor.marca_produto}
+                            </Badge>
+                          )}
+                          {promotorTemVisitaAtiva(promotor.id) && (
+                            <Badge variant="secondary" className="text-xs bg-yellow-500">
+                              Em visita
+                            </Badge>
+                          )}
+                        </div>
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <div className="p-2 text-center text-muted-foreground text-sm">
+                      Nenhum promotor encontrado
+                    </div>
+                  )}
                 </SelectContent>
               </Select>
+              
+              <p className="text-xs text-muted-foreground">
+                {promotoresFiltrados.length} promotor(es) encontrado(s)
+              </p>
             </div>
 
+            {/* 🔥 LOJA COM BARRA DE PESQUISA */}
             <div className="space-y-2">
               <label className="text-sm font-medium flex items-center gap-2">
                 <Store className="h-4 w-4" />
                 Loja
               </label>
+              
+              {/* 🔥 BARRA DE PESQUISA DE LOJAS */}
+              <div className="relative">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="🔍 Buscar loja por nome ou código..."
+                  value={searchLoja}
+                  onChange={(e) => setSearchLoja(e.target.value)}
+                  className="pl-8 mb-2"
+                />
+              </div>
+              
               <Select value={selectedLojaId} onValueChange={setSelectedLojaId}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione uma loja" />
                 </SelectTrigger>
-                <SelectContent>
-                  {lojas.map((loja) => (
-                    <SelectItem key={loja.id} value={loja.id}>
-                      <div className="flex items-center justify-between w-full">
-                        <span>{loja.nome_loja} - {loja.cod_loja}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
+                <SelectContent className="max-h-[300px]">
+                  {lojasFiltradas.length > 0 ? (
+                    lojasFiltradas.map((loja) => (
+                      <SelectItem key={loja.id} value={loja.id}>
+                        <div className="flex items-center justify-between w-full">
+                          <span>{loja.cod_loja} - {loja.nome_loja}</span>
+                        </div>
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <div className="p-2 text-center text-muted-foreground text-sm">
+                      Nenhuma loja encontrada
+                    </div>
+                  )}
                 </SelectContent>
               </Select>
+              
+              <p className="text-xs text-muted-foreground">
+                {lojasFiltradas.length} loja(s) encontrada(s)
+              </p>
               <p className="text-xs text-muted-foreground">
                 Uma loja pode receber múltiplos promotores de marcas diferentes.
               </p>
