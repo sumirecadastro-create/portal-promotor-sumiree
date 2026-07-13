@@ -1,6 +1,5 @@
 // src/services/solicitacoes.ts
 import { supabase } from '@/lib/supabase'
-import { useAuth } from '@/hooks/use-auth'
 
 export interface SolicitacaoPromotor {
   id: string
@@ -53,29 +52,10 @@ export interface CreateSolicitacaoData {
   data_necessidade: string
 }
 
-// 🔥 FUNÇÃO AUXILIAR PARA PEGAR O USUÁRIO
-function getUserId() {
+// 🔥 LISTAR SOLICITAÇÕES (RECEBE O USUÁRIO COMO PARÂMETRO)
+export async function getSolicitacoes(userId: string, isAdmin: boolean): Promise<SolicitacaoPromotor[]> {
   try {
-    const { user } = useAuth()
-    return user?.id || null
-  } catch (error) {
-    console.error('❌ Erro ao pegar usuário do contexto:', error)
-    return null
-  }
-}
-
-// Listar solicitações do usuário ou todas (admin)
-export async function getSolicitacoes(): Promise<SolicitacaoPromotor[]> {
-  try {
-    // 🔥 USAR O HOOK useAuth EM VEZ DE supabase.auth.getUser()
-    const { user, isAdmin } = useAuth()
-    
-    if (!user) {
-      console.warn('⚠️ Usuário não autenticado')
-      return []
-    }
-
-    console.log('👤 Buscando solicitações para usuário:', user.id)
+    console.log('👤 Buscando solicitações para usuário:', userId, 'isAdmin:', isAdmin)
 
     let query = supabase
       .from('solicitacoes_promotores')
@@ -88,9 +68,9 @@ export async function getSolicitacoes(): Promise<SolicitacaoPromotor[]> {
       `)
       .order('created_at', { ascending: false })
 
-    // 🔥 USAR isAdmin DO HOOK
+    // Se não for admin, filtrar pelo usuário
     if (!isAdmin) {
-      query = query.eq('solicitante_id', user.id)
+      query = query.eq('solicitante_id', userId)
     }
 
     const { data, error } = await query
@@ -108,18 +88,19 @@ export async function getSolicitacoes(): Promise<SolicitacaoPromotor[]> {
   }
 }
 
-// Criar nova solicitação
-export async function createSolicitacao(data: CreateSolicitacaoData): Promise<SolicitacaoPromotor | null> {
+// 🔥 CRIAR SOLICITAÇÃO (RECEBE O USUÁRIO COMO PARÂMETRO)
+export async function createSolicitacao(
+  data: CreateSolicitacaoData,
+  userId: string,
+  isAdmin: boolean
+): Promise<SolicitacaoPromotor | null> {
   try {
-    // 🔥 USAR O HOOK useAuth EM VEZ DE supabase.auth.getUser()
-    const { user, isAdmin } = useAuth()
-    
-    if (!user) {
+    if (!userId) {
       console.error('❌ Usuário não autenticado')
       throw new Error('Usuário não autenticado')
     }
 
-    console.log('👤 Criando solicitação para usuário:', user.id)
+    console.log('👤 Criando solicitação para usuário:', userId)
 
     // 🔥 VERIFICAR SE O USUÁRIO TEM PERMISSÃO PARA CRIAR
     // Gerentes só podem criar para sua própria loja
@@ -128,7 +109,7 @@ export async function createSolicitacao(data: CreateSolicitacaoData): Promise<So
       const { data: userData } = await supabase
         .from('usuarios_internos')
         .select('loja_id')
-        .eq('id', user.id)
+        .eq('id', userId)
         .single()
       
       if (userData && userData.loja_id !== data.loja_id) {
@@ -143,7 +124,7 @@ export async function createSolicitacao(data: CreateSolicitacaoData): Promise<So
         tipo_solicitacao: data.tipo_solicitacao || 'novo',
         motivo: data.motivo,
         prioridade: data.prioridade || 'media',
-        solicitante_id: user.id,
+        solicitante_id: userId,
         status: 'pendente',
         observacoes: data.observacoes || null,
         dias_semana_sugerido: data.dias_semana_sugerido || null,
@@ -162,18 +143,18 @@ export async function createSolicitacao(data: CreateSolicitacaoData): Promise<So
 
     console.log('✅ Solicitação criada com sucesso:', solicitacao.id)
 
-    // Registrar no histórico (opcional - se a tabela existir)
+    // Registrar no histórico (opcional)
     try {
       await supabase
         .from('historico_solicitacoes')
         .insert({
           solicitacao_id: solicitacao.id,
-          usuario_id: user.id,
+          usuario_id: userId,
           acao: 'criacao',
           descricao: `Solicitação de ${data.tipo_solicitacao} criada`
         })
     } catch (histError) {
-      console.warn('⚠️ Erro ao registrar histórico (tabela pode não existir):', histError)
+      console.warn('⚠️ Erro ao registrar histórico:', histError)
     }
 
     return solicitacao
@@ -183,17 +164,16 @@ export async function createSolicitacao(data: CreateSolicitacaoData): Promise<So
   }
 }
 
-// Atualizar status da solicitação (admin/regional)
+// 🔥 ATUALIZAR STATUS (RECEBE O USUÁRIO COMO PARÂMETRO)
 export async function updateSolicitacaoStatus(
   id: string,
   status: 'aprovado' | 'reprovado' | 'cancelado',
+  userId: string,
+  isAdmin: boolean,
   motivo?: string
 ): Promise<boolean> {
   try {
-    // 🔥 USAR O HOOK useAuth
-    const { user, isAdmin } = useAuth()
-    
-    if (!user) {
+    if (!userId) {
       console.error('❌ Usuário não autenticado')
       throw new Error('Usuário não autenticado')
     }
@@ -211,10 +191,10 @@ export async function updateSolicitacaoStatus(
     }
     
     if (status === 'aprovado') {
-      updateData.aprovado_por = user.id
+      updateData.aprovado_por = userId
       updateData.data_aprovacao = new Date().toISOString()
     } else if (status === 'reprovado') {
-      updateData.reprovado_por = user.id
+      updateData.reprovado_por = userId
       updateData.data_reprovacao = new Date().toISOString()
       updateData.motivo_reprovacao = motivo || null
     }
@@ -235,7 +215,7 @@ export async function updateSolicitacaoStatus(
         .from('historico_solicitacoes')
         .insert({
           solicitacao_id: id,
-          usuario_id: user.id,
+          usuario_id: userId,
           acao: status,
           descricao: `Status alterado para ${status}${motivo ? `: ${motivo}` : ''}`
         })
