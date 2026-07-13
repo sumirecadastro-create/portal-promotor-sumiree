@@ -12,7 +12,7 @@ import {
   User,
   Calendar,
   Target,
-  UserPlus,  // 🔥 ADICIONE ESTA LINHA
+  UserPlus,
 } from 'lucide-react'
 import {
   Sidebar,
@@ -41,6 +41,61 @@ const allItems = [
   { title: 'Solicitações de Promotores', url: '/solicitacoes-promotores', icon: UserPlus },
 ]
 
+// 🔥 DEFINIÇÃO DOS PERFIS E SUAS PERMISSÕES
+const rolePermissions: Record<string, string[]> = {
+  admin: [
+    'Dashboard', 
+    'Lojas', 
+    'Promotores', 
+    'Check-in (Operação)', 
+    'Cadastro de Usuários', 
+    'Marcas', 
+    'Ações', 
+    'Campanhas', 
+    'Relatórios', 
+    'Solicitações de Promotores'
+  ],
+  gestor: [
+    'Dashboard', 
+    'Lojas', 
+    'Promotores', 
+    'Ações', 
+    'Campanhas', 
+    'Relatórios'
+  ],
+  gerente: [
+    'Dashboard', 
+    'Check-in (Operação)', 
+    'Ações', 
+    'Campanhas', 
+    'Solicitações de Promotores', 
+    'Relatórios'
+  ],
+  // 🔥 ADICIONADO: Regional e Gerente Regional
+  regional: [
+    'Dashboard', 
+    'Lojas', 
+    'Promotores', 
+    'Ações', 
+    'Campanhas', 
+    'Solicitações de Promotores', 
+    'Relatórios'
+  ],
+  gerente_regional: [
+    'Dashboard', 
+    'Lojas', 
+    'Promotores', 
+    'Ações', 
+    'Campanhas', 
+    'Solicitações de Promotores', 
+    'Relatórios'
+  ],
+  promotor: [
+    'Dashboard', 
+    'Check-in (Operação)'
+  ],
+}
+
 export function AppSidebar() {
   const location = useLocation()
   const navigate = useNavigate()
@@ -63,24 +118,10 @@ export function AppSidebar() {
     )
   }
 
-  // 🔥 FILTRO DE MENU BASEADO NO PERFIL (CORRIGIDO)
+  // 🔥 FILTRO DE MENU BASEADO NO PERFIL (USANDO rolePermissions)
   const items = allItems.filter((item) => {
-    // ADMIN: vê tudo
-    if (role === 'admin') return true
-    
-    // GESTOR: NÃO vê Cadastro de Usuários e Marcas
-    if (role === 'gestor')
-      return ['Dashboard', 'Lojas', 'Promotores', 'Ações', 'Campanhas', 'Relatórios'].includes(item.title)
-    
-    // 🔥 GERENTE DE LOJA: vê Dashboard, Check-in, Ações, Campanhas, Solicitações e Relatórios
-    if (role === 'gerente')
-      return ['Dashboard', 'Check-in (Operação)', 'Ações', 'Campanhas', 'Solicitações de Promotores', 'Relatórios'].includes(item.title)
-    
-    // PROMOTOR: vê apenas Dashboard e Check-in
-    if (role === 'promotor') 
-      return ['Dashboard', 'Check-in (Operação)'].includes(item.title)
-    
-    return false
+    const allowedItems = rolePermissions[role] || []
+    return allowedItems.includes(item.title)
   })
 
   const handleSignOut = async () => {
