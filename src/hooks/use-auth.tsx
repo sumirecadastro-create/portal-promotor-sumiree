@@ -13,6 +13,10 @@ interface AuthContextType {
   loading: boolean
   isAdmin: boolean
   isGerente: boolean
+  isGestor: boolean
+  isRegional: boolean
+  isSupervisor: boolean
+  isPromotor: boolean
   userLojaId: string | null
   signOut: () => Promise<void>
 }
@@ -30,6 +34,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true)
   const [isAdmin, setIsAdmin] = useState(false)
   const [isGerente, setIsGerente] = useState(false)
+  const [isGestor, setIsGestor] = useState(false)
+  const [isRegional, setIsRegional] = useState(false)
+  const [isSupervisor, setIsSupervisor] = useState(false)
+  const [isPromotor, setIsPromotor] = useState(false)
   const [userLojaId, setUserLojaId] = useState<string | null>(null)
 
   useEffect(() => {
@@ -53,19 +61,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               .maybeSingle()
             
             const customUser = session.user as CustomUser
-            customUser.app_role = userData?.role || 'admin'
+            const role = userData?.role || 'promotor'
+            
+            customUser.app_role = role
             customUser.nome = userData?.nome || session.user.email?.split('@')[0]
             customUser.loja_id = userData?.loja_id || null
             
-            // Setar permissões
-            const adminRole = userData?.role === 'admin' || userData?.role === 'gestor'
-            const gerenteRole = userData?.role === 'gerente'
-            
-            setIsAdmin(adminRole)
-            setIsGerente(gerenteRole)
+            // 🔥 SETAR TODAS AS PERMISSÕES
+            setIsAdmin(role === 'admin')
+            setIsGestor(role === 'gestor')
+            setIsGerente(role === 'gerente')
+            setIsRegional(role === 'regional' || role === 'gerente_regional')
+            setIsSupervisor(role === 'supervisor')
+            setIsPromotor(role === 'promotor')
             setUserLojaId(userData?.loja_id || null)
             
-            console.log('✅ Usuário carregado:', customUser.email, 'Role:', userData?.role, 'Loja:', userData?.loja_id)
+            console.log('✅ Usuário carregado:', customUser.email, 'Role:', role, 'Loja:', userData?.loja_id)
             setUser(customUser)
             setLoading(false)
             return
@@ -77,7 +88,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       
       setUser(null)
       setIsAdmin(false)
+      setIsGestor(false)
       setIsGerente(false)
+      setIsRegional(false)
+      setIsSupervisor(false)
+      setIsPromotor(false)
       setUserLojaId(null)
       setLoading(false)
     }
@@ -95,19 +110,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           .maybeSingle()
         
         const customUser = session.user as CustomUser
-        customUser.app_role = userData?.role || 'admin'
+        const role = userData?.role || 'promotor'
+        
+        customUser.app_role = role
         customUser.nome = userData?.nome || session.user.email?.split('@')[0]
         customUser.loja_id = userData?.loja_id || null
         
-        setIsAdmin(userData?.role === 'admin' || userData?.role === 'gestor')
-        setIsGerente(userData?.role === 'gerente')
+        // 🔥 SETAR TODAS AS PERMISSÕES
+        setIsAdmin(role === 'admin')
+        setIsGestor(role === 'gestor')
+        setIsGerente(role === 'gerente')
+        setIsRegional(role === 'regional' || role === 'gerente_regional')
+        setIsSupervisor(role === 'supervisor')
+        setIsPromotor(role === 'promotor')
         setUserLojaId(userData?.loja_id || null)
         
         setUser(customUser)
       } else {
         setUser(null)
         setIsAdmin(false)
+        setIsGestor(false)
         setIsGerente(false)
+        setIsRegional(false)
+        setIsSupervisor(false)
+        setIsPromotor(false)
         setUserLojaId(null)
       }
       setLoading(false)
@@ -133,7 +159,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       
       setUser(null)
       setIsAdmin(false)
+      setIsGestor(false)
       setIsGerente(false)
+      setIsRegional(false)
+      setIsSupervisor(false)
+      setIsPromotor(false)
       setUserLojaId(null)
       
       console.log('✅ Logout realizado com sucesso')
@@ -146,7 +176,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, isAdmin, isGerente, userLojaId, signOut }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      loading, 
+      isAdmin, 
+      isGerente,
+      isGestor,
+      isRegional,
+      isSupervisor,
+      isPromotor,
+      userLojaId, 
+      signOut 
+    }}>
       {children}
     </AuthContext.Provider>
   )
