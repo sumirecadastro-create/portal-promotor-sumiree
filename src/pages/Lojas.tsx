@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Search, Plus, Eye } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
+import { useAuth } from '@/hooks/use-auth'  // 🔥 ADICIONADO
 import {
   Dialog,
   DialogContent,
@@ -25,6 +26,8 @@ interface Loja {
 }
 
 export default function Lojas() {
+  // 🔥 ADICIONAR useAuth
+  const { isAdmin, isGerente, isRegional, userLojaId } = useAuth()
   const [lojas, setLojas] = useState<Loja[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -36,11 +39,37 @@ export default function Lojas() {
   const { toast } = useToast()
 
   const loadData = async () => {
+    setLoading(true)
     try {
-      const { data, error } = await supabase
+      // 🔥 CONSTRUIR QUERY COM FILTROS
+      let query = supabase
         .from('lojas')
         .select('*')
         .order('nome_loja')
+
+      // 🔥 SE FOR REGIONAL: filtrar apenas as lojas que ele gerencia
+      if (isRegional && userLojaId) {
+        const { data: lojasData } = await supabase
+          .from('gerentes_regionais_lojas')
+          .select('loja_id')
+          .eq('gerente_regional_id', userLojaId)
+        
+        const lojaIds = lojasData?.map(l => l.loja_id) || []
+        if (lojaIds.length > 0) {
+          query = query.in('id', lojaIds)
+        } else {
+          setLojas([])
+          setLoading(false)
+          return
+        }
+      }
+      // 🔥 SE FOR GERENTE: filtrar apenas a loja dele
+      else if (isGerente && userLojaId) {
+        query = query.eq('id', userLojaId)
+      }
+      // 🔥 ADMIN: vê todas as lojas (sem filtro)
+
+      const { data, error } = await query
       
       if (error) throw error
       setLojas(data || [])
@@ -58,7 +87,7 @@ export default function Lojas() {
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [userLojaId, isRegional, isGerente, isAdmin])
 
   const handleCreateLoja = async () => {
     if (!newCodLoja || !newNomeLoja) {
@@ -167,7 +196,19 @@ export default function Lojas() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Unidades Sumirê ({lojas.length})</CardTitle>
+          <CardTitle className="text-lg">
+            Unidades Sumirê ({lojas.length})
+            {isRegional && userLojaId && (
+              <span className="text-sm font-normal text-muted-foreground ml-2">
+                (Filtrado para suas lojas)
+              </span>
+            )}
+            {isGerente && userLojaId && (
+              <span className="text-sm font-normal text-muted-foreground ml-2">
+                (Sua loja)
+              </span>
+            )}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -203,7 +244,7 @@ export default function Lojas() {
                 {filteredLojas.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={3} className="text-center py-6 text-muted-foreground">
-                      Nenhuma loja encontrada.
+                      {isRegional ? 'Nenhuma loja encontrada para sua região.' : 'Nenhuma loja encontrada.'}
                     </TableCell>
                   </TableRow>
                 )}
