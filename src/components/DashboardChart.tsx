@@ -2,7 +2,15 @@ import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { BarChart3, PieChart, TrendingUp, Loader2 } from 'lucide-react'
-import { getCoberturaPorMarcaComLojas, MarcaCobertura } from '@/services/dashboard'
+import { getCoberturaPorMarcaComLojas } from '@/services/dashboard'
+import { useAuth } from '@/hooks/use-auth'
+
+// 🔥 DEFINIR INTERFACE LOCALMENTE
+interface MarcaCobertura {
+  nome_marca: string
+  total_promotores: number
+  cobertura_percentual: number
+}
 
 // Componente de gráfico de barras
 function BarChartComponent({ data }: { data: MarcaCobertura[] }) {
@@ -22,7 +30,7 @@ function BarChartComponent({ data }: { data: MarcaCobertura[] }) {
           </div>
           <div className="relative w-full h-8 bg-secondary rounded-md overflow-hidden">
             <div 
-              className="absolute left-0 top-0 h-full bg-gradient-to-r from-blue-500 to-indigo-600 rounded-md transition-all duration-500 flex items-center justify-end px-2"
+              className="absolute left-0 top-0 h-full bg-gradient-to-r from-pink-500 to-purple-600 rounded-md transition-all duration-500 flex items-center justify-end px-2"
               style={{ width: `${(item.total_promotores / maxValue) * 100}%` }}
             >
               <span className="text-xs text-white font-medium">
@@ -40,8 +48,8 @@ function BarChartComponent({ data }: { data: MarcaCobertura[] }) {
 function PieChartComponent({ data }: { data: MarcaCobertura[] }) {
   const total = data.reduce((sum, item) => sum + item.total_promotores, 0)
   const colors = [
-    'bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-red-500', 
-    'bg-purple-500', 'bg-pink-500', 'bg-indigo-500', 'bg-orange-500',
+    'bg-pink-500', 'bg-purple-500', 'bg-blue-500', 'bg-green-500', 
+    'bg-yellow-500', 'bg-red-500', 'bg-indigo-500', 'bg-orange-500',
     'bg-teal-500', 'bg-cyan-500', 'bg-amber-500', 'bg-lime-500',
     'bg-emerald-500', 'bg-fuchsia-500', 'bg-rose-500', 'bg-sky-500'
   ]
@@ -73,6 +81,8 @@ function PieChartComponent({ data }: { data: MarcaCobertura[] }) {
 }
 
 export function DashboardChart() {
+  // 🔥 ADICIONAR useAuth PARA PEGAR O USUÁRIO
+  const { user, isAdmin, userLojaId } = useAuth()
   const [data, setData] = useState<MarcaCobertura[]>([])
   const [loading, setLoading] = useState(true)
   const [chartType, setChartType] = useState<'bar' | 'pie'>('bar')
@@ -80,7 +90,8 @@ export function DashboardChart() {
   const loadData = async () => {
     setLoading(true)
     try {
-      const result = await getCoberturaPorMarcaComLojas()
+      // 🔥 PASSAR OS PARÂMETROS CORRETAMENTE
+      const result = await getCoberturaPorMarcaComLojas(userLojaId, isAdmin)
       setData(result)
     } catch (error) {
       console.error('Erro ao carregar dados do gráfico:', error)
@@ -91,7 +102,7 @@ export function DashboardChart() {
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [userLojaId, isAdmin])
 
   return (
     <Card className="animate-slide-up delay-100">
@@ -103,6 +114,7 @@ export function DashboardChart() {
             size="sm"
             onClick={() => setChartType('bar')}
             className="h-8 px-2"
+            style={chartType === 'bar' ? { background: '#FF1686' } : {}}
           >
             <BarChart3 className="h-4 w-4" />
           </Button>
@@ -111,6 +123,7 @@ export function DashboardChart() {
             size="sm"
             onClick={() => setChartType('pie')}
             className="h-8 px-2"
+            style={chartType === 'pie' ? { background: '#FF1686' } : {}}
           >
             <PieChart className="h-4 w-4" />
           </Button>
