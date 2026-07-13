@@ -406,7 +406,6 @@ function AcaoTooltip({ acao, children }: { acao: Acao; children: React.ReactNode
 }
 
 export default function Acoes() {
-  // 🔥 ADICIONADO isRegional
   const { 
     isAdmin, 
     isGerente,
@@ -415,7 +414,6 @@ export default function Acoes() {
     loading: authLoading 
   } = useAuth()
   
-  // Estados principais
   const [mesAtual, setMesAtual] = useState(new Date())
   const [lojaFiltroNome, setLojaFiltroNome] = useState('')
   const [lojas, setLojas] = useState<Loja[]>([])
@@ -423,7 +421,6 @@ export default function Acoes() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   
-  // Estados dos modais
   const [showFilterModal, setShowFilterModal] = useState(false)
   const [showNovaAcaoModal, setShowNovaAcaoModal] = useState(false)
   const [showDetalhesModal, setShowDetalhesModal] = useState(false)
@@ -431,12 +428,10 @@ export default function Acoes() {
   const [acaoSelecionada, setAcaoSelecionada] = useState<Acao | null>(null)
   const [editandoAcao, setEditandoAcao] = useState<Acao | null>(null)
   
-  // Estado dos filtros
   const [filtroStatus, setFiltroStatus] = useState<string>('todos')
   const [filtroTipo, setFiltroTipo] = useState<string>('todos')
   const [lojasSelecionadas, setLojasSelecionadas] = useState<string[]>([])
   
-  // Estado da nova ação
   const [novaAcao, setNovaAcao] = useState({
     nome: '',
     loja_ids: [] as string[],
@@ -448,10 +443,8 @@ export default function Acoes() {
   })
   const [salvando, setSalvando] = useState(false)
   
-  // Estado para edição
   const [selectedLojasEdit, setSelectedLojasEdit] = useState<string[]>([])
   
-  // Estados do Popover de Lojas
   const [lojasPopoverOpen, setLojasPopoverOpen] = useState(false)
   const [buscaLojasTemp, setBuscaLojasTemp] = useState('')
   const [lojasSelecionadasTemp, setLojasSelecionadasTemp] = useState<string[]>([])
@@ -492,7 +485,17 @@ export default function Acoes() {
     setLojasPopoverOpen(false)
   }
 
-  // 🔥 CORRIGIDO: carregarLojas com suporte a Regional
+  // 🔥 FUNÇÃO PARA BUSCAR LOJAS DO REGIONAL
+  const getLojasRegional = async () => {
+    if (!isRegional || !userLojaId) return []
+    const { data } = await supabase
+      .from('gerentes_regionais_lojas')
+      .select('loja_id')
+      .eq('gerente_regional_id', userLojaId)
+    return data?.map(l => l.loja_id) || []
+  }
+
+  // 🔥 CARREGAR LOJAS COM FILTRO REGIONAL
   async function carregarLojas() {
     try {
       let query = supabase
@@ -506,16 +509,10 @@ export default function Acoes() {
       }
       // 🔥 Se for Regional, filtrar apenas as lojas que ele gerencia
       else if (isRegional && !isAdmin && userLojaId) {
-        const { data: lojasData } = await supabase
-          .from('gerentes_regionais_lojas')
-          .select('loja_id')
-          .eq('gerente_regional_id', userLojaId)
-        
-        const lojaIds = lojasData?.map(l => l.loja_id) || []
+        const lojaIds = await getLojasRegional()
         if (lojaIds.length > 0) {
           query = query.in('id', lojaIds)
         } else {
-          // Se não tem lojas, retorna vazio
           setLojas([])
           return
         }
@@ -542,7 +539,7 @@ export default function Acoes() {
     }
   }
 
-  // 🔥 CORRIGIDO: carregarAcoes com suporte a Regional
+  // 🔥 CARREGAR AÇÕES COM FILTRO REGIONAL
   async function carregarAcoes() {
     try {
       const startDate = getFirstDayOfMonth(ano, mes)
@@ -559,11 +556,7 @@ export default function Acoes() {
         }
       } else if (isRegional && !isAdmin) {
         // 🔥 REGIONAL: buscar lojas que ele gerencia
-        const { data: lojasData } = await supabase
-          .from('gerentes_regionais_lojas')
-          .select('loja_id')
-          .eq('gerente_regional_id', userLojaId)
-        lojasPermitidasIds = lojasData?.map(l => l.loja_id) || []
+        lojasPermitidasIds = await getLojasRegional()
       }
       
       let query = supabase
@@ -629,7 +622,6 @@ export default function Acoes() {
     setLoading(false)
   }
 
-  // 🔥 ADICIONADO isRegional no useEffect
   useEffect(() => {
     const init = async () => {
       if (!authLoading) {
@@ -846,7 +838,6 @@ export default function Acoes() {
     { value: 'abordagem', label: '📢 Abordagem', description: 'Abordagem ativa de clientes' }
   ]
 
-  // Verificação de carregamento
   if (authLoading || loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -858,7 +849,6 @@ export default function Acoes() {
     )
   }
 
-  // 🔥 CORRIGIDO: Verificação de permissão com isRegional
   const hasAccess = isAdmin === true || isGerente === true || isRegional === true
   
   if (!hasAccess) {
