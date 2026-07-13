@@ -9,6 +9,7 @@ import { getPromotores, Promotor, createPromotor, updatePromotor, deletePromotor
 import { uploadCartaPromotor, deleteCartaPromotor } from '@/services/uploadCarta'
 import { getLojas } from '@/services/lojas'
 import { useToast } from '@/hooks/use-toast'
+import { useAuth } from '@/hooks/use-auth'
 import {
   Dialog,
   DialogContent,
