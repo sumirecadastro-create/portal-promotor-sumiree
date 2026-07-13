@@ -27,12 +27,10 @@ export default function Index() {
 
   const loadData = async () => {
     setLoading(true)
-    // Passar o userLojaId e isAdmin para filtrar os dados
     const data = await getDashboardData(userLojaId, isAdmin)
     setStats(data.stats)
     setRecentVisits(data.recentVisits)
     
-    // Carregar cobertura por marca filtrada
     const marcas = await getCoberturaPorMarcaComLojas(userLojaId, isAdmin)
     setCoberturaMarcas(marcas)
     
@@ -52,7 +50,6 @@ export default function Index() {
   const goToCheckIn = () => navigate('/check-in')
   const goToPromotores = () => navigate('/promotores')
 
-  // Verificar se está carregando
   if (loading) {
     return (
       <div className="flex justify-center items-center h-96">
@@ -91,60 +88,53 @@ export default function Index() {
             <CardTitle className="text-base">Atividade Recente (Hoje)</CardTitle>
           </CardHeader>
           <CardContent>
-            {loading ? (
-              <div className="flex justify-center p-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Promotor</TableHead>
-                    <TableHead>Loja</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Hora</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {recentVisits.map((visit) => {
-                    const isEmAndamento = visit.status === 'em_andamento' || !visit.check_out
-                    return (
-                      <TableRow key={visit.id}>
-                        <TableCell className="font-medium text-xs truncate max-w-[120px]">
-                          {visit.promotor_nome || 'Desconhecido'}
-                        </TableCell>
-                        <TableCell className="text-xs truncate max-w-[120px]">
-                          {visit.loja_nome || 'Desconhecida'}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={isEmAndamento ? 'default' : 'secondary'}
-                            className={isEmAndamento ? 'bg-emerald-500 hover:bg-emerald-600' : ''}
-                          >
-                            {isEmAndamento ? 'Em Andamento' : 'Concluída'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right text-xs text-muted-foreground">
-                          {formatTime(visit.check_in)}
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                  {recentVisits.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center py-6 text-muted-foreground">
-                        Nenhuma visita recente
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Promotor</TableHead>
+                  <TableHead>Loja</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Hora</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recentVisits.map((visit) => {
+                  const isEmAndamento = visit.status === 'em_andamento' || !visit.check_out
+                  return (
+                    <TableRow key={visit.id}>
+                      <TableCell className="font-medium text-xs truncate max-w-[120px]">
+                        {visit.promotor_nome || 'Desconhecido'}
+                      </TableCell>
+                      <TableCell className="text-xs truncate max-w-[120px]">
+                        {visit.loja_nome || 'Desconhecida'}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={isEmAndamento ? 'default' : 'secondary'}
+                          className={isEmAndamento ? 'bg-emerald-500 hover:bg-emerald-600' : ''}
+                        >
+                          {isEmAndamento ? 'Em Andamento' : 'Concluída'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right text-xs text-muted-foreground">
+                        {formatTime(visit.check_in)}
                       </TableCell>
                     </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            )}
+                  )
+                })}
+                {recentVisits.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center py-6 text-muted-foreground">
+                      Nenhuma visita recente
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       </div>
 
-      {/* Cobertura por Marca */}
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Cobertura por Marca</CardTitle>
@@ -179,11 +169,8 @@ export default function Index() {
         </CardContent>
       </Card>
 
-      {/* Calendário de Campanhas */}
       <CalendarioCampanhas />
     </div>
   )
 }
-
-// 🔥 ESTA LINHA É OBRIGATÓRIA!
-export default Index
+// 🔥 NÃO COLOQUE OUTRO export default AQUI!
