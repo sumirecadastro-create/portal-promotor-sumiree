@@ -113,12 +113,14 @@ function DetalhesCampanha({
   campanha, 
   open, 
   onOpenChange,
-  onEditar
+  onEditar,
+  isAdmin
 }: { 
   campanha: Campanha | null; 
   open: boolean; 
   onOpenChange: (open: boolean) => void;
   onEditar: (campanha: Campanha) => void;
+  isAdmin: boolean;
 }) {
   if (!campanha) return null
 
@@ -239,10 +241,12 @@ function DetalhesCampanha({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Fechar
           </Button>
-          <Button onClick={handleEditar} style={{ background: PRIMARY_COLOR }}>
-            <Edit className="h-4 w-4 mr-2" />
-            Editar Campanha
-          </Button>
+          {isAdmin && (
+            <Button onClick={handleEditar} style={{ background: PRIMARY_COLOR }}>
+              <Edit className="h-4 w-4 mr-2" />
+              Editar Campanha
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -272,8 +276,8 @@ function CampanhaTooltip({ campanha, children }: { campanha: Campanha; children:
 }
 
 export default function Campanhas() {
-  // 🔥 Autenticação
-  const { isAdmin, isGerente, userLojaId, loading: authLoading } = useAuth()
+  // 🔥 Autenticação - ADICIONADO isRegional
+  const { isAdmin, isGerente, isRegional, userLojaId, loading: authLoading } = useAuth()
   
   // Estados principais
   const [mesAtual, setMesAtual] = useState(new Date())
@@ -337,6 +341,7 @@ export default function Campanhas() {
   const abrirEdicao = (campanha: Campanha) => {
     setEditandoCampanha({ ...campanha })
     setSelectedLojasEdit(campanha.lojas?.map(l => l.id) || [])
+    setSelectedPromotoresEdit(campanha.promotores?.map(p => p.id) || [])
     setShowEditModal(true)
   }
 
@@ -376,7 +381,7 @@ export default function Campanhas() {
     setPromotoresPopoverOpen(false)
   }
 
-  // 🔥 Buscar lojas do Supabase com filtro por permissão do gerente
+  // Buscar lojas do Supabase com filtro por permissão
   async function carregarLojas() {
     try {
       let query = supabase
@@ -427,26 +432,25 @@ export default function Campanhas() {
     }
   }
 
-  // 🔥 Buscar campanhas do Supabase com filtro por permissão do gerente
+  // Buscar campanhas do Supabase com filtro por permissão
   async function carregarCampanhas() {
     try {
       const startDate = `${ano}-${String(mes + 1).padStart(2, '0')}-01`
       const lastDay = new Date(ano, mes + 1, 0).getDate()
       const endDate = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
       
-      // Buscar IDs das lojas permitidas para o gerente
+      // Buscar IDs das lojas permitidas
       let lojasPermitidasIds: string[] = []
       
-      if (isGerente && !isAdmin) {
-        if (userLojaId) {
-          lojasPermitidasIds = [userLojaId]
-        } else {
-          // Gerente sem loja específica - buscar todas as lojas
-          const { data: lojasData } = await supabase
-            .from('lojas')
-            .select('id')
-          lojasPermitidasIds = lojasData?.map(l => l.id) || []
-        }
+      if (isGerente && !isAdmin && userLojaId) {
+        lojasPermitidasIds = [userLojaId]
+      } else if (isRegional && !isAdmin) {
+        // 🔥 REGIONAL: buscar lojas que ele gerencia
+        const { data: lojasData } = await supabase
+          .from('gerentes_regionais_lojas')
+          .select('loja_id')
+          .eq('gerente_regional_id', userLojaId)
+        lojasPermitidasIds = lojasData?.map(l => l.loja_id) || []
       }
       
       // Buscar campanhas
@@ -477,8 +481,8 @@ export default function Campanhas() {
         .select('campanha_id, loja_id')
         .in('campanha_id', campanhaIds)
       
-      // Se for gerente, filtrar apenas as lojas permitidas
-      if (isGerente && !isAdmin && lojasPermitidasIds.length > 0) {
+      // Se for gerente ou regional, filtrar apenas as lojas permitidas
+      if ((isGerente || isRegional) && !isAdmin && lojasPermitidasIds.length > 0) {
         lojasRelQuery = lojasRelQuery.in('loja_id', lojasPermitidasIds)
       }
       
@@ -567,7 +571,7 @@ export default function Campanhas() {
     if (!authLoading) {
       carregarDados()
     }
-  }, [mesAtual, filtroStatus, authLoading, isGerente, isAdmin, userLojaId])
+  }, [mesAtual, filtroStatus, authLoading, isGerente, isAdmin, isRegional, userLojaId])
 
   // Filtrar lojas
   const lojasFiltradas = lojas.filter(loja => {
@@ -806,7 +810,7 @@ export default function Campanhas() {
   const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
   const filtrosAtivos = (filtroStatus !== 'todos' ? 1 : 0) + (lojasSelecionadas.length > 0 ? 1 : 0)
 
-  // 🔥 Verificar permissão de acesso
+  // 🔥 Verificar permissão de acesso - ADICIONADO isRegional
   if (authLoading || loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -818,8 +822,8 @@ export default function Campanhas() {
     )
   }
 
-  // 🔥 Se não for admin nem gerente, mostrar acesso negado
-  if (!isAdmin && !isGerente) {
+  // 🔥 Se não for admin, gerente ou regional, mostrar acesso negado
+  if (!isAdmin && !isGerente && !isRegional) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
@@ -848,23 +852,21 @@ export default function Campanhas() {
             </div>
             
             <div className="flex gap-2">
-              {/* 🔥 Botão de filtro - admin vê tudo, gerente só vê se tiver mais de uma loja */}
-              {(isAdmin || lojas.length > 1) && (
-                <Button 
-                  variant="secondary" 
-                  size="sm" 
-                  className="bg-white/20 hover:bg-white/30 text-white"
-                  onClick={() => setShowFilterModal(true)}
-                >
-                  <Filter className="h-4 w-4 mr-2" />
-                  Filtrar
-                  {filtrosAtivos > 0 && (
-                    <Badge className="ml-2 bg-white text-pink-600" variant="secondary">
-                      {filtrosAtivos}
-                    </Badge>
-                  )}
-                </Button>
-              )}
+              {/* Botão de filtro */}
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                className="bg-white/20 hover:bg-white/30 text-white"
+                onClick={() => setShowFilterModal(true)}
+              >
+                <Filter className="h-4 w-4 mr-2" />
+                Filtrar
+                {filtrosAtivos > 0 && (
+                  <Badge className="ml-2 bg-white text-pink-600" variant="secondary">
+                    {filtrosAtivos}
+                  </Badge>
+                )}
+              </Button>
               
               {/* 🔥 Botão de nova campanha - apenas admin pode criar */}
               {isAdmin && (
@@ -1050,6 +1052,7 @@ export default function Campanhas() {
           open={showDetalhesModal}
           onOpenChange={setShowDetalhesModal}
           onEditar={abrirEdicao}
+          isAdmin={isAdmin}
         />
 
         {/* Modal de Edição de Campanha - apenas admin */}
@@ -1062,7 +1065,7 @@ export default function Campanhas() {
               </DialogDescription>
             </DialogHeader>
             
-            {editandoCampanha && isAdmin && (
+            {editandoCampanha && (
               <div className="space-y-4 py-4">
                 <div className="space-y-2">
                   <Label>Nome da Campanha <span className="text-red-500">*</span></Label>
