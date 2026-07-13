@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge'
 import { Plus, Search, Edit, Package } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useToast } from '@/hooks/use-toast'
+import { useAuth } from '@/hooks/use-auth'
 import {
   Dialog,
   DialogContent,
@@ -32,6 +33,7 @@ interface Marca {
 }
 
 export default function Marcas() {
+  const { user, isAdmin, isGerente, isRegional, userLojaId } = useAuth()
   const [marcas, setMarcas] = useState<Marca[]>([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
@@ -40,12 +42,99 @@ export default function Marcas() {
   const [newMarca, setNewMarca] = useState('')
   const { toast } = useToast()
 
+  // 🔥 FUNÇÃO PARA BUSCAR LOJAS DO REGIONAL
+  const getLojasRegional = async () => {
+    if (!isRegional || !userLojaId) return []
+    const { data } = await supabase
+      .from('gerentes_regionais_lojas')
+      .select('loja_id')
+      .eq('gerente_regional_id', userLojaId)
+    return data?.map(l => l.loja_id) || []
+  }
+
   const loadData = async () => {
+    setLoading(true)
     try {
-      const { data, error } = await supabase
+      let marcaIds: string[] = []
+
+      // 🔥 Se for regional, buscar marcas das lojas que ele gerencia
+      if (isRegional && userLojaId) {
+        const lojaIds = await getLojasRegional()
+        
+        if (lojaIds.length === 0) {
+          setMarcas([])
+          setLoading(false)
+          return
+        }
+
+        // Buscar promotores das lojas do regional
+        const { data: promotoresLojas } = await supabase
+          .from('promotores_lojas')
+          .select('promotor_id')
+          .in('loja_id', lojaIds)
+
+        const promotorIds = promotoresLojas?.map(p => p.promotor_id) || []
+
+        if (promotorIds.length === 0) {
+          setMarcas([])
+          setLoading(false)
+          return
+        }
+
+        // Buscar marcas desses promotores
+        const { data: marcasData } = await supabase
+          .from('promotores_marcas')
+          .select('marca_id')
+          .in('promotor_id', promotorIds)
+
+        marcaIds = marcasData?.map(m => m.marca_id) || []
+
+        if (marcaIds.length === 0) {
+          setMarcas([])
+          setLoading(false)
+          return
+        }
+      }
+      // 🔥 Se for gerente, buscar marcas da loja dele
+      else if (isGerente && userLojaId) {
+        const { data: promotoresLojas } = await supabase
+          .from('promotores_lojas')
+          .select('promotor_id')
+          .eq('loja_id', userLojaId)
+
+        const promotorIds = promotoresLojas?.map(p => p.promotor_id) || []
+
+        if (promotorIds.length === 0) {
+          setMarcas([])
+          setLoading(false)
+          return
+        }
+
+        const { data: marcasData } = await supabase
+          .from('promotores_marcas')
+          .select('marca_id')
+          .in('promotor_id', promotorIds)
+
+        marcaIds = marcasData?.map(m => m.marca_id) || []
+
+        if (marcaIds.length === 0) {
+          setMarcas([])
+          setLoading(false)
+          return
+        }
+      }
+
+      // 🔥 Buscar marcas (com filtro se for regional/gerente)
+      let query = supabase
         .from('marcas')
         .select('*')
         .order('nome')
+
+      if (marcaIds.length > 0) {
+        query = query.in('id', marcaIds)
+      }
+
+      const { data, error } = await query
       
       if (error) throw error
       setMarcas(data || [])
@@ -63,7 +152,7 @@ export default function Marcas() {
 
   useEffect(() => {
     loadData()
-  }, [])
+  }, [userLojaId, isRegional, isGerente, isAdmin])
 
   const handleCreateMarca = async () => {
     if (!newMarca.trim()) {
@@ -134,7 +223,19 @@ export default function Marcas() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between gap-4">
         <div className="flex items-center gap-2">
-          <h2 className="text-2xl font-bold tracking-tight">Marcas Parceiras</h2>
+          <h2 className="text-2xl font-bold tracking-tight">
+            Marcas Parceiras
+            {isRegional && (
+              <span className="text-sm font-normal text-muted-foreground ml-2">
+                (Filtrado para sua região)
+              </span>
+            )}
+            {isGerente && (
+              <span className="text-sm font-normal text-muted-foreground ml-2">
+                (Filtrado para sua loja)
+              </span>
+            )}
+          </h2>
         </div>
         <div className="flex gap-2">
           <div className="relative w-full sm:w-64">
@@ -186,7 +287,14 @@ export default function Marcas() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Lista de Marcas</CardTitle>
+          <CardTitle className="text-lg">
+            Lista de Marcas
+            {marcas.length > 0 && (
+              <span className="text-sm font-normal text-muted-foreground ml-2">
+                ({marcas.length} marcas)
+              </span>
+            )}
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -231,7 +339,11 @@ export default function Marcas() {
                 {filteredMarcas.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={3} className="text-center py-6 text-muted-foreground">
-                      Nenhuma marca encontrada.
+                      {isRegional 
+                        ? 'Nenhuma marca encontrada para sua região.' 
+                        : isGerente 
+                        ? 'Nenhuma marca encontrada para sua loja.'
+                        : 'Nenhuma marca encontrada.'}
                     </TableCell>
                   </TableRow>
                 )}
