@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/popover'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
+import { ImportarPromotoresExcel } from '@/components/ImportarPromotoresExcel'
 
 interface Loja {
   id: string
@@ -82,11 +83,14 @@ export default function Promotores() {
   const [uploadingCarta, setUploadingCarta] = useState(false)
   const { toast } = useToast()
 
+  // 🔥 Buscar permissões do usuário
+  const { user, isAdmin, isGerente, isRegional } = useAuth() as any
+
   // Formulário de novo promotor
   const [newPromotor, setNewPromotor] = useState({
     promotor_nome: '',
     loja_ids: [] as string[],
-    gerente_ids: [] as string[], // 🔥 MUDOU: agora é array
+    gerente_ids: [] as string[],
     marca_ids: [] as string[],
     dias_semana: '',
     contato_responsavel: '',
@@ -103,11 +107,12 @@ export default function Promotores() {
   const [buscaLojasEdit, setBuscaLojasEdit] = useState('')
   const [lojasSelecionadasTempEdit, setLojasSelecionadasTempEdit] = useState<string[]>([])
 
-  // 🔥 NOVOS ESTADOS: Popovers de seleção de gerentes (MULTI SELECT)
+  // Estados para os popovers de seleção de gerentes (Novo)
   const [gerentesPopoverOpenNew, setGerentesPopoverOpenNew] = useState(false)
   const [buscaGerentesNew, setBuscaGerentesNew] = useState('')
   const [gerentesSelecionadosTempNew, setGerentesSelecionadosTempNew] = useState<string[]>([])
 
+  // Estados para os popovers de seleção de gerentes (Edição)
   const [gerentesPopoverOpenEdit, setGerentesPopoverOpenEdit] = useState(false)
   const [buscaGerentesEdit, setBuscaGerentesEdit] = useState('')
   const [gerentesSelecionadosTempEdit, setGerentesSelecionadosTempEdit] = useState<string[]>([])
@@ -119,7 +124,6 @@ export default function Promotores() {
     try {
       console.log('🚀 Carregando dados...')
       
-      // 🔥 Adicionar getGerentesDisponiveis
       const [promotoresData, lojasData, gerentesData, marcasData] = await Promise.all([
         getPromotores(),
         getLojas(),
@@ -190,7 +194,7 @@ export default function Promotores() {
     setLojasPopoverOpenEdit(false)
   }
 
-  // 🔥 FUNÇÕES DO POPOVER DE GERENTES (NOVO) - MULTI SELECT
+  // Funções do Popover de Gerentes (Novo)
   const abrirSelecionarGerentesNew = () => {
     setGerentesSelecionadosTempNew([...newPromotor.gerente_ids])
     setBuscaGerentesNew('')
@@ -212,7 +216,7 @@ export default function Promotores() {
     setGerentesPopoverOpenNew(false)
   }
 
-  // 🔥 FUNÇÕES DO POPOVER DE GERENTES (EDIÇÃO) - MULTI SELECT
+  // Funções do Popover de Gerentes (Edição)
   const abrirSelecionarGerentesEdit = () => {
     setGerentesSelecionadosTempEdit(editingPromotor?.gerente_ids || [])
     setBuscaGerentesEdit('')
@@ -253,7 +257,7 @@ export default function Promotores() {
       const result = await createPromotor({
         promotor_nome: newPromotor.promotor_nome.trim(),
         loja_ids: newPromotor.loja_ids,
-        gerente_ids: newPromotor.gerente_ids, // 🔥 MUDOU: array
+        gerente_ids: newPromotor.gerente_ids,
         marca_ids: newPromotor.marca_ids,
         dias_semana: newPromotor.dias_semana || undefined,
         contato_responsavel: newPromotor.contato_responsavel || undefined,
@@ -310,7 +314,7 @@ export default function Promotores() {
       const result = await updatePromotor(editingPromotor.id, {
         promotor_nome: editingPromotor.promotor_nome.trim(),
         loja_ids: editingPromotor.loja_ids || [],
-        gerente_ids: editingPromotor.gerente_ids || [], // 🔥 MUDOU: array
+        gerente_ids: editingPromotor.gerente_ids || [],
         marca_ids: marcaIds,
         dias_semana: editingPromotor.dias_semana || undefined,
         contato_responsavel: editingPromotor.contato_responsavel || undefined,
@@ -479,16 +483,7 @@ export default function Promotores() {
     )
   }
 
-  const toggleMarca = (marcaId: string, currentIds: string[]) => {
-    if (!Array.isArray(currentIds)) return [marcaId]
-    if (currentIds.includes(marcaId)) {
-      return currentIds.filter(id => id !== marcaId)
-    } else {
-      return [...currentIds, marcaId]
-    }
-  }
-
-  // 🔥 COMPONENTE: GerentesMultiSelect (MULTI SELECT)
+  // Componente: GerentesMultiSelect
   const GerentesMultiSelect = ({
     selectedIds,
     onChange,
@@ -922,96 +917,102 @@ export default function Promotores() {
           />
         </div>
         
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2">
-              <Plus className="h-4 w-4" />
-              Novo Promotor
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Novo Promotor</DialogTitle>
-              <DialogDescription>
-                Preencha os dados para cadastrar um novo promotor.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="promotor_nome">Nome do Promotor *</Label>
-                <Input
-                  id="promotor_nome"
-                  placeholder="Nome completo"
-                  value={newPromotor.promotor_nome}
-                  onChange={(e) => setNewPromotor({ ...newPromotor, promotor_nome: e.target.value })}
-                />
-              </div>
-
-              <LojasMultiSelect
-                selectedIds={newPromotor.loja_ids}
-                onChange={(ids) => setNewPromotor({ ...newPromotor, loja_ids: ids })}
-                label="Lojas Vinculadas"
-                open={lojasPopoverOpenNew}
-                onOpenChange={setLojasPopoverOpenNew}
-                buscaTemp={buscaLojasNew}
-                setBuscaTemp={setBuscaLojasNew}
-                tempIds={lojasSelecionadasTempNew}
-                setTempIds={setLojasSelecionadasTempNew}
-                onAplicar={aplicarSelecaoLojasNew}
-                onCancelar={cancelarSelecaoLojasNew}
-              />
-
-              {/* 🔥 SUBSTITUIR O GERENTE SELECT PELO MULTI SELECT */}
-              <GerentesMultiSelect
-                selectedIds={newPromotor.gerente_ids}
-                onChange={(ids) => setNewPromotor({ ...newPromotor, gerente_ids: ids })}
-                label="Gerentes Responsáveis"
-                open={gerentesPopoverOpenNew}
-                onOpenChange={setGerentesPopoverOpenNew}
-                buscaTemp={buscaGerentesNew}
-                setBuscaTemp={setBuscaGerentesNew}
-                tempIds={gerentesSelecionadosTempNew}
-                setTempIds={setGerentesSelecionadosTempNew}
-                onAplicar={aplicarSelecaoGerentesNew}
-                onCancelar={cancelarSelecaoGerentesNew}
-                onLimpar={limparGerentesNew}
-              />
-
-              <MarcasMultiSelect
-                selectedIds={newPromotor.marca_ids}
-                onChange={(ids) => setNewPromotor({ ...newPromotor, marca_ids: ids })}
-              />
-
-              <div className="space-y-2">
-                <Label htmlFor="dias_semana">Dias de Atuação</Label>
-                <Input
-                  id="dias_semana"
-                  placeholder="Ex: Segunda, Terça, Quarta"
-                  value={newPromotor.dias_semana}
-                  onChange={(e) => setNewPromotor({ ...newPromotor, dias_semana: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="contato_responsavel">Contato / Telefone</Label>
-                <Input
-                  id="contato_responsavel"
-                  placeholder="(11) 99999-9999"
-                  value={newPromotor.contato_responsavel}
-                  onChange={(e) => setNewPromotor({ ...newPromotor, contato_responsavel: e.target.value })}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setOpen(false)}>
-                Cancelar
+        <div className="flex gap-2">
+          {/* 🔥 BOTÃO DE IMPORTAÇÃO EXCEL - APENAS ADMIN */}
+          {isAdmin && (
+            <ImportarPromotoresExcel onImportComplete={loadData} />
+          )}
+          
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2">
+                <Plus className="h-4 w-4" />
+                Novo Promotor
               </Button>
-              <Button onClick={handleCreatePromotor} disabled={saving}>
-                {saving ? 'Salvando...' : 'Salvar'}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Novo Promotor</DialogTitle>
+                <DialogDescription>
+                  Preencha os dados para cadastrar um novo promotor.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="promotor_nome">Nome do Promotor *</Label>
+                  <Input
+                    id="promotor_nome"
+                    placeholder="Nome completo"
+                    value={newPromotor.promotor_nome}
+                    onChange={(e) => setNewPromotor({ ...newPromotor, promotor_nome: e.target.value })}
+                  />
+                </div>
+
+                <LojasMultiSelect
+                  selectedIds={newPromotor.loja_ids}
+                  onChange={(ids) => setNewPromotor({ ...newPromotor, loja_ids: ids })}
+                  label="Lojas Vinculadas"
+                  open={lojasPopoverOpenNew}
+                  onOpenChange={setLojasPopoverOpenNew}
+                  buscaTemp={buscaLojasNew}
+                  setBuscaTemp={setBuscaLojasNew}
+                  tempIds={lojasSelecionadasTempNew}
+                  setTempIds={setLojasSelecionadasTempNew}
+                  onAplicar={aplicarSelecaoLojasNew}
+                  onCancelar={cancelarSelecaoLojasNew}
+                />
+
+                <GerentesMultiSelect
+                  selectedIds={newPromotor.gerente_ids}
+                  onChange={(ids) => setNewPromotor({ ...newPromotor, gerente_ids: ids })}
+                  label="Gerentes Responsáveis"
+                  open={gerentesPopoverOpenNew}
+                  onOpenChange={setGerentesPopoverOpenNew}
+                  buscaTemp={buscaGerentesNew}
+                  setBuscaTemp={setBuscaGerentesNew}
+                  tempIds={gerentesSelecionadosTempNew}
+                  setTempIds={setGerentesSelecionadosTempNew}
+                  onAplicar={aplicarSelecaoGerentesNew}
+                  onCancelar={cancelarSelecaoGerentesNew}
+                  onLimpar={limparGerentesNew}
+                />
+
+                <MarcasMultiSelect
+                  selectedIds={newPromotor.marca_ids}
+                  onChange={(ids) => setNewPromotor({ ...newPromotor, marca_ids: ids })}
+                />
+
+                <div className="space-y-2">
+                  <Label htmlFor="dias_semana">Dias de Atuação</Label>
+                  <Input
+                    id="dias_semana"
+                    placeholder="Ex: Segunda, Terça, Quarta"
+                    value={newPromotor.dias_semana}
+                    onChange={(e) => setNewPromotor({ ...newPromotor, dias_semana: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="contato_responsavel">Contato / Telefone</Label>
+                  <Input
+                    id="contato_responsavel"
+                    placeholder="(11) 99999-9999"
+                    value={newPromotor.contato_responsavel}
+                    onChange={(e) => setNewPromotor({ ...newPromotor, contato_responsavel: e.target.value })}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleCreatePromotor} disabled={saving}>
+                  {saving ? 'Salvando...' : 'Salvar'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
 
         {/* Dialog de Edição */}
         <Dialog open={editOpen} onOpenChange={setEditOpen}>
@@ -1048,7 +1049,6 @@ export default function Promotores() {
                   onCancelar={cancelarSelecaoLojasEdit}
                 />
 
-                {/* 🔥 SUBSTITUIR O GERENTE SELECT PELO MULTI SELECT */}
                 <GerentesMultiSelect
                   selectedIds={editingPromotor.gerente_ids || []}
                   onChange={(ids) => setEditingPromotor({ ...editingPromotor, gerente_ids: ids })}
@@ -1224,7 +1224,6 @@ export default function Promotores() {
                         </div>
                       </div>
                       
-                      {/* 🔥 EXIBIR MÚLTIPLOS GERENTES */}
                       <div className="flex items-start gap-2">
                         <User className="h-4 w-4 shrink-0 mt-0.5" />
                         <div className="flex-1">
