@@ -17,21 +17,72 @@ import {
 import { Link } from 'react-router-dom'
 
 export function SidebarMenuItems() {
-  const { isAdmin } = useAuth()
+  const { user, isAdmin, isGerente, isRegional, isGestor } = useAuth()
 
+  // 🔥 DEFINIÇÃO DOS ITENS DO MENU COM PERMISSÕES
   const menuItems = [
-    { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { href: '/lojas', label: 'Lojas', icon: Store },
-    { href: '/promotores', label: 'Promotores', icon: Users },
-    { href: '/check-in', label: 'Check-in (Operação)', icon: CheckSquare },
-    { href: '/acoes', label: 'Ações', icon: Target },
-    { href: '/campanhas', label: 'Campanhas', icon: Megaphone },
-    { href: '/relatorios', label: 'Relatórios', icon: BarChart3 },
+    { 
+      href: '/', 
+      label: 'Dashboard', 
+      icon: LayoutDashboard,
+      permissions: ['admin', 'gestor', 'gerente', 'regional', 'gerente_regional', 'promotor']
+    },
+    { 
+      href: '/lojas', 
+      label: 'Lojas', 
+      icon: Store,
+      permissions: ['admin', 'gestor', 'regional', 'gerente_regional']
+    },
+    { 
+      href: '/promotores', 
+      label: 'Promotores', 
+      icon: Users,
+      permissions: ['admin', 'gestor', 'regional', 'gerente_regional']
+    },
+    { 
+      href: '/check-in', 
+      label: 'Check-in (Operação)', 
+      icon: CheckSquare,
+      permissions: ['admin', 'gerente', 'promotor']
+    },
+    { 
+      href: '/acoes', 
+      label: 'Ações', 
+      icon: Target,
+      permissions: ['admin', 'gestor', 'gerente', 'regional', 'gerente_regional']
+    },
+    { 
+      href: '/campanhas', 
+      label: 'Campanhas', 
+      icon: Megaphone,
+      permissions: ['admin', 'gestor', 'gerente', 'regional', 'gerente_regional']
+    },
+    { 
+      href: '/relatorios', 
+      label: 'Relatórios', 
+      icon: BarChart3,
+      permissions: ['admin', 'gestor', 'gerente', 'regional', 'gerente_regional']
+    },
+    { 
+      href: '/solicitacoes-promotores', 
+      label: 'Solicitações de Promotores', 
+      icon: UserPlus,
+      permissions: ['admin', 'gerente', 'regional', 'gerente_regional']
+    },
   ]
+
+  // 🔥 FUNÇÃO PARA VERIFICAR SE O USUÁRIO TEM PERMISSÃO
+  const hasPermission = (permissions: string[]) => {
+    const role = user?.app_role || ''
+    return permissions.includes(role)
+  }
+
+  // 🔥 FILTRA OS ITENS DO MENU
+  const filteredMenu = menuItems.filter(item => hasPermission(item.permissions))
 
   return (
     <SidebarMenu>
-      {menuItems.map((item) => (
+      {filteredMenu.map((item) => (
         <SidebarMenuItem key={item.href}>
           <SidebarMenuButton asChild>
             <Link to={item.href}>
@@ -42,7 +93,7 @@ export function SidebarMenuItems() {
         </SidebarMenuItem>
       ))}
       
-      {/* Só administradores e gestores podem ver Cadastro de Usuários */}
+      {/* Só administradores podem ver Cadastro de Usuários */}
       {isAdmin && (
         <SidebarMenuItem>
           <SidebarMenuButton asChild>
