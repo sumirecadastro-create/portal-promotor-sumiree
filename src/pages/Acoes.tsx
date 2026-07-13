@@ -151,7 +151,7 @@ const getTipoConfig = (tipo: string) => {
   }
 }
 
-// ✅ CORRIGIDO: Componente Checkbox usando a mesma estrutura do shadcn
+// Componente Checkbox
 function Checkbox({ checked, onCheckedChange }: { checked: boolean; onCheckedChange: (checked: boolean) => void }) {
   return (
     <div
@@ -211,7 +211,7 @@ async function atualizarStatusAcoes() {
   }
 }
 
-// ✅ CORRIGIDO: Componente de Detalhes da Ação com isAdmin como parâmetro
+// Componente de Detalhes da Ação
 function DetalhesAcao({ 
   acao, 
   open, 
@@ -361,7 +361,6 @@ function DetalhesAcao({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Fechar
           </Button>
-          {/* ✅ CORRIGIDO: Botão Editar - apenas ADMIN pode editar */}
           {isAdmin && (
             <Button onClick={handleEditar} style={{ background: PRIMARY_COLOR }}>
               <Edit className="h-4 w-4 mr-2" />
@@ -407,7 +406,6 @@ function AcaoTooltip({ acao, children }: { acao: Acao; children: React.ReactNode
 }
 
 export default function Acoes() {
-  // ✅ CORRIGIDO: Agora pegando todas as propriedades do useAuth
   const { 
     isAdmin, 
     isGerente, 
@@ -492,7 +490,6 @@ export default function Acoes() {
     setLojasPopoverOpen(false)
   }
 
-  // Buscar lojas com filtro por permissão do gerente
   async function carregarLojas() {
     try {
       let query = supabase
@@ -500,7 +497,6 @@ export default function Acoes() {
         .select('*')
         .order('nome_loja', { ascending: true })
       
-      // Se for gerente (não admin), filtrar apenas a loja dele
       if (isGerente && !isAdmin && userLojaId) {
         query = query.eq('id', userLojaId)
       }
@@ -517,7 +513,6 @@ export default function Acoes() {
       
       setLojas(lojasFormatadas)
       
-      // Se for gerente e tem apenas uma loja, auto-selecionar
       if (isGerente && !isAdmin && userLojaId && lojasFormatadas.length === 1) {
         setLojasSelecionadas([userLojaId])
       }
@@ -527,13 +522,11 @@ export default function Acoes() {
     }
   }
 
-  // Buscar ações com filtro por permissão do gerente
   async function carregarAcoes() {
     try {
       const startDate = getFirstDayOfMonth(ano, mes)
       const endDate = getLastDayOfMonth(ano, mes)
       
-      // Buscar IDs das lojas permitidas para o gerente
       let lojasPermitidasIds: string[] = []
       
       if (isGerente && !isAdmin) {
@@ -563,7 +556,6 @@ export default function Acoes() {
       
       if (error) throw error
       
-      // Buscar as lojas relacionadas para cada ação
       const acoesComLojas = await Promise.all((data || []).map(async (acao) => {
         const { data: relacoes } = await supabase
           .from('acoes_lojas')
@@ -573,7 +565,6 @@ export default function Acoes() {
         if (relacoes && relacoes.length > 0) {
           let lojaIds = relacoes.map(r => r.loja_id)
           
-          // Se for gerente, filtrar apenas lojas permitidas
           if (isGerente && !isAdmin && lojasPermitidasIds.length > 0) {
             lojaIds = lojaIds.filter(id => lojasPermitidasIds.includes(id))
           }
@@ -825,7 +816,7 @@ export default function Acoes() {
     { value: 'abordagem', label: '📢 Abordagem', description: 'Abordagem ativa de clientes' }
   ]
 
-  // ✅ CORRIGIDO: Verificação de carregamento
+  // Verificação de carregamento
   if (authLoading || loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -837,8 +828,7 @@ export default function Acoes() {
     )
   }
 
-  // ✅ CORRIGIDO: Verificação de permissão - Apenas ADMIN e GERENTE podem acessar
-  // Adicionamos um fallback seguro caso isAdmin ou isGerente sejam undefined
+  // Verificação de permissão
   const hasAccess = isAdmin === true || isGerente === true
   
   if (!hasAccess) {
@@ -857,4 +847,714 @@ export default function Acoes() {
     <TooltipProvider>
       <div className="space-y-6">
         {/* Cabeçalho */}
-        <div className="rounded-lg p-6 text-white" style={{
+        <div className="rounded-lg p-6 text-white" style={{ 
+          background: `linear-gradient(135deg, ${PRIMARY_COLOR} 0%, #cc1168 100%)` 
+        }}>
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <h1 className="text-2xl font-bold flex items-center gap-2">
+                <Target className="h-7 w-7" />
+                Calendário de Ações
+              </h1>
+              <p className="text-pink-100 text-sm mt-1">
+                {lojas.length} lojas cadastradas • {acoes.length} ações no período
+              </p>
+            </div>
+            
+            <div className="flex gap-2">
+              <Button 
+                variant="secondary" 
+                size="sm" 
+                className="bg-white/20 hover:bg-white/30 text-white"
+                onClick={() => setShowFilterModal(true)}
+              >
+                <Filter className="h-4 w-4 mr-2" />
+                Filtrar
+                {filtrosAtivos > 0 && (
+                  <Badge className="ml-2 bg-white text-pink-600" variant="secondary">
+                    {filtrosAtivos}
+                  </Badge>
+                )}
+              </Button>
+              {isAdmin && (
+                <Button 
+                  variant="default" 
+                  size="sm" 
+                  style={{ background: 'white', color: PRIMARY_COLOR }} 
+                  className="hover:bg-gray-100"
+                  onClick={() => setShowNovaAcaoModal(true)}
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Nova Ação
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Controles do mês */}
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => mudarMes(-1)}>
+              <ChevronLeft className="h-4 w-4" />
+              Mês anterior
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => mudarMes(1)}>
+              Próximo mês
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+          <h2 className="text-xl font-bold text-gray-800">
+            {mesAtual.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}
+          </h2>
+          <div className="w-64">
+            <Input
+              placeholder="🔍 Buscar loja por nome..."
+              value={lojaFiltroNome}
+              onChange={(e) => setLojaFiltroNome(e.target.value)}
+              className="border-gray-300 focus:border-pink-500 focus:ring-pink-500"
+            />
+          </div>
+        </div>
+
+        {/* Legenda */}
+        <div className="flex flex-wrap gap-4 text-sm bg-gray-50 p-3 rounded-lg">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full" style={{ background: PRIMARY_COLOR }}></div>
+            <span>Em Andamento</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-emerald-500 rounded-full"></div>
+            <span>Concluída</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
+            <span>Pendente</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+            <span>Agendada</span>
+          </div>
+          {filtroStatus !== 'todos' && (
+            <Badge variant="outline" className="text-xs">
+              Status: {filtroStatus === 'em_andamento' ? 'Em Andamento' : 
+                       filtroStatus === 'concluida' ? 'Concluída' : 
+                       filtroStatus === 'pendente' ? 'Pendente' : 'Agendada'}
+            </Badge>
+          )}
+          {lojasSelecionadas.length > 0 && (
+            <Badge variant="outline" className="text-xs">
+              {lojasSelecionadas.length} loja(s) selecionada(s)
+            </Badge>
+          )}
+          <div className="flex items-center gap-2 ml-auto text-gray-500 text-xs">
+            <span>Exibindo: {lojasFiltradas.length} de {lojas.length} lojas</span>
+          </div>
+        </div>
+
+        {/* Calendário */}
+        <Card className="overflow-hidden shadow-lg border-0">
+          <CardContent className="p-0 overflow-x-auto">
+            <div className="min-w-[1200px]">
+              <div className="grid border-b sticky top-0 z-20" 
+                style={{ gridTemplateColumns: `250px repeat(${dias.length}, 80px)` }}>
+                <div className="p-3 font-bold text-gray-700 sticky left-0 z-10 border-r" style={{ background: '#f9fafb' }}>
+                  <div className="flex items-center gap-2">
+                    <Store className="h-4 w-4" style={{ color: PRIMARY_COLOR }} />
+                    Loja / Dia
+                  </div>
+                </div>
+                {dias.map((dia) => {
+                  const data = new Date(ano, mes, dia)
+                  const nomeDia = diasSemana[data.getDay()]
+                  const isDiaHoje = isHoje(dia)
+                  return (
+                    <div key={dia} className={cn(
+                      "p-2 text-center font-semibold border-r",
+                      isDiaHoje && "bg-yellow-50"
+                    )}>
+                      <div className="text-lg font-bold">{dia}</div>
+                      <div className="text-xs text-gray-500">{nomeDia}</div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {lojasFiltradas.map((loja) => (
+                <div key={loja.id} className="grid border-b hover:bg-gray-50 transition-colors"
+                  style={{ gridTemplateColumns: `250px repeat(${dias.length}, 80px)` }}>
+                  
+                  <div className="p-3 font-medium sticky left-0 bg-white z-10 border-r">
+                    <div className="font-bold text-gray-800">
+                      {loja.codigo || loja.id.substring(0, 6)}
+                    </div>
+                    <div className="text-xs text-gray-500 truncate" title={loja.nome_loja}>
+                      {loja.nome_loja}
+                    </div>
+                  </div>
+
+                  {dias.map((dia) => {
+                    const acoesDoDia = getAcoesDoDia(loja.id, dia)
+                    const isDiaHoje = isHoje(dia)
+                    
+                    return (
+                      <div key={dia} className={cn(
+                        "p-1 border-r min-h-[100px] align-top",
+                        isDiaHoje && "bg-yellow-50"
+                      )}>
+                        {acoesDoDia.length > 0 ? (
+                          <div className="space-y-1.5">
+                            {acoesDoDia.map((acao) => {
+                              const statusConfig = getStatusConfig(acao.status)
+                              const tipoConfig = getTipoConfig(acao.tipo)
+                              const StatusIcon = statusConfig.icon
+                              const TipoIcon = tipoConfig.icon
+                              
+                              return (
+                                <AcaoTooltip key={acao.id} acao={acao}>
+                                  <div 
+                                    className="p-1.5 rounded-md text-xs cursor-pointer transition-all hover:scale-105 relative group"
+                                    style={{ 
+                                      background: statusConfig.bg,
+                                      borderLeft: `3px solid ${statusConfig.color}`
+                                    }}
+                                    onClick={() => abrirDetalhes(acao)}
+                                  >
+                                    <div className="flex items-center justify-between mb-0.5">
+                                      <div className="flex items-center gap-1">
+                                        <TipoIcon className="h-3 w-3" style={{ color: PRIMARY_COLOR }} />
+                                        <span className="font-semibold">{acao.nome}</span>
+                                      </div>
+                                      <div className="flex items-center gap-1">
+                                        <StatusIcon className="h-3 w-3" style={{ color: statusConfig.color }} />
+                                        <Info className="h-2.5 w-2.5 opacity-50" />
+                                      </div>
+                                    </div>
+                                    <div className="flex items-center justify-between mt-1">
+                                      <span className="text-[10px] text-gray-400">
+                                        {new Date(acao.data_inicio + 'T00:00:00').getDate() === dia ? 
+                                          (new Date(acao.data_fim + 'T00:00:00').getDate() === dia ? 'Único' : 'Início') :
+                                          (new Date(acao.data_fim + 'T00:00:00').getDate() === dia ? 'Fim' : '')}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </AcaoTooltip>
+                              )
+                            })}
+                          </div>
+                        ) : (
+                          <div className="text-center text-gray-300 text-xs h-full flex items-center justify-center min-h-[80px]">
+                            —
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              ))}
+
+              {lojasFiltradas.length === 0 && (
+                <div className="text-center py-20 text-gray-500">
+                  <Store className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                  <p>Nenhuma loja encontrada</p>
+                  <p className="text-sm">Tente ajustar os filtros ou a busca</p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Modal de Detalhes */}
+        <DetalhesAcao 
+          acao={acaoSelecionada}
+          open={showDetalhesModal}
+          onOpenChange={setShowDetalhesModal}
+          onEditar={abrirEdicao}
+          isAdmin={isAdmin}
+        />
+
+        {/* Modal de Edição */}
+        {isAdmin && (
+          <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+            <DialogContent className="sm:max-w-[550px]">
+              <DialogHeader>
+                <DialogTitle>Editar Ação</DialogTitle>
+                <DialogDescription>
+                  Altere os dados da ação. <span className="text-red-500">*</span> Campos obrigatórios.
+                </DialogDescription>
+              </DialogHeader>
+              
+              {editandoAcao && (
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label>Nome da Ação <span className="text-red-500">*</span></Label>
+                    <Input
+                      value={editandoAcao.nome}
+                      onChange={(e) => setEditandoAcao({ ...editandoAcao, nome: e.target.value })}
+                      placeholder="Ex: Promoção de Verão"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Lojas <span className="text-red-500">*</span></Label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" className="w-full justify-between">
+                          {selectedLojasEdit.length === 0 ? "Selecione as lojas..." : `${selectedLojasEdit.length} loja(s) selecionada(s)`}
+                          <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[400px] p-0" align="start">
+                        <div className="p-2 border-b">
+                          <Input placeholder="Buscar loja..." className="h-8" />
+                        </div>
+                        <div className="max-h-[300px] overflow-y-auto p-2">
+                          {lojas.map((loja) => (
+                            <div
+                              key={loja.id}
+                              className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
+                              onClick={() => {
+                                setSelectedLojasEdit(prev =>
+                                  prev.includes(loja.id)
+                                    ? prev.filter(id => id !== loja.id)
+                                    : [...prev, loja.id]
+                                )
+                              }}
+                            >
+                              <Checkbox checked={selectedLojasEdit.includes(loja.id)} />
+                              <Label className="cursor-pointer flex-1">
+                                {loja.codigo} - {loja.nome_loja}
+                              </Label>
+                            </div>
+                          ))}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Data Início <span className="text-red-500">*</span></Label>
+                      <Input
+                        type="date"
+                        value={editandoAcao.data_inicio}
+                        onChange={(e) => setEditandoAcao({ ...editandoAcao, data_inicio: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Data Fim <span className="text-red-500">*</span></Label>
+                      <Input
+                        type="date"
+                        value={editandoAcao.data_fim}
+                        onChange={(e) => setEditandoAcao({ ...editandoAcao, data_fim: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Tipo</Label>
+                      <Select 
+                        value={editandoAcao.tipo} 
+                        onValueChange={(value) => setEditandoAcao({ ...editandoAcao, tipo: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {tiposAcao.map(tipo => (
+                            <SelectItem key={tipo.value} value={tipo.value}>
+                              {tipo.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label>Status</Label>
+                      <Select 
+                        value={editandoAcao.status} 
+                        onValueChange={(value) => setEditandoAcao({ ...editandoAcao, status: value })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pendente">⏳ Pendente</SelectItem>
+                          <SelectItem value="em_andamento">⚡ Em Andamento</SelectItem>
+                          <SelectItem value="agendada">📅 Agendada</SelectItem>
+                          <SelectItem value="concluida">✅ Concluída</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>Descrição</Label>
+                    <textarea
+                      className="w-full min-h-[80px] p-2 border rounded-md text-sm"
+                      value={editandoAcao.descricao || ''}
+                      onChange={(e) => setEditandoAcao({ ...editandoAcao, descricao: e.target.value })}
+                      placeholder="Descrição detalhada da ação..."
+                    />
+                  </div>
+                </div>
+              )}
+              
+              <DialogFooter>
+                {editandoAcao && (
+                  <Button 
+                    variant="destructive" 
+                    onClick={() => excluirAcao(editandoAcao.id, editandoAcao.nome)}
+                    className="mr-auto"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Excluir
+                  </Button>
+                )}
+                <Button variant="outline" onClick={() => setShowEditModal(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={atualizarAcao} disabled={salvando} style={{ background: PRIMARY_COLOR }}>
+                  {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                  Salvar alterações
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
+
+        {/* Modal de Filtro */}
+        <Dialog open={showFilterModal} onOpenChange={setShowFilterModal}>
+          <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Filtrar Ações</DialogTitle>
+              <DialogDescription>
+                Selecione os filtros para visualizar as ações desejadas.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-6 py-4">
+              <div className="space-y-2">
+                <Label>Status da Ação</Label>
+                <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os status</SelectItem>
+                    <SelectItem value="em_andamento">Em Andamento</SelectItem>
+                    <SelectItem value="pendente">Pendente</SelectItem>
+                    <SelectItem value="concluida">Concluída</SelectItem>
+                    <SelectItem value="agendada">Agendada</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Tipo de Ação</Label>
+                <Select value={filtroTipo} onValueChange={setFiltroTipo}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos</SelectItem>
+                    {tiposAcao.map(tipo => (
+                      <SelectItem key={tipo.value} value={tipo.value}>
+                        {tipo.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Lojas para exibir</Label>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={selecionarTodasLojas}
+                    className="text-xs"
+                  >
+                    {lojasSelecionadas.length === lojas.length ? 'Desmarcar todas' : 'Selecionar todas'}
+                  </Button>
+                </div>
+                
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      className="w-full justify-between"
+                    >
+                      {lojasSelecionadas.length === 0
+                        ? "Todas as lojas"
+                        : `${lojasSelecionadas.length} loja(s) selecionada(s)`}
+                      <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[400px] p-0">
+                    <div className="p-2 border-b">
+                      <Input
+                        placeholder="Buscar loja..."
+                        className="h-8"
+                        value={buscaLojasTemp}
+                        onChange={(e) => setBuscaLojasTemp(e.target.value)}
+                      />
+                    </div>
+                    <div className="max-h-64 overflow-y-auto p-2">
+                      {lojas
+                        .filter(loja => {
+                          const busca = buscaLojasTemp.toLowerCase()
+                          return loja.nome_loja.toLowerCase().includes(busca) ||
+                                 (loja.codigo && loja.codigo.toLowerCase().includes(busca))
+                        })
+                        .map((loja) => (
+                          <div
+                            key={loja.id}
+                            className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
+                            onClick={() => toggleLojaSelecionada(loja.id)}
+                          >
+                            <Checkbox
+                              checked={lojasSelecionadas.includes(loja.id)}
+                              onCheckedChange={() => toggleLojaSelecionada(loja.id)}
+                            />
+                            <Label className="cursor-pointer flex-1">
+                              <span className="font-mono text-xs">{loja.codigo}</span> - {loja.nome_loja}
+                            </Label>
+                          </div>
+                        ))}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => {
+                setFiltroStatus('todos')
+                setFiltroTipo('todos')
+                setLojasSelecionadas([])
+              }}>
+                Limpar todos os filtros
+              </Button>
+              <Button onClick={() => setShowFilterModal(false)} style={{ background: PRIMARY_COLOR }}>
+                Aplicar filtros
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de Nova Ação */}
+        {isAdmin && (
+          <Dialog open={showNovaAcaoModal} onOpenChange={setShowNovaAcaoModal}>
+            <DialogContent className="sm:max-w-[500px]">
+              <DialogHeader>
+                <DialogTitle>Criar Nova Ação</DialogTitle>
+                <DialogDescription>
+                  Preencha os dados da ação. Os campos com * são obrigatórios.
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Nome da Ação *</Label>
+                  <Input
+                    value={novaAcao.nome}
+                    onChange={(e) => setNovaAcao({ ...novaAcao, nome: e.target.value })}
+                    placeholder="Ex: Promoção de Verão"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Lojas *</Label>
+                  <Popover open={lojasPopoverOpen} onOpenChange={setLojasPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        role="combobox"
+                        className="w-full justify-between h-auto min-h-[40px]"
+                        onClick={abrirSelecionarLojas}
+                      >
+                        <div className="flex flex-wrap gap-1">
+                          {novaAcao.loja_ids.length === 0 ? (
+                            <span className="text-muted-foreground">Selecione as lojas...</span>
+                          ) : (
+                            <>
+                              <Badge variant="secondary" className="text-xs">
+                                📦 {novaAcao.loja_ids.length} loja(s) selecionada(s)
+                              </Badge>
+                              {novaAcao.loja_ids.slice(0, 3).map(lojaId => {
+                                const loja = lojas.find(l => l.id === lojaId)
+                                return loja ? (
+                                  <Badge key={lojaId} variant="outline" className="text-xs">
+                                    {loja.codigo}
+                                  </Badge>
+                                ) : null
+                              })}
+                              {novaAcao.loja_ids.length > 3 && (
+                                <Badge variant="outline" className="text-xs">
+                                  +{novaAcao.loja_ids.length - 3}
+                                </Badge>
+                              )}
+                            </>
+                          )}
+                        </div>
+                        <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[400px] p-0" align="start">
+                      <div className="p-2 border-b">
+                        <Input
+                          placeholder="🔍 Buscar loja por nome ou código..."
+                          value={buscaLojasTemp}
+                          onChange={(e) => setBuscaLojasTemp(e.target.value)}
+                          className="h-8"
+                        />
+                      </div>
+                      
+                      <div className="max-h-[300px] overflow-y-auto p-2">
+                        <div className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer border-b pb-2 mb-1">
+                          <Checkbox
+                            checked={lojasSelecionadasTemp.length === lojas.length && lojas.length > 0}
+                            onCheckedChange={() => {
+                              if (lojasSelecionadasTemp.length === lojas.length) {
+                                setLojasSelecionadasTemp([])
+                              } else {
+                                setLojasSelecionadasTemp(lojas.map(l => l.id))
+                              }
+                            }}
+                          />
+                          <Label className="cursor-pointer font-semibold flex-1">
+                            Selecionar todas as lojas ({lojas.length})
+                          </Label>
+                        </div>
+                        
+                        {lojas
+                          .filter(loja => {
+                            const busca = buscaLojasTemp.toLowerCase()
+                            return loja.nome_loja.toLowerCase().includes(busca) ||
+                                   (loja.codigo && loja.codigo.toLowerCase().includes(busca))
+                          })
+                          .map((loja) => (
+                            <div
+                              key={loja.id}
+                              className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
+                              onClick={() => {
+                                setLojasSelecionadasTemp(prev =>
+                                  prev.includes(loja.id)
+                                    ? prev.filter(id => id !== loja.id)
+                                    : [...prev, loja.id]
+                                )
+                              }}
+                            >
+                              <Checkbox
+                                checked={lojasSelecionadasTemp.includes(loja.id)}
+                                onCheckedChange={() => {}}
+                              />
+                              <Label className="cursor-pointer flex-1">
+                                <span className="font-mono text-xs">{loja.codigo}</span> - {loja.nome_loja}
+                              </Label>
+                            </div>
+                          ))}
+                      </div>
+                      
+                      <div className="p-2 border-t flex justify-between">
+                        <Button variant="ghost" size="sm" onClick={() => setLojasSelecionadasTemp([])}>
+                          Limpar tudo
+                        </Button>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" onClick={cancelarSelecaoLojas}>
+                            Cancelar
+                          </Button>
+                          <Button size="sm" onClick={aplicarSelecaoLojas} style={{ background: PRIMARY_COLOR }}>
+                            Aplicar ({lojasSelecionadasTemp.length})
+                          </Button>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                  <p className="text-xs text-muted-foreground">
+                    Clique para selecionar uma ou mais lojas
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Data Início *</Label>
+                    <Input
+                      type="date"
+                      value={novaAcao.data_inicio}
+                      onChange={(e) => setNovaAcao({ ...novaAcao, data_inicio: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Data Fim *</Label>
+                    <Input
+                      type="date"
+                      value={novaAcao.data_fim}
+                      onChange={(e) => setNovaAcao({ ...novaAcao, data_fim: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Tipo</Label>
+                    <Select value={novaAcao.tipo} onValueChange={(value) => setNovaAcao({ ...novaAcao, tipo: value })}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {tiposAcao.map(tipo => (
+                          <SelectItem key={tipo.value} value={tipo.value}>
+                            {tipo.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label>Status</Label>
+                    <Select value={novaAcao.status} onValueChange={(value: any) => setNovaAcao({ ...novaAcao, status: value })}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pendente">⏳ Pendente</SelectItem>
+                        <SelectItem value="em_andamento">⚡ Em Andamento</SelectItem>
+                        <SelectItem value="agendada">📅 Agendada</SelectItem>
+                        <SelectItem value="concluida">✅ Concluída</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Descrição</Label>
+                  <textarea
+                    className="w-full min-h-[80px] p-2 border rounded-md text-sm"
+                    value={novaAcao.descricao}
+                    onChange={(e) => setNovaAcao({ ...novaAcao, descricao: e.target.value })}
+                    placeholder="Descrição detalhada da ação..."
+                  />
+                </div>
+              </div>
+              
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowNovaAcaoModal(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={criarNovaAcao} disabled={salvando} style={{ background: PRIMARY_COLOR }}>
+                  {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                  Salvar ação
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
+      </div>
+    </TooltipProvider>
+  )
+}
