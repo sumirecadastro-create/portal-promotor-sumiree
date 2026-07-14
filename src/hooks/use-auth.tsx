@@ -63,17 +63,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             
             const customUser = session.user as CustomUser
             const role = userData?.role || 'promotor'
-            
-            // 🔥 SALVAR O ID INTERNO DO USUÁRIO
             const internalUserId = userData?.id
             
-            // 🔥 SOBRESCREVER O ID DO USUÁRIO COM O ID INTERNO
             customUser.id = internalUserId
             customUser.app_role = role
             customUser.nome = userData?.nome || session.user.email?.split('@')[0]
             customUser.loja_id = userData?.loja_id || null
             
-            // 🔥 SETAR PERMISSÕES
             setIsAdmin(role === 'admin')
             setIsGestor(role === 'gestor')
             setIsGerente(role === 'gerente')
@@ -81,11 +77,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             setIsSupervisor(role === 'supervisor')
             setIsPromotor(role === 'promotor')
             
-            // 🔥 userLojaId DEVE SER O ID DO USUÁRIO PARA REGIONAL
+            // 🔥 CORRIGIDO: LÓGICA PARA CADA PERFIL
             if (role === 'regional' || role === 'gerente_regional') {
               // Para regional, usar o ID do usuário (para buscar na tabela gerentes_regionais_lojas)
               setUserLojaId(internalUserId)
               console.log('🔑 Regional - userLojaId (ID do usuário):', internalUserId)
+            } else if (role === 'gerente') {
+              // 🔥 Para gerente, usar a loja_id
+              setUserLojaId(userData?.loja_id || null)
+              console.log('🔑 Gerente - userLojaId (loja_id):', userData?.loja_id)
             } else {
               // Para outros perfis, usar a loja_id
               setUserLojaId(userData?.loja_id || null)
@@ -144,6 +144,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (role === 'regional' || role === 'gerente_regional') {
           setUserLojaId(internalUserId)
           console.log('🔑 Regional - userLojaId (ID do usuário):', internalUserId)
+        } else if (role === 'gerente') {
+          setUserLojaId(userData?.loja_id || null)
+          console.log('🔑 Gerente - userLojaId (loja_id):', userData?.loja_id)
         } else {
           setUserLojaId(userData?.loja_id || null)
           console.log('🔑 userLojaId (loja_id):', userData?.loja_id)
