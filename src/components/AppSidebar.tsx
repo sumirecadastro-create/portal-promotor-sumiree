@@ -28,7 +28,6 @@ import {
 } from '@/components/ui/sidebar'
 import { useAuth } from '@/hooks/use-auth'
 
-// 🔥 TODOS OS ITENS DO MENU
 const allItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
   { title: 'Lojas', url: '/lojas', icon: Store },
@@ -42,9 +41,8 @@ const allItems = [
   { title: 'Solicitações de Promotores', url: '/solicitacoes-promotores', icon: UserPlus },
 ]
 
-// 🔥 PERMISSÕES POR PERFIL (ATUALIZADO)
+// 🔥 PERMISSÕES POR PERFIL
 const rolePermissions: Record<string, string[]> = {
-  // ADMIN: vê tudo
   admin: [
     'Dashboard',
     'Lojas',
@@ -57,8 +55,6 @@ const rolePermissions: Record<string, string[]> = {
     'Relatórios',
     'Solicitações de Promotores'
   ],
-  
-  // GESTOR: vê tudo exceto Cadastro de Usuários e Marcas
   gestor: [
     'Dashboard',
     'Lojas',
@@ -67,40 +63,33 @@ const rolePermissions: Record<string, string[]> = {
     'Campanhas',
     'Relatórios'
   ],
-  
-  // GERENTE DE LOJA: vê apenas o essencial
   gerente: [
     'Dashboard',
+    'Promotores',  // 🔥 ADICIONADO
     'Check-in (Operação)',
     'Ações',
     'Campanhas',
     'Solicitações de Promotores',
     'Relatórios'
   ],
-  
-  // 🔥 REGIONAL: AGORA TEM ACESSO A AÇÕES E CAMPANHAS
   regional: [
     'Dashboard',
-    'Lojas',                    // ✅ Pode ver lojas
-    'Promotores',               // ✅ Pode ver promotores
-    'Ações',                    // ✅ ADICIONADO
-    'Campanhas',                // ✅ ADICIONADO
+    'Lojas',
+    'Promotores',
+    'Ações',
+    'Campanhas',
     'Solicitações de Promotores',
     'Relatórios'
   ],
-  
-  // 🔥 GERENTE REGIONAL: MESMA PERMISSÃO QUE REGIONAL
   gerente_regional: [
     'Dashboard',
     'Lojas',
     'Promotores',
-    'Ações',                    // ✅ ADICIONADO
-    'Campanhas',                // ✅ ADICIONADO
+    'Ações',
+    'Campanhas',
     'Solicitações de Promotores',
     'Relatórios'
   ],
-  
-  // PROMOTOR: vê apenas Dashboard e Check-in
   promotor: [
     'Dashboard',
     'Check-in (Operação)'
@@ -112,10 +101,8 @@ export function AppSidebar() {
   const navigate = useNavigate()
   const { user, signOut, loading } = useAuth()
 
-  // Pega o role do usuário da tabela usuarios_internos
   const role = user?.app_role || 'promotor'
 
-  // Se ainda estiver carregando, mostra um placeholder
   if (loading) {
     return (
       <Sidebar>
@@ -146,7 +133,6 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
-      {/* HEADER - Logo */}
       <SidebarHeader className="p-4 border-b border-sidebar-border">
         <div className="flex items-center gap-2 px-2">
           <img 
@@ -154,7 +140,6 @@ export function AppSidebar() {
             alt="Sumirê" 
             className="h-8 w-auto"
             onError={(e) => {
-              // Fallback se a imagem não carregar
               e.currentTarget.style.display = 'none'
             }}
           />
@@ -164,7 +149,6 @@ export function AppSidebar() {
         </div>
       </SidebarHeader>
 
-      {/* CONTENT - Menu */}
       <SidebarContent>
         <SidebarGroup>
           <SidebarGroupLabel>Menu Principal</SidebarGroupLabel>
@@ -189,9 +173,7 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      {/* FOOTER - Usuário e Ações */}
       <SidebarFooter className="border-t border-sidebar-border p-4">
-        {/* Informações do usuário */}
         <div className="flex items-center gap-3 px-2 mb-4">
           <div className="h-8 w-8 rounded-full bg-pink-100 flex items-center justify-center">
             <User className="h-4 w-4 text-pink-600" />
@@ -212,7 +194,6 @@ export function AppSidebar() {
           </div>
         </div>
 
-        {/* Botões do rodapé */}
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton 
