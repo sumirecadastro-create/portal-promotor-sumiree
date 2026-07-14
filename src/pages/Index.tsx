@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -24,8 +24,15 @@ export default function Index() {
   const [recentVisits, setRecentVisits] = useState<RecentVisit[]>([])
   const [coberturaMarcas, setCoberturaMarcas] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const loadedRef = useRef(false)
 
   const loadData = async () => {
+    // 🔥 EVITAR CARREGAMENTOS DUPLICADOS
+    if (loadedRef.current) {
+      console.log('⏭️ Dados já carregados, ignorando...')
+      return
+    }
+
     setLoading(true)
     try {
       console.log('📊 Carregando dados do dashboard...', { 
@@ -36,7 +43,7 @@ export default function Index() {
         user: user?.email 
       })
       
-      // 🔥 PASSAR TODOS OS PARÂMETROS
+      // 🔥 CHAMAR O SERVIÇO COM TODOS OS PARÂMETROS
       const data = await getDashboardData(userLojaId, isAdmin, isRegional, isGerente)
       console.log('📊 Dados do dashboard recebidos:', data)
       
@@ -47,6 +54,7 @@ export default function Index() {
       console.log('📊 Marcas recebidas:', marcas)
       setCoberturaMarcas(marcas)
       
+      loadedRef.current = true
     } catch (error) {
       console.error('❌ Erro ao carregar dashboard:', error)
     } finally {
@@ -55,7 +63,12 @@ export default function Index() {
   }
 
   useEffect(() => {
-    loadData()
+    // 🔥 SÓ CARREGAR SE TIVER userLojaId OU FOR ADMIN
+    if (userLojaId !== undefined && userLojaId !== null) {
+      loadData()
+    } else if (isAdmin) {
+      loadData()
+    }
   }, [userLojaId, isAdmin, isRegional, isGerente])
 
   const formatTime = (dateString: string) => {
@@ -67,6 +80,7 @@ export default function Index() {
   const goToCheckIn = () => navigate('/check-in')
   const goToPromotores = () => navigate('/promotores')
 
+  // 🔥 MOSTRAR LOADING ENQUANTO CARREGA
   if (loading) {
     return (
       <div className="flex justify-center items-center h-96">
@@ -167,7 +181,7 @@ export default function Index() {
           <CardTitle className="text-base">Cobertura por Marca</CardTitle>
         </CardHeader>
         <CardContent>
-          {coberturaMarcas.length > 0 ? (
+          {coberturaMarcas && coberturaMarcas.length > 0 ? (
             <div className="space-y-3">
               {coberturaMarcas.map((marca) => (
                 <div key={marca.nome_marca} className="flex items-center justify-between">
