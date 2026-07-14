@@ -5,7 +5,6 @@ import { BarChart3, PieChart, TrendingUp, Loader2 } from 'lucide-react'
 import { getCoberturaPorMarcaComLojas } from '@/services/dashboard'
 import { useAuth } from '@/hooks/use-auth'
 
-// 🔥 DEFINIR INTERFACE LOCALMENTE
 interface MarcaCobertura {
   nome_marca: string
   total_promotores: number
@@ -81,8 +80,8 @@ function PieChartComponent({ data }: { data: MarcaCobertura[] }) {
 }
 
 export function DashboardChart() {
-  // 🔥 ADICIONAR useAuth PARA PEGAR O USUÁRIO
-  const { user, isAdmin, userLojaId } = useAuth()
+  // 🔥 ADICIONAR isGerente
+  const { user, isAdmin, userLojaId, isRegional, isGerente } = useAuth()
   const [data, setData] = useState<MarcaCobertura[]>([])
   const [loading, setLoading] = useState(true)
   const [chartType, setChartType] = useState<'bar' | 'pie'>('bar')
@@ -90,8 +89,21 @@ export function DashboardChart() {
   const loadData = async () => {
     setLoading(true)
     try {
-      // 🔥 PASSAR OS PARÂMETROS CORRETAMENTE
-      const result = await getCoberturaPorMarcaComLojas(userLojaId, isAdmin)
+      console.log('📊 DashboardChart - carregando com:', { 
+        userLojaId, 
+        isAdmin, 
+        isRegional, 
+        isGerente 
+      })
+      
+      // 🔥 PASSAR isGerente
+      const result = await getCoberturaPorMarcaComLojas(
+        userLojaId, 
+        isAdmin, 
+        isRegional, 
+        isGerente
+      )
+      console.log('📊 DashboardChart - resultado:', result)
       setData(result)
     } catch (error) {
       console.error('Erro ao carregar dados do gráfico:', error)
@@ -102,7 +114,7 @@ export function DashboardChart() {
 
   useEffect(() => {
     loadData()
-  }, [userLojaId, isAdmin])
+  }, [userLojaId, isAdmin, isRegional, isGerente])
 
   return (
     <Card className="animate-slide-up delay-100">
@@ -144,7 +156,13 @@ export function DashboardChart() {
           <div className="text-center py-12 text-muted-foreground">
             <TrendingUp className="h-12 w-12 mx-auto mb-3 opacity-50" />
             <p>Nenhum dado disponível</p>
-            <p className="text-sm">Cadastre marcas e vincule aos promotores</p>
+            <p className="text-sm">
+              {isGerente 
+                ? 'Cadastre marcas e vincule aos promotores da sua loja'
+                : isRegional
+                ? 'Cadastre marcas e vincule aos promotores da sua região'
+                : 'Cadastre marcas e vincule aos promotores'}
+            </p>
           </div>
         )}
       </CardContent>
