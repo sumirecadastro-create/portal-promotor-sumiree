@@ -122,6 +122,100 @@ export default function Promotores() {
     return data?.map(l => l.loja_id) || []
   }
 
+  // 🔥 FUNÇÃO PARA CARREGAR PROMOTORES COM LOJAS COMPLETAS
+  const carregarPromotoresComLojas = async (promotorIds: string[]) => {
+    if (promotorIds.length === 0) return []
+
+    // Buscar os promotores
+    const { data: promotoresData, error: promotoresError } = await supabase
+      .from('promotores')
+      .select('*')
+      .eq('status', 'ativo')
+      .in('id', promotorIds)
+      .order('promotor_nome')
+
+    if (promotoresError) throw promotoresError
+
+    // Buscar as lojas para cada promotor
+    const { data: lojasRel } = await supabase
+      .from('promotores_lojas')
+      .select('promotor_id, loja_id')
+      .in('promotor_id', promotorIds)
+
+    const lojaIds = [...new Set(lojasRel?.map(r => r.loja_id) || [])]
+    
+    let lojasMap = new Map()
+    if (lojaIds.length > 0) {
+      const { data: lojasData } = await supabase
+        .from('lojas')
+        .select('id, cod_loja, nome_loja')
+        .in('id', lojaIds)
+      lojasMap = new Map(lojasData?.map(l => [l.id, l]) || [])
+    }
+
+    // Montar os promotores com suas lojas
+    const lojasPorPromotor = new Map<string, any[]>()
+    lojasRel?.forEach(rel => {
+      if (!lojasPorPromotor.has(rel.promotor_id)) {
+        lojasPorPromotor.set(rel.promotor_id, [])
+      }
+      const loja = lojasMap.get(rel.loja_id)
+      if (loja) {
+        lojasPorPromotor.get(rel.promotor_id)!.push(loja)
+      }
+    })
+
+    // Buscar marcas para cada promotor
+    const { data: marcasRel } = await supabase
+      .from('promotores_marcas')
+      .select('promotor_id, marca_id')
+      .in('promotor_id', promotorIds)
+
+    const marcaIds = [...new Set(marcasRel?.map(r => r.marca_id) || [])]
+    let marcasMap = new Map()
+    if (marcaIds.length > 0) {
+      const { data: marcasData } = await supabase
+        .from('marcas')
+        .select('id, nome')
+        .in('id', marcaIds)
+      marcasMap = new Map(marcasData?.map(m => [m.id, m]) || [])
+    }
+
+    const marcasPorPromotor = new Map<string, any[]>()
+    marcasRel?.forEach(rel => {
+      if (!marcasPorPromotor.has(rel.promotor_id)) {
+        marcasPorPromotor.set(rel.promotor_id, [])
+      }
+      const marca = marcasMap.get(rel.marca_id)
+      if (marca) {
+        marcasPorPromotor.get(rel.promotor_id)!.push(marca)
+      }
+    })
+
+    // Buscar gerentes para cada promotor
+    const promotoresComDados = await Promise.all(
+      promotoresData.map(async (promotor) => {
+        let gerentesData = []
+        if (promotor.gerente_ids && promotor.gerente_ids.length > 0) {
+          const { data: gerentes } = await supabase
+            .from('gerentes')
+            .select('id, nome_gerente, telefone, cod_loja')
+            .in('id', promotor.gerente_ids)
+          gerentesData = gerentes || []
+        }
+
+        return {
+          ...promotor,
+          lojas: lojasPorPromotor.get(promotor.id) || [],
+          marcas: marcasPorPromotor.get(promotor.id) || [],
+          gerentes: gerentesData
+        }
+      })
+    )
+
+    return promotoresComDados
+  }
+
   const loadData = async () => {
     setLoading(true)
     setError(null)
@@ -146,18 +240,11 @@ export default function Promotores() {
           .select('promotor_id')
           .in('loja_id', lojaIdsPermitidas)
         
-        const promotorIds = promotoresLojas?.map(p => p.promotor_id) || []
+        const promotorIds = [...new Set(promotoresLojas?.map(p => p.promotor_id) || [])]
         
         if (promotorIds.length > 0) {
-          const { data: promotores, error } = await supabase
-            .from('promotores')
-            .select('*')
-            .eq('status', 'ativo')
-            .in('id', promotorIds)
-            .order('promotor_nome')
-          
-          if (error) throw error
-          promotoresData = promotores || []
+          // 🔥 CARREGAR PROMOTORES COM LOJAS COMPLETAS
+          promotoresData = await carregarPromotoresComLojas(promotorIds)
         } else {
           promotoresData = []
         }
