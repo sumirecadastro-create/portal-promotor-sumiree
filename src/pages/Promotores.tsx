@@ -126,7 +126,6 @@ export default function Promotores() {
   const carregarPromotoresComLojas = async (promotorIds: string[]) => {
     if (promotorIds.length === 0) return []
 
-    // Buscar os promotores
     const { data: promotoresData, error: promotoresError } = await supabase
       .from('promotores')
       .select('*')
@@ -136,7 +135,6 @@ export default function Promotores() {
 
     if (promotoresError) throw promotoresError
 
-    // Buscar as lojas para cada promotor
     const { data: lojasRel } = await supabase
       .from('promotores_lojas')
       .select('promotor_id, loja_id')
@@ -153,7 +151,6 @@ export default function Promotores() {
       lojasMap = new Map(lojasData?.map(l => [l.id, l]) || [])
     }
 
-    // Montar os promotores com suas lojas
     const lojasPorPromotor = new Map<string, any[]>()
     lojasRel?.forEach(rel => {
       if (!lojasPorPromotor.has(rel.promotor_id)) {
@@ -165,7 +162,6 @@ export default function Promotores() {
       }
     })
 
-    // Buscar marcas para cada promotor
     const { data: marcasRel } = await supabase
       .from('promotores_marcas')
       .select('promotor_id, marca_id')
@@ -192,7 +188,6 @@ export default function Promotores() {
       }
     })
 
-    // Buscar gerentes para cada promotor
     const promotoresComDados = await Promise.all(
       promotoresData.map(async (promotor) => {
         let gerentesData = []
@@ -216,6 +211,7 @@ export default function Promotores() {
     return promotoresComDados
   }
 
+  // 🔥 FUNÇÃO LOAD DATA CORRIGIDA
   const loadData = async () => {
     setLoading(true)
     setError(null)
@@ -223,17 +219,37 @@ export default function Promotores() {
     try {
       console.log('🚀 Carregando dados...')
       
-      // 🔥 BUSCAR LOJAS DO REGIONAL
+      // 🔥 BUSCAR LOJAS PERMITIDAS
       let lojaIdsPermitidas: string[] = []
-      if (isRegional && userLojaId) {
-        lojaIdsPermitidas = await getLojasRegional()
-        console.log('🏪 Lojas do regional (promotores):', lojaIdsPermitidas.length)
+      
+      if (isAdmin) {
+        // Admin: todas as lojas
+        const { data: lojas } = await supabase.from('lojas').select('id')
+        lojaIdsPermitidas = lojas?.map(l => l.id) || []
+        console.log('🏪 Admin - todas:', lojaIdsPermitidas.length)
+      }
+      else if (isRegional && userLojaId) {
+        // Regional: lojas da região
+        const lojaIds = await getLojasRegional()
+        lojaIdsPermitidas = lojaIds
+        console.log('🏪 Regional - lojas:', lojaIdsPermitidas.length)
+      }
+      else if (isGerente && userLojaId) {
+        // 🔥 GERENTE: apenas a loja dele
+        lojaIdsPermitidas = [userLojaId]
+        console.log('🏪 Gerente - loja:', lojaIdsPermitidas.length)
+      }
+      else {
+        // Fallback: todas as lojas
+        const { data: lojas } = await supabase.from('lojas').select('id')
+        lojaIdsPermitidas = lojas?.map(l => l.id) || []
+        console.log('🏪 Fallback - todas:', lojaIdsPermitidas.length)
       }
 
       // 🔥 BUSCAR PROMOTORES FILTRADOS
       let promotoresData = []
       
-      if (isRegional && lojaIdsPermitidas.length > 0) {
+      if (lojaIdsPermitidas.length > 0) {
         // Buscar promotores das lojas permitidas
         const { data: promotoresLojas } = await supabase
           .from('promotores_lojas')
@@ -241,34 +257,32 @@ export default function Promotores() {
           .in('loja_id', lojaIdsPermitidas)
         
         const promotorIds = [...new Set(promotoresLojas?.map(p => p.promotor_id) || [])]
+        console.log('👤 Promotores encontrados nas lojas:', promotorIds.length)
         
         if (promotorIds.length > 0) {
           // 🔥 CARREGAR PROMOTORES COM LOJAS COMPLETAS
           promotoresData = await carregarPromotoresComLojas(promotorIds)
         } else {
+          console.log('⚠️ Nenhum promotor encontrado nas lojas permitidas')
           promotoresData = []
         }
       } else {
-        // Admin ou Gerente: usar o serviço normal
+        // Fallback: todos os promotores (apenas se não houver lojas permitidas)
+        console.log('⚠️ Nenhuma loja permitida, buscando todos os promotores')
         promotoresData = await getPromotores()
       }
 
-      // 🔥 BUSCAR LOJAS (filtradas para regional)
+      // 🔥 BUSCAR LOJAS (filtradas)
       let lojasData = []
-      if (isRegional && userLojaId) {
-        const lojaIds = await getLojasRegional()
-        if (lojaIds.length > 0) {
-          const { data, error } = await supabase
-            .from('lojas')
-            .select('*')
-            .in('id', lojaIds)
-            .order('nome_loja')
-          
-          if (error) throw error
-          lojasData = data || []
-        } else {
-          lojasData = []
-        }
+      if (lojaIdsPermitidas.length > 0) {
+        const { data, error } = await supabase
+          .from('lojas')
+          .select('*')
+          .in('id', lojaIdsPermitidas)
+          .order('nome_loja')
+        
+        if (error) throw error
+        lojasData = data || []
       } else {
         lojasData = await getLojas()
       }
@@ -306,7 +320,7 @@ export default function Promotores() {
 
   useEffect(() => {
     loadData()
-  }, [userLojaId, isRegional])
+  }, [userLojaId, isRegional, isGerente, isAdmin])
 
   const abrirSelecionarLojasNew = () => {
     setLojasSelecionadasTempNew([...newPromotor.loja_ids])
