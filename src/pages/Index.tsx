@@ -19,7 +19,7 @@ import { useAuth } from '@/hooks/use-auth'
 
 export default function Index() {
   const navigate = useNavigate()
-  const { user, isAdmin, isRegional, userLojaId } = useAuth()
+  const { user, isAdmin, isRegional, isGerente, userLojaId } = useAuth()
   const [stats, setStats] = useState<DashboardStats | undefined>()
   const [recentVisits, setRecentVisits] = useState<RecentVisit[]>([])
   const [coberturaMarcas, setCoberturaMarcas] = useState<any[]>([])
@@ -28,15 +28,22 @@ export default function Index() {
   const loadData = async () => {
     setLoading(true)
     try {
-      console.log('📊 Carregando dados do dashboard...', { userLojaId, isAdmin, isRegional })
+      console.log('📊 Carregando dados do dashboard...', { 
+        userLojaId, 
+        isAdmin, 
+        isRegional, 
+        isGerente,
+        user: user?.email 
+      })
       
-      const data = await getDashboardData(userLojaId, isAdmin, isRegional)
+      // 🔥 PASSAR TODOS OS PARÂMETROS
+      const data = await getDashboardData(userLojaId, isAdmin, isRegional, isGerente)
       console.log('📊 Dados do dashboard recebidos:', data)
       
       setStats(data.stats)
       setRecentVisits(data.recentVisits)
       
-      const marcas = await getCoberturaPorMarcaComLojas(userLojaId, isAdmin, isRegional)
+      const marcas = await getCoberturaPorMarcaComLojas(userLojaId, isAdmin, isRegional, isGerente)
       console.log('📊 Marcas recebidas:', marcas)
       setCoberturaMarcas(marcas)
       
@@ -49,7 +56,7 @@ export default function Index() {
 
   useEffect(() => {
     loadData()
-  }, [userLojaId, isAdmin, isRegional])
+  }, [userLojaId, isAdmin, isRegional, isGerente])
 
   const formatTime = (dateString: string) => {
     if (!dateString) return '--:--'
@@ -78,7 +85,12 @@ export default function Index() {
               (Filtrado para sua região)
             </span>
           )}
-          {!isAdmin && !isRegional && userLojaId && (
+          {isGerente && userLojaId && (
+            <span className="ml-2 text-primary font-medium">
+              (Filtrado para sua loja)
+            </span>
+          )}
+          {!isAdmin && !isRegional && !isGerente && userLojaId && (
             <span className="ml-2 text-primary font-medium">
               (Filtrado para sua loja)
             </span>
@@ -178,7 +190,7 @@ export default function Index() {
             </div>
           ) : (
             <p className="text-center text-muted-foreground py-6">
-              Nenhuma marca encontrada para sua região
+              Nenhuma marca encontrada
             </p>
           )}
         </CardContent>
