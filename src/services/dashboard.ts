@@ -25,20 +25,27 @@ export interface MarcaCobertura {
 
 export async function getDashboardData(
   lojaId: string | null = null, 
-  isAdmin: boolean = true,
-  isRegional: boolean = false
+  isAdmin: boolean = false,
+  isRegional: boolean = false,
+  isGerente: boolean = false
 ): Promise<{
   stats: DashboardStats
   recentVisits: RecentVisit[]
 }> {
   try {
-    console.log('📊 Buscando dados do dashboard...', { lojaId, isAdmin, isRegional })
+    console.log('📊 Buscando dados do dashboard...', { lojaId, isAdmin, isRegional, isGerente })
 
     let lojaIds: string[] = []
     
-    // 🔥 1. DETERMINAR LOJAS PERMITIDAS
-    if (isRegional && lojaId) {
-      // REGIONAL: buscar lojas que gerencia
+    // 🔥 PRIORIDADE: ADMIN > REGIONAL > GERENTE > FALLBACK
+    if (isAdmin) {
+      // ADMIN: todas as lojas
+      const { data: lojas } = await supabase.from('lojas').select('id')
+      lojaIds = lojas?.map(l => l.id) || []
+      console.log('🏪 Admin - todas:', lojaIds.length)
+    } 
+    else if (isRegional && lojaId) {
+      // REGIONAL: lojas da região
       const { data: lojasData } = await supabase
         .from('gerentes_regionais_lojas')
         .select('loja_id')
@@ -46,31 +53,21 @@ export async function getDashboardData(
       lojaIds = lojasData?.map(l => l.loja_id) || []
       console.log('🏪 Regional - lojas:', lojaIds.length)
     } 
-    else if (isAdmin) {
-      // ADMIN: todas as lojas
-      const { data: lojas } = await supabase.from('lojas').select('id')
-      lojaIds = lojas?.map(l => l.id) || []
-      console.log('🏪 Admin - todas:', lojaIds.length)
+    else if (isGerente && lojaId) {
+      // 🔥 GERENTE: apenas a loja dele
+      lojaIds = [lojaId]
+      console.log('🏪 Gerente - loja:', lojaIds.length)
     } 
     else if (lojaId) {
-      // GERENTE: verificar role
-      const { data: userData } = await supabase
-        .from('usuarios_internos')
-        .select('role')
-        .eq('id', lojaId)
-        .single()
-      
-      if (userData?.role === 'gerente') {
-        lojaIds = [lojaId]
-        console.log('🏪 Gerente - loja:', lojaIds.length)
-      } else {
-        const { data: lojas } = await supabase.from('lojas').select('id')
-        lojaIds = lojas?.map(l => l.id) || []
-      }
-    } else {
-      // FALLBACK: todas as lojas
+      // Fallback: usar o lojaId se disponível
+      lojaIds = [lojaId]
+      console.log('🏪 Fallback - loja única:', lojaIds.length)
+    }
+    else {
+      // Fallback final: todas as lojas (segurança)
       const { data: lojas } = await supabase.from('lojas').select('id')
       lojaIds = lojas?.map(l => l.id) || []
+      console.log('🏪 Fallback - todas:', lojaIds.length)
     }
 
     if (lojaIds.length === 0) {
@@ -81,11 +78,11 @@ export async function getDashboardData(
       }
     }
 
-    console.log('🏪 Lojas permitidas:', lojaIds.length)
+    console.log('🏪 Lojas permitidas FINAL:', lojaIds.length)
 
     const totalLojas = lojaIds.length
 
-    // 🔥 2. PROMOTORES ATIVOS - CORRIGIDO (usando promotores_lojas)
+    // 🔥 PROMOTORES ATIVOS
     const { data: promotoresLojas, error: plError } = await supabase
       .from('promotores_lojas')
       .select('promotor_id, loja_id')
@@ -103,7 +100,7 @@ export async function getDashboardData(
 
     console.log('📊 Cobertura:', cobertura, '%', 'Lojas cobertas:', lojasComPromotor.size, 'de', totalLojas)
 
-    // Promotores ativos (IDs únicos)
+    // Promotores ativos
     const promotorIds = new Set(promotoresLojas?.map(p => p.promotor_id) || [])
     let promotoresAtivos = 0
     if (promotorIds.size > 0) {
@@ -116,7 +113,7 @@ export async function getDashboardData(
     }
     console.log('👤 Promotores ativos:', promotoresAtivos)
 
-    // 🔥 3. VISITAS HOJE
+    // 🔥 VISITAS HOJE
     const hoje = new Date().toISOString().split('T')[0]
     
     let visitasQuery = supabase
@@ -180,16 +177,22 @@ export async function getDashboardData(
 
 export async function getCoberturaPorMarcaComLojas(
   lojaId: string | null = null, 
-  isAdmin: boolean = true,
-  isRegional: boolean = false
+  isAdmin: boolean = false,
+  isRegional: boolean = false,
+  isGerente: boolean = false
 ): Promise<MarcaCobertura[]> {
   try {
-    console.log('🔍 Buscando cobertura por marca...', { lojaId, isAdmin, isRegional })
+    console.log('🔍 Buscando cobertura por marca...', { lojaId, isAdmin, isRegional, isGerente })
 
     let lojaIds: string[] = []
 
-    // 🔥 MESMA LÓGICA PARA LOJAS PERMITIDAS
-    if (isRegional && lojaId) {
+    // 🔥 PRIORIDADE: ADMIN > REGIONAL > GERENTE > FALLBACK
+    if (isAdmin) {
+      const { data: lojas } = await supabase.from('lojas').select('id')
+      lojaIds = lojas?.map(l => l.id) || []
+      console.log('🏪 Admin (marcas) - todas:', lojaIds.length)
+    } 
+    else if (isRegional && lojaId) {
       const { data: lojasData } = await supabase
         .from('gerentes_regionais_lojas')
         .select('loja_id')
@@ -197,26 +200,18 @@ export async function getCoberturaPorMarcaComLojas(
       lojaIds = lojasData?.map(l => l.loja_id) || []
       console.log('🏪 Regional (marcas) - lojas:', lojaIds.length)
     } 
-    else if (isAdmin) {
-      const { data: lojas } = await supabase.from('lojas').select('id')
-      lojaIds = lojas?.map(l => l.id) || []
+    else if (isGerente && lojaId) {
+      lojaIds = [lojaId]
+      console.log('🏪 Gerente (marcas) - loja:', lojaIds.length)
     } 
     else if (lojaId) {
-      const { data: userData } = await supabase
-        .from('usuarios_internos')
-        .select('role')
-        .eq('id', lojaId)
-        .single()
-      
-      if (userData?.role === 'gerente') {
-        lojaIds = [lojaId]
-      } else {
-        const { data: lojas } = await supabase.from('lojas').select('id')
-        lojaIds = lojas?.map(l => l.id) || []
-      }
-    } else {
+      lojaIds = [lojaId]
+      console.log('🏪 Fallback (marcas) - loja:', lojaIds.length)
+    }
+    else {
       const { data: lojas } = await supabase.from('lojas').select('id')
       lojaIds = lojas?.map(l => l.id) || []
+      console.log('🏪 Fallback (marcas) - todas:', lojaIds.length)
     }
 
     if (lojaIds.length === 0) {
@@ -285,13 +280,14 @@ export async function getCoberturaPorMarcaComLojas(
 
 export async function getCampanhasAtivas(
   lojaId: string | null = null, 
-  isAdmin: boolean = true,
-  isRegional: boolean = false
+  isAdmin: boolean = false,
+  isRegional: boolean = false,
+  isGerente: boolean = false
 ): Promise<any[]> {
   try {
     const hoje = new Date().toISOString().split('T')[0]
 
-    // Buscar lojas permitidas para o regional
+    // Buscar lojas permitidas
     let lojaIds: string[] = []
     if (isRegional && lojaId) {
       const { data: lojasData } = await supabase
@@ -299,6 +295,8 @@ export async function getCampanhasAtivas(
         .select('loja_id')
         .eq('gerente_regional_id', lojaId)
       lojaIds = lojasData?.map(l => l.loja_id) || []
+    } else if (isGerente && lojaId) {
+      lojaIds = [lojaId]
     }
 
     const { data: campanhas, error } = await supabase
@@ -327,10 +325,9 @@ export async function getCampanhasAtivas(
       const lojas = lojasCampanhas?.filter(lc => lc.campanha_id === campanha.id) || []
       const lojaIdsCampanha = lojas.map(l => l.loja_id)
       
-      if (!isAdmin && lojaId) {
-        if (isRegional && lojaIds.length > 0) {
-          return lojaIdsCampanha.some(id => lojaIds.includes(id))
-        }
+      if (!isAdmin && lojaIds.length > 0) {
+        return lojaIdsCampanha.some(id => lojaIds.includes(id))
+      } else if (!isAdmin && lojaId) {
         return lojaIdsCampanha.includes(lojaId)
       }
       return true
@@ -345,13 +342,14 @@ export async function getCampanhasAtivas(
 
 export async function getAcoesAtivas(
   lojaId: string | null = null, 
-  isAdmin: boolean = true,
-  isRegional: boolean = false
+  isAdmin: boolean = false,
+  isRegional: boolean = false,
+  isGerente: boolean = false
 ): Promise<any[]> {
   try {
     const hoje = new Date().toISOString().split('T')[0]
 
-    // Buscar lojas permitidas para o regional
+    // Buscar lojas permitidas
     let lojaIds: string[] = []
     if (isRegional && lojaId) {
       const { data: lojasData } = await supabase
@@ -359,6 +357,8 @@ export async function getAcoesAtivas(
         .select('loja_id')
         .eq('gerente_regional_id', lojaId)
       lojaIds = lojasData?.map(l => l.loja_id) || []
+    } else if (isGerente && lojaId) {
+      lojaIds = [lojaId]
     }
 
     const { data: acoes, error } = await supabase
@@ -387,10 +387,9 @@ export async function getAcoesAtivas(
       const lojas = lojasAcoes?.filter(la => la.acao_id === acao.id) || []
       const lojaIdsAcao = lojas.map(l => l.loja_id)
       
-      if (!isAdmin && lojaId) {
-        if (isRegional && lojaIds.length > 0) {
-          return lojaIdsAcao.some(id => lojaIds.includes(id))
-        }
+      if (!isAdmin && lojaIds.length > 0) {
+        return lojaIdsAcao.some(id => lojaIds.includes(id))
+      } else if (!isAdmin && lojaId) {
         return lojaIdsAcao.includes(lojaId)
       }
       return true
