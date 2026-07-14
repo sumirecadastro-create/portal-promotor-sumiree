@@ -7,7 +7,7 @@ import { useToast } from '@/hooks/use-toast'
 import { createVisit, updateVisit, getActiveVisitsByDay, Visita } from '@/services/visitas'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/use-auth'
-import { MapPin, User, Store, Clock, Calendar, XCircle, Package, Search } from 'lucide-react'
+import { MapPin, User, Store, Clock, Calendar, XCircle, Package, Search, Edit, Save } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import {
   Select,
@@ -16,6 +16,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
 
 interface Promotor {
   id: string
@@ -57,6 +66,13 @@ export default function CheckIn() {
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
 
+  // 🔥 ESTADOS PARA MODAL DE CHECK-OUT
+  const [checkoutDialogOpen, setCheckoutDialogOpen] = useState(false)
+  const [checkoutVisitaId, setCheckoutVisitaId] = useState<string>('')
+  const [checkoutPromotorNome, setCheckoutPromotorNome] = useState('')
+  const [checkoutLojaNome, setCheckoutLojaNome] = useState('')
+  const [checkoutObservacoes, setCheckoutObservacoes] = useState('')
+
   // 🔥 FUNÇÃO PARA BUSCAR LOJAS DO REGIONAL
   const getLojasRegional = async () => {
     if (!isRegional || !userLojaId) return []
@@ -73,7 +89,6 @@ export default function CheckIn() {
       const hoje = new Date().toISOString().split('T')[0]
       console.log('📅 Data de hoje:', hoje)
       
-      // 🔥 BUSCAR LOJAS DO REGIONAL
       let lojaIdsPermitidas: string[] = []
       if (isRegional && userLojaId) {
         lojaIdsPermitidas = await getLojasRegional()
@@ -91,7 +106,6 @@ export default function CheckIn() {
           .eq('status', 'ativo')
           .order('promotor_nome')
         
-        // 🔥 Se for regional, filtrar promotores das lojas permitidas
         if (isRegional && lojaIdsPermitidas.length > 0) {
           const { data: promotoresLojas } = await supabase
             .from('promotores_lojas')
@@ -108,9 +122,7 @@ export default function CheckIn() {
             setLoading(false)
             return
           }
-        }
-        // 🔥 Se for gerente, filtrar promotores da loja dele
-        else if (isGerente && userLojaId) {
+        } else if (isGerente && userLojaId) {
           const { data: promotoresLojas } = await supabase
             .from('promotores_lojas')
             .select('promotor_id')
@@ -148,12 +160,9 @@ export default function CheckIn() {
           .select('id, cod_loja, nome_loja, endereco')
           .order('nome_loja')
         
-        // 🔥 Se for regional, filtrar apenas as lojas que ele gerencia
         if (isRegional && lojaIdsPermitidas.length > 0) {
           query = query.in('id', lojaIdsPermitidas)
-        }
-        // 🔥 Se for gerente, filtrar apenas a loja dele
-        else if (isGerente && userLojaId) {
+        } else if (isGerente && userLojaId) {
           query = query.eq('id', userLojaId)
         }
         
@@ -167,13 +176,10 @@ export default function CheckIn() {
       }
       setLojas(lojasData)
 
-      // 🔥 Auto-selecionar a loja se for gerente e tiver apenas uma
       if (isGerente && lojasData.length === 1) {
         setSelectedLojaId(lojasData[0].id)
         console.log('🔒 Loja auto-selecionada:', lojasData[0].nome_loja)
-      }
-      // 🔥 Auto-selecionar a primeira loja se for regional e tiver apenas uma
-      else if (isRegional && lojasData.length === 1) {
+      } else if (isRegional && lojasData.length === 1) {
         setSelectedLojaId(lojasData[0].id)
         console.log('🔒 Loja auto-selecionada:', lojasData[0].nome_loja)
       }
@@ -189,7 +195,6 @@ export default function CheckIn() {
           .gte('check_in', hoje)
           .order('check_in', { ascending: false })
         
-        // 🔥 Filtrar visitas pela loja do gerente/regional
         if (isGerente && userLojaId) {
           query = query.eq('loja_id', userLojaId)
         } else if (isRegional && lojaIdsPermitidas.length > 0) {
@@ -261,18 +266,15 @@ export default function CheckIn() {
     loadData()
   }, [userLojaId, isRegional, isGerente])
 
-  // Verificar se promotor já tem visita ativa hoje
   const promotorTemVisitaAtiva = (promotorId: string) => {
     return visitasAtivas.some(v => v.promotor_id === promotorId)
   }
 
-  // Filtrar promotores pela pesquisa
   const promotoresFiltrados = promotores.filter(p =>
     p.promotor_nome.toLowerCase().includes(searchPromotor.toLowerCase()) ||
     (p.marca_produto && p.marca_produto.toLowerCase().includes(searchPromotor.toLowerCase()))
   )
 
-  // Filtrar lojas pela pesquisa
   const lojasFiltradas = lojas.filter(l =>
     l.nome_loja.toLowerCase().includes(searchLoja.toLowerCase()) ||
     l.cod_loja.toLowerCase().includes(searchLoja.toLowerCase())
@@ -330,20 +332,43 @@ export default function CheckIn() {
     }
   }
 
-  const handleCheckOut = async (visitaId: string, promotorNome: string, lojaNome: string) => {
-    if (!confirm(`Finalizar visita de ${promotorNome} na loja ${lojaNome}?`)) return
+  // 🔥 NOVA FUNÇÃO: ABRIR MODAL DE CHECK-OUT
+  const abrirCheckoutDialog = (visitaId: string, promotorNome: string, lojaNome: string, observacoesAtuais: string | null) => {
+    setCheckoutVisitaId(visitaId)
+    setCheckoutPromotorNome(promotorNome)
+    setCheckoutLojaNome(lojaNome)
+    setCheckoutObservacoes(observacoesAtuais || '')
+    setCheckoutDialogOpen(true)
+  }
+
+  // 🔥 FUNÇÃO DE CHECK-OUT COM OBSERVAÇÕES
+  const handleCheckOut = async () => {
+    if (!checkoutVisitaId) return
 
     setActionLoading(true)
     try {
       const now = new Date().toISOString()
-      await updateVisit(visitaId, { check_out: now })
+      
+      // 🔥 ATUALIZAR VISITA COM CHECK-OUT E OBSERVAÇÕES
+      const { error } = await supabase
+        .from('visitas')
+        .update({
+          check_out: now,
+          observacoes: checkoutObservacoes || null,
+          status: 'concluida'
+        })
+        .eq('id', checkoutVisitaId)
+
+      if (error) throw error
       
       toast({ 
         title: 'Check-out realizado!', 
-        description: `Visita de ${promotorNome} finalizada.`,
+        description: `Visita de ${checkoutPromotorNome} finalizada com observações.`,
         className: 'bg-blue-500 text-white'
       })
       
+      setCheckoutDialogOpen(false)
+      setCheckoutObservacoes('')
       await loadData()
     } catch (error: any) {
       console.error('Erro no check-out:', error)
@@ -371,7 +396,6 @@ export default function CheckIn() {
     day: 'numeric'
   })
 
-  // Agrupar visitas por loja
   const visitasPorLoja = visitasAtivas.reduce((acc, visita) => {
     const lojaId = visita.loja_id
     if (!acc[lojaId]) {
@@ -432,7 +456,7 @@ export default function CheckIn() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
-            {/* PROMOTOR COM BARRA DE PESQUISA */}
+            {/* PROMOTOR */}
             <div className="space-y-2">
               <label className="text-sm font-medium flex items-center gap-2">
                 <User className="h-4 w-4" />
@@ -490,7 +514,7 @@ export default function CheckIn() {
               </p>
             </div>
 
-            {/* LOJA COM BARRA DE PESQUISA */}
+            {/* LOJA */}
             <div className="space-y-2">
               <label className="text-sm font-medium flex items-center gap-2">
                 <Store className="h-4 w-4" />
@@ -567,7 +591,7 @@ export default function CheckIn() {
         </CardContent>
       </Card>
 
-      {/* Lista de Visitas Ativas - Agrupada por Loja */}
+      {/* Lista de Visitas Ativas */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -627,11 +651,16 @@ export default function CheckIn() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleCheckOut(visita.id, visita.promotor_nome || '', visita.loja_nome || '')}
-                          className="text-red-500 hover:text-red-700 hover:bg-red-50 border-red-200"
+                          onClick={() => abrirCheckoutDialog(
+                            visita.id,
+                            visita.promotor_nome || '',
+                            visita.loja_nome || '',
+                            visita.observacoes || null
+                          )}
+                          className="text-blue-500 hover:text-blue-700 hover:bg-blue-50 border-blue-200"
                           disabled={actionLoading}
                         >
-                          <XCircle className="h-4 w-4 mr-1" />
+                          <Edit className="h-4 w-4 mr-1" />
                           Finalizar
                         </Button>
                       </div>
@@ -643,6 +672,53 @@ export default function CheckIn() {
           )}
         </CardContent>
       </Card>
+
+      {/* 🔥 MODAL DE CHECK-OUT COM OBSERVAÇÕES */}
+      <Dialog open={checkoutDialogOpen} onOpenChange={setCheckoutDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Finalizar Visita</DialogTitle>
+            <DialogDescription>
+              Registre as observações finais da visita de <strong>{checkoutPromotorNome}</strong> na loja <strong>{checkoutLojaNome}</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="checkout-observacoes">Observações Finais</Label>
+              <Textarea
+                id="checkout-observacoes"
+                placeholder="Ex: Promotor saiu mais cedo, produtos em falta, próxima visita agendada, etc."
+                className="min-h-[100px] resize-none"
+                value={checkoutObservacoes}
+                onChange={(e) => setCheckoutObservacoes(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Estas observações serão salvas junto com o registro da visita.
+              </p>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCheckoutDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleCheckOut} disabled={actionLoading} className="bg-blue-500 hover:bg-blue-600">
+              {actionLoading ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent mr-2" />
+                  Finalizando...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" />
+                  Finalizar Visita
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Resumo rápido */}
       <div className="grid gap-4 md:grid-cols-3">
