@@ -37,7 +37,8 @@ export function SidebarMenuItems() {
       href: '/promotores', 
       label: 'Promotores', 
       icon: Users,
-      permissions: ['admin', 'gestor', 'regional', 'gerente_regional']
+      // 🔥 ADICIONADO 'gerente' AQUI
+      permissions: ['admin', 'gestor', 'gerente', 'regional', 'gerente_regional']
     },
     { 
       href: '/check-in', 
