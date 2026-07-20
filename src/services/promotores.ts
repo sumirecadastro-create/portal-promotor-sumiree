@@ -226,7 +226,7 @@ export async function getPromotores(): Promise<Promotor[]> {
           marcas: marcasPorPromotor[promotor.id] || [],
           carta: cartasPorPromotor[promotor.id] || null
         }
-      })
+      )
     )
 
     const promotoresComLojas = promotoresComDados.filter(p => p.lojas && p.lojas.length > 0).length
