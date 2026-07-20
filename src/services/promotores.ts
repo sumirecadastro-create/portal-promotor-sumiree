@@ -26,7 +26,7 @@ export interface Promotor {
     id: string
     nome_loja: string
     cod_loja: string
-    numero_loja?: string
+    numero_loja?: string  // Adicionado campo numero_loja
   }[]
   gerentes?: {  // 🔥 MUDOU: agora é array
     id: string
@@ -150,13 +150,16 @@ export async function getPromotores(): Promise<Promotor[]> {
     const todosLojasIds = [...new Set(Object.values(lojasIdsPorPromotor).flat())]
     let lojasData: any[] = []
     if (todosLojasIds.length > 0) {
+      // CORREÇÃO: Buscar também o campo numero_loja
       const { data: lojas } = await supabase
         .from('lojas')
         .select('id, nome_loja, cod_loja, numero_loja')
         .in('id', todosLojasIds)
       
+      // CORREÇÃO: Garantir que nome_loja tenha um valor significativo
       lojasData = (lojas || []).map(loja => ({
         ...loja,
+        // Se nome_loja estiver vazio ou for igual ao código, usar numero_loja
         nome_loja: (!loja.nome_loja || loja.nome_loja === loja.cod_loja) && loja.numero_loja 
           ? loja.numero_loja 
           : loja.nome_loja
@@ -170,7 +173,7 @@ export async function getPromotores(): Promise<Promotor[]> {
       lojasPorPromotor[promotorId] = lojaIds
         .map(id => lojasMap.get(id))
         .filter(Boolean)
-        .filter(loja => loja !== undefined)
+        .filter(loja => loja !== undefined) // Filtrar lojas que existem
     })
 
     // Buscar todas as cartas de uma vez
@@ -209,44 +212,26 @@ export async function getPromotores(): Promise<Promotor[]> {
         .select('id, nome_gerente, telefone, cod_loja')
         .in('id', [...new Set(todosGerenteIds)])
 
-      if (gerentesData) {
-        gerentesData.forEach(g => gerentesMap.set(g.id, g))
-        console.log(`👤 Encontrados ${gerentesMap.size} gerentes únicos`)
-      }
-    }
+        // CORREÇÃO: Log para debug
+        const lojasDoPromotor = lojasPorPromotor[promotor.id] || []
+        if (lojasDoPromotor.length === 0 && lojasIdsPorPromotor[promotor.id]?.length > 0) {
+          console.warn(`⚠️ Promotor ${promotor.promotor_nome} tem ${lojasIdsPorPromotor[promotor.id].length} loja(s) vinculada(s) mas nenhuma foi encontrada na tabela lojas`)
+        }
 
-    // Montar os promotores com todos os dados
-    const promotoresComDados = promotores.map((promotor) => {
-      // 🔥 Buscar todos os gerentes do promotor
-      const gerentesDoPromotor: any[] = []
-      if (promotor.gerente_ids && Array.isArray(promotor.gerente_ids)) {
-        promotor.gerente_ids.forEach(gerenteId => {
-          const gerente = gerentesMap.get(gerenteId)
-          if (gerente) {
-            gerentesDoPromotor.push(gerente)
-          }
-        })
-      }
-
-      const lojasDoPromotor = lojasPorPromotor[promotor.id] || []
-      if (lojasDoPromotor.length === 0 && lojasIdsPorPromotor[promotor.id]?.length > 0) {
-        console.warn(`⚠️ Promotor ${promotor.promotor_nome} tem ${lojasIdsPorPromotor[promotor.id].length} loja(s) vinculada(s) mas nenhuma foi encontrada na tabela lojas`)
-      }
-
-      return {
-        ...promotor,
-        loja_ids: lojasIdsPorPromotor[promotor.id] || [],
-        lojas: lojasDoPromotor,
-        gerentes: gerentesDoPromotor,  // 🔥 Agora é um array
-        marcas: marcasPorPromotor[promotor.id] || [],
-        carta: cartasPorPromotor[promotor.id] || null
-      }
-    })
+        return {
+          ...promotor,
+          loja_ids: lojasIdsPorPromotor[promotor.id] || [],
+          lojas: lojasDoPromotor,
+          gerentes: gerente,
+          marcas: marcasPorPromotor[promotor.id] || [],
+          carta: cartasPorPromotor[promotor.id] || null
+        }
+      })
+    )
 
     const promotoresComLojas = promotoresComDados.filter(p => p.lojas && p.lojas.length > 0).length
     const promotoresComMarcas = promotoresComDados.filter(p => p.marcas && p.marcas.length > 0).length
     const totalVinculosLojas = promotoresComDados.reduce((sum, p) => sum + (p.loja_ids?.length || 0), 0)
-    const promotoresComGerentes = promotoresComDados.filter(p => p.gerentes && p.gerentes.length > 0).length
     
     console.log(`✅ ${promotoresComDados.length} promotores carregados`)
     console.log(`   - ${promotoresComLojas} com lojas vinculadas (${totalVinculosLojas} vínculos totais)`)
@@ -290,11 +275,13 @@ export async function getPromotorById(id: string): Promise<Promotor | null> {
     
     let lojasData: any[] = []
     if (lojaIds.length > 0) {
+      // CORREÇÃO: Buscar também o campo numero_loja
       const { data: lojas } = await supabase
         .from('lojas')
         .select('id, nome_loja, cod_loja, numero_loja')
         .in('id', lojaIds)
       
+      // CORREÇÃO: Garantir que nome_loja tenha um valor significativo
       lojasData = (lojas || []).map(loja => ({
         ...loja,
         nome_loja: (!loja.nome_loja || loja.nome_loja === loja.cod_loja) && loja.numero_loja 
@@ -389,6 +376,7 @@ export async function getMarcasDisponiveis(): Promise<Marca[]> {
 }
 
 // Buscar todas as lojas disponíveis para vinculação
+// CORREÇÃO: Adicionar numero_loja ao retorno
 export async function getLojasDisponiveis(): Promise<{ id: string; cod_loja: string; nome_loja: string; numero_loja: string }[]> {
   try {
     const { data, error } = await supabase
@@ -401,6 +389,7 @@ export async function getLojasDisponiveis(): Promise<{ id: string; cod_loja: str
       throw error
     }
 
+    // CORREÇÃO: Garantir que nome_loja tenha um valor significativo
     const lojasCorrigidas = (data || []).map(loja => ({
       ...loja,
       nome_loja: (!loja.nome_loja || loja.nome_loja === loja.cod_loja) && loja.numero_loja 

@@ -361,6 +361,7 @@ function DetalhesAcao({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Fechar
           </Button>
+          {/* 🔥 Botão Editar - apenas ADMIN pode editar */}
           {isAdmin && (
             <Button onClick={handleEditar} style={{ background: PRIMARY_COLOR }}>
               <Edit className="h-4 w-4 mr-2" />
@@ -406,14 +407,10 @@ function AcaoTooltip({ acao, children }: { acao: Acao; children: React.ReactNode
 }
 
 export default function Acoes() {
-  const { 
-    isAdmin, 
-    isGerente,
-    isRegional, 
-    userLojaId, 
-    loading: authLoading 
-  } = useAuth()
+  // 🔥 CONTROLE DE ACESSO
+  const { isAdmin, isGerente, userLojaId, loading: authLoading } = useAuth()
   
+  // Estados principais
   const [mesAtual, setMesAtual] = useState(new Date())
   const [lojaFiltroNome, setLojaFiltroNome] = useState('')
   const [lojas, setLojas] = useState<Loja[]>([])
@@ -485,17 +482,7 @@ export default function Acoes() {
     setLojasPopoverOpen(false)
   }
 
-  // 🔥 FUNÇÃO PARA BUSCAR LOJAS DO REGIONAL
-  const getLojasRegional = async () => {
-    if (!isRegional || !userLojaId) return []
-    const { data } = await supabase
-      .from('gerentes_regionais_lojas')
-      .select('loja_id')
-      .eq('gerente_regional_id', userLojaId)
-    return data?.map(l => l.loja_id) || []
-  }
-
-  // 🔥 CARREGAR LOJAS COM FILTRO REGIONAL
+  // 🔥 Buscar lojas com filtro por permissão do gerente
   async function carregarLojas() {
     try {
       let query = supabase
@@ -506,16 +493,6 @@ export default function Acoes() {
       // Se for gerente (não admin), filtrar apenas a loja dele
       if (isGerente && !isAdmin && userLojaId) {
         query = query.eq('id', userLojaId)
-      }
-      // 🔥 Se for Regional, filtrar apenas as lojas que ele gerencia
-      else if (isRegional && !isAdmin && userLojaId) {
-        const lojaIds = await getLojasRegional()
-        if (lojaIds.length > 0) {
-          query = query.in('id', lojaIds)
-        } else {
-          setLojas([])
-          return
-        }
       }
       
       const { data, error } = await query
@@ -530,6 +507,7 @@ export default function Acoes() {
       
       setLojas(lojasFormatadas)
       
+      // Se for gerente e tem apenas uma loja, auto-selecionar
       if (isGerente && !isAdmin && userLojaId && lojasFormatadas.length === 1) {
         setLojasSelecionadas([userLojaId])
       }
@@ -539,12 +517,13 @@ export default function Acoes() {
     }
   }
 
-  // 🔥 CARREGAR AÇÕES COM FILTRO REGIONAL
+  // 🔥 Buscar ações com filtro por permissão do gerente
   async function carregarAcoes() {
     try {
       const startDate = getFirstDayOfMonth(ano, mes)
       const endDate = getLastDayOfMonth(ano, mes)
       
+      // Buscar IDs das lojas permitidas para o gerente
       let lojasPermitidasIds: string[] = []
       
       if (isGerente && !isAdmin) {
@@ -554,9 +533,6 @@ export default function Acoes() {
           const { data: lojasData } = await supabase.from('lojas').select('id')
           lojasPermitidasIds = lojasData?.map(l => l.id) || []
         }
-      } else if (isRegional && !isAdmin) {
-        // 🔥 REGIONAL: buscar lojas que ele gerencia
-        lojasPermitidasIds = await getLojasRegional()
       }
       
       let query = supabase
@@ -586,8 +562,8 @@ export default function Acoes() {
         if (relacoes && relacoes.length > 0) {
           let lojaIds = relacoes.map(r => r.loja_id)
           
-          // Se for gerente ou regional, filtrar apenas lojas permitidas
-          if ((isGerente || isRegional) && !isAdmin && lojasPermitidasIds.length > 0) {
+          // 🔥 Se for gerente, filtrar apenas lojas permitidas
+          if (isGerente && !isAdmin && lojasPermitidasIds.length > 0) {
             lojaIds = lojaIds.filter(id => lojasPermitidasIds.includes(id))
           }
           
@@ -630,7 +606,7 @@ export default function Acoes() {
       }
     }
     init()
-  }, [mesAtual, filtroStatus, filtroTipo, authLoading, isGerente, isAdmin, isRegional, userLojaId])
+  }, [mesAtual, filtroStatus, filtroTipo, authLoading, isGerente, isAdmin, userLojaId])
 
   const lojasFiltradas = lojas.filter(loja => {
     const matchNome = loja.nome_loja.toLowerCase().includes(lojaFiltroNome.toLowerCase()) ||
@@ -838,6 +814,7 @@ export default function Acoes() {
     { value: 'abordagem', label: '📢 Abordagem', description: 'Abordagem ativa de clientes' }
   ]
 
+  // 🔥 VERIFICAÇÃO DE CARREGAMENTO
   if (authLoading || loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -849,9 +826,8 @@ export default function Acoes() {
     )
   }
 
-  const hasAccess = isAdmin === true || isGerente === true || isRegional === true
-  
-  if (!hasAccess) {
+  // 🔥 VERIFICAÇÃO DE PERMISSÃO - Apenas ADMIN e GERENTE podem acessar
+  if (!isAdmin && !isGerente) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
@@ -896,6 +872,7 @@ export default function Acoes() {
                   </Badge>
                 )}
               </Button>
+              {/* 🔥 Botão Nova Ação - apenas ADMIN pode criar */}
               {isAdmin && (
                 <Button 
                   variant="default" 
@@ -1093,7 +1070,7 @@ export default function Acoes() {
           isAdmin={isAdmin}
         />
 
-        {/* Modal de Edição */}
+        {/* Modal de Edição - apenas ADMIN */}
         {isAdmin && (
           <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
             <DialogContent className="sm:max-w-[550px]">
@@ -1365,7 +1342,7 @@ export default function Acoes() {
           </DialogContent>
         </Dialog>
 
-        {/* Modal de Nova Ação */}
+        {/* Modal de Nova Ação - apenas ADMIN */}
         {isAdmin && (
           <Dialog open={showNovaAcaoModal} onOpenChange={setShowNovaAcaoModal}>
             <DialogContent className="sm:max-w-[500px]">

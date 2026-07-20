@@ -12,7 +12,7 @@ import {
   User,
   Calendar,
   Target,
-  UserPlus,
+  UserPlus,  // 🔥 ADICIONE ESTA LINHA
 } from 'lucide-react'
 import {
   Sidebar,
@@ -101,6 +101,7 @@ export function AppSidebar() {
   const navigate = useNavigate()
   const { user, signOut, loading } = useAuth()
 
+  // Pega o role do usuário da tabela usuarios_internos
   const role = user?.app_role || 'promotor'
 
   if (loading) {
@@ -116,10 +117,24 @@ export function AppSidebar() {
     )
   }
 
-  // 🔥 FILTRO DE MENU BASEADO NO PERFIL
+  // 🔥 FILTRO DE MENU BASEADO NO PERFIL (CORRIGIDO)
   const items = allItems.filter((item) => {
-    const allowedItems = rolePermissions[role] || []
-    return allowedItems.includes(item.title)
+    // ADMIN: vê tudo
+    if (role === 'admin') return true
+    
+    // GESTOR: NÃO vê Cadastro de Usuários e Marcas
+    if (role === 'gestor')
+      return ['Dashboard', 'Lojas', 'Promotores', 'Ações', 'Campanhas', 'Relatórios'].includes(item.title)
+    
+    // 🔥 GERENTE DE LOJA: vê Dashboard, Check-in, Ações, Campanhas, Solicitações e Relatórios
+    if (role === 'gerente')
+      return ['Dashboard', 'Check-in (Operação)', 'Ações', 'Campanhas', 'Solicitações de Promotores', 'Relatórios'].includes(item.title)
+    
+    // PROMOTOR: vê apenas Dashboard e Check-in
+    if (role === 'promotor') 
+      return ['Dashboard', 'Check-in (Operação)'].includes(item.title)
+    
+    return false
   })
 
   const handleSignOut = async () => {
