@@ -122,10 +122,11 @@ export default function Promotores() {
     return data?.map(l => l.loja_id) || []
   }
 
-  // 🔥 FUNÇÃO PARA CARREGAR PROMOTORES COM LOJAS COMPLETAS
+  // 🔥 FUNÇÃO CORRIGIDA PARA CARREGAR PROMOTORES COM LOJAS E GERENTES
   const carregarPromotoresComLojas = async (promotorIds: string[]) => {
     if (promotorIds.length === 0) return []
 
+    // Buscar dados dos promotores
     const { data: promotoresData, error: promotoresError } = await supabase
       .from('promotores')
       .select('*')
@@ -135,6 +136,7 @@ export default function Promotores() {
 
     if (promotoresError) throw promotoresError
 
+    // Buscar relações com lojas
     const { data: lojasRel } = await supabase
       .from('promotores_lojas')
       .select('promotor_id, loja_id')
@@ -162,6 +164,7 @@ export default function Promotores() {
       }
     })
 
+    // Buscar relações com marcas
     const { data: marcasRel } = await supabase
       .from('promotores_marcas')
       .select('promotor_id, marca_id')
@@ -188,30 +191,51 @@ export default function Promotores() {
       }
     })
 
-    const promotoresComDados = await Promise.all(
-      promotoresData.map(async (promotor) => {
-        let gerentesData = []
-        if (promotor.gerente_ids && promotor.gerente_ids.length > 0) {
-          const { data: gerentes } = await supabase
-            .from('gerentes')
-            .select('id, nome_gerente, telefone, cod_loja')
-            .in('id', promotor.gerente_ids)
-          gerentesData = gerentes || []
-        }
+    // 🔥 CORREÇÃO: Buscar TODOS os gerentes de UMA VEZ
+    const todosGerenteIds = promotoresData
+      .filter(p => p.gerente_ids && Array.isArray(p.gerente_ids) && p.gerente_ids.length > 0)
+      .flatMap(p => p.gerente_ids)
+      .filter(id => id)
 
-        return {
-          ...promotor,
-          lojas: lojasPorPromotor.get(promotor.id) || [],
-          marcas: marcasPorPromotor.get(promotor.id) || [],
-          gerentes: gerentesData
-        }
-      })
-    )
+    let gerentesMap = new Map()
+    if (todosGerenteIds.length > 0) {
+      const { data: gerentesData } = await supabase
+        .from('gerentes')
+        .select('id, nome_gerente, telefone, cod_loja')
+        .in('id', [...new Set(todosGerenteIds)])
+      
+      if (gerentesData) {
+        gerentesData.forEach(g => {
+          gerentesMap.set(g.id, g)
+        })
+      }
+    }
+
+    // Mapear gerentes por promotor
+    const gerentesPorPromotor = new Map<string, any[]>()
+    promotoresData.forEach(p => {
+      if (p.gerente_ids && Array.isArray(p.gerente_ids)) {
+        gerentesPorPromotor.set(p.id, p.gerente_ids
+          .map(id => gerentesMap.get(id))
+          .filter(Boolean)
+        )
+      } else {
+        gerentesPorPromotor.set(p.id, [])
+      }
+    })
+
+    // Montar objeto final
+    const promotoresComDados = promotoresData.map((promotor) => ({
+      ...promotor,
+      lojas: lojasPorPromotor.get(promotor.id) || [],
+      marcas: marcasPorPromotor.get(promotor.id) || [],
+      gerentes: gerentesPorPromotor.get(promotor.id) || []
+    }))
 
     return promotoresComDados
   }
 
-  // 🔥 FUNÇÃO LOAD DATA CORRIGIDA
+  // 🔥 FUNÇÃO LOAD DATA
   const loadData = async () => {
     setLoading(true)
     setError(null)
@@ -223,24 +247,20 @@ export default function Promotores() {
       let lojaIdsPermitidas: string[] = []
       
       if (isAdmin) {
-        // Admin: todas as lojas
         const { data: lojas } = await supabase.from('lojas').select('id')
         lojaIdsPermitidas = lojas?.map(l => l.id) || []
         console.log('🏪 Admin - todas:', lojaIdsPermitidas.length)
       }
       else if (isRegional && userLojaId) {
-        // Regional: lojas da região
         const lojaIds = await getLojasRegional()
         lojaIdsPermitidas = lojaIds
         console.log('🏪 Regional - lojas:', lojaIdsPermitidas.length)
       }
       else if (isGerente && userLojaId) {
-        // 🔥 GERENTE: apenas a loja dele
         lojaIdsPermitidas = [userLojaId]
         console.log('🏪 Gerente - loja:', lojaIdsPermitidas.length)
       }
       else {
-        // Fallback: todas as lojas
         const { data: lojas } = await supabase.from('lojas').select('id')
         lojaIdsPermitidas = lojas?.map(l => l.id) || []
         console.log('🏪 Fallback - todas:', lojaIdsPermitidas.length)
@@ -250,7 +270,6 @@ export default function Promotores() {
       let promotoresData = []
       
       if (lojaIdsPermitidas.length > 0) {
-        // Buscar promotores das lojas permitidas
         const { data: promotoresLojas } = await supabase
           .from('promotores_lojas')
           .select('promotor_id')
@@ -260,14 +279,12 @@ export default function Promotores() {
         console.log('👤 Promotores encontrados nas lojas:', promotorIds.length)
         
         if (promotorIds.length > 0) {
-          // 🔥 CARREGAR PROMOTORES COM LOJAS COMPLETAS
           promotoresData = await carregarPromotoresComLojas(promotorIds)
         } else {
           console.log('⚠️ Nenhum promotor encontrado nas lojas permitidas')
           promotoresData = []
         }
       } else {
-        // Fallback: todos os promotores (apenas se não houver lojas permitidas)
         console.log('⚠️ Nenhuma loja permitida, buscando todos os promotores')
         promotoresData = await getPromotores()
       }
@@ -322,6 +339,7 @@ export default function Promotores() {
     loadData()
   }, [userLojaId, isRegional, isGerente, isAdmin])
 
+  // Funções para seleção de lojas e gerentes (mantidas iguais)
   const abrirSelecionarLojasNew = () => {
     setLojasSelecionadasTempNew([...newPromotor.loja_ids])
     setBuscaLojasNew('')
@@ -640,6 +658,7 @@ export default function Promotores() {
     )
   }
 
+  // Componentes de seleção (mantidos iguais)
   const GerentesMultiSelect = ({
     selectedIds,
     onChange,
