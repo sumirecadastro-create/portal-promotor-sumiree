@@ -29,18 +29,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import {
-  getVisitasEmAndamento,
-  getVisitasConcluidas,
-  criarCheckIn,
-  finalizarCheckIn,
-  verificarCheckInAtivo,
-  type Visita
-} from '@/services/visitas'
-
-// ============================================
-// TIPOS
-// ============================================
 
 interface Promotor {
   id: string
@@ -58,22 +46,24 @@ interface Loja {
   telefone: string | null
 }
 
-interface AuthUser {
+interface Visita {
   id: string
-  email: string
-  role: string
-  nome: string
+  promotor_id: string
+  loja_id: string
+  check_in: string
+  check_out: string | null
+  observacao_check_in: string | null
+  observacao_check_out: string | null
+  status: string
+  created_at: string
+  promotores?: { promotor_nome: string }
+  lojas?: { nome_loja: string; cod_loja: string }
 }
-
-// ============================================
-// COMPONENTE PRINCIPAL
-// ============================================
 
 export default function CheckIn() {
   const { toast } = useToast()
-  const { user } = useAuth() as { user: AuthUser | null }
+  const { user } = useAuth() as any
 
-  // Estados
   const [promotores, setPromotores] = useState<Promotor[]>([])
   const [lojas, setLojas] = useState<Loja[]>([])
   const [visitasEmAndamento, setVisitasEmAndamento] = useState<Visita[]>([])
@@ -82,73 +72,55 @@ export default function CheckIn() {
   const [searchPromotor, setSearchPromotor] = useState('')
   const [searchLoja, setSearchLoja] = useState('')
 
-  // Estado do formulário
   const [selectedPromotor, setSelectedPromotor] = useState<Promotor | null>(null)
   const [selectedLoja, setSelectedLoja] = useState<Loja | null>(null)
   const [observacaoCheckIn, setObservacaoCheckIn] = useState('')
   const [observacaoCheckOut, setObservacaoCheckOut] = useState('')
   const [visitaSelecionada, setVisitaSelecionada] = useState<Visita | null>(null)
 
-  // Dialogs
   const [dialogAberto, setDialogAberto] = useState(false)
   const [dialogTipo, setDialogTipo] = useState<'check-in' | 'check-out'>('check-in')
   const [loadingAction, setLoadingAction] = useState(false)
 
-  // ============================================
-  // MEMOIZATION
-  // ============================================
-
   const promotoresMap = useMemo(
-    () => new Map(promotores.map(p => [p.id, p])),
+    () => new Map(promotores.map((p) => [p.id, p])),
     [promotores]
   )
 
   const lojasMap = useMemo(
-    () => new Map(lojas.map(l => [l.id, l])),
+    () => new Map(lojas.map((l) => [l.id, l])),
     [lojas]
   )
 
   const promotoresFiltrados = useMemo(() => {
     if (!searchPromotor.trim()) return promotores
-    return promotores.filter(p =>
+    return promotores.filter((p) =>
       p.promotor_nome.toLowerCase().includes(searchPromotor.toLowerCase())
     )
   }, [promotores, searchPromotor])
 
   const lojasFiltradas = useMemo(() => {
     if (!searchLoja.trim()) return lojas
-    return lojas.filter(l =>
-      l.nome_loja.toLowerCase().includes(searchLoja.toLowerCase()) ||
-      l.cod_loja.toLowerCase().includes(searchLoja.toLowerCase())
+    return lojas.filter(
+      (l) =>
+        l.nome_loja.toLowerCase().includes(searchLoja.toLowerCase()) ||
+        l.cod_loja.toLowerCase().includes(searchLoja.toLowerCase())
     )
   }, [lojas, searchLoja])
-
-  // ============================================
-  // FUNÇÕES DE CARREGAMENTO
-  // ============================================
 
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      const [promotoresResult, lojasResult, emAndamentoResult, concluidasResult] = await Promise.all([
-        // 1. Buscar promotores ativos
+      const [promotoresResult, lojasResult] = await Promise.all([
         supabase
           .from('promotores')
           .select('id, promotor_nome, telefone, status')
           .eq('status', 'ativo')
           .order('promotor_nome'),
-
-        // 2. Buscar lojas
         supabase
           .from('lojas')
           .select('id, cod_loja, nome_loja, cidade, endereco, telefone')
           .order('nome_loja'),
-
-        // 3. Buscar visitas em andamento
-        getVisitasEmAndamento(),
-
-        // 4. Buscar últimas 20 visitas concluídas
-        getVisitasConcluidas(20)
       ])
 
       if (promotoresResult.error) throw promotoresResult.error
@@ -156,9 +128,26 @@ export default function CheckIn() {
 
       setPromotores(promotoresResult.data || [])
       setLojas(lojasResult.data || [])
-      setVisitasEmAndamento(emAndamentoResult)
-      setVisitasConcluidas(concluidasResult)
 
+      const { data: emAndamento, error: emAndamentoError } = await supabase
+        .from('visitas')
+        .select('*')
+        .eq('status', 'em_andamento')
+        .order('check_in', { ascending: false })
+
+      if (emAndamentoError) throw emAndamentoError
+
+      const { data: concluidas, error: concluidasError } = await supabase
+        .from('visitas')
+        .select('*')
+        .eq('status', 'concluida')
+        .order('check_out', { ascending: false })
+        .limit(20)
+
+      if (concluidasError) throw concluidasError
+
+      setVisitasEmAndamento(emAndamento || [])
+      setVisitasConcluidas(concluidas || [])
     } catch (error: any) {
       toast({
         variant: 'destructive',
@@ -170,120 +159,9 @@ export default function CheckIn() {
     }
   }, [toast])
 
-  const recarregarVisitas = useCallback(async () => {
-    try {
-      const [emAndamentoResult, concluidasResult] = await Promise.all([
-        getVisitasEmAndamento(),
-        getVisitasConcluidas(20)
-      ])
-      setVisitasEmAndamento(emAndamentoResult)
-      setVisitasConcluidas(concluidasResult)
-    } catch (error: any) {
-      console.error('Erro ao recarregar visitas:', error)
-    }
-  }, [])
-
   useEffect(() => {
     loadData()
   }, [loadData])
-
-  // ============================================
-  // FUNÇÕES DE CHECK-IN / CHECK-OUT
-  // ============================================
-
-  const handleCheckIn = async () => {
-    if (!selectedPromotor || !selectedLoja) {
-      toast({
-        variant: 'destructive',
-        title: 'Erro',
-        description: 'Selecione um promotor e uma loja',
-      })
-      return
-    }
-
-    setLoadingAction(true)
-    try {
-      // Verificar se já há check-in ativo
-      const temAtivo = await verificarCheckInAtivo(selectedPromotor.id)
-
-      if (temAtivo) {
-        toast({
-          variant: 'destructive',
-          title: 'Check-in já realizado',
-          description: 'Este promotor já está em atendimento em outra loja',
-        })
-        setLoadingAction(false)
-        return
-      }
-
-      // Criar check-in (o banco registra check_in com now())
-      const novaVisita = await criarCheckIn({
-        promotor_id: selectedPromotor.id,
-        loja_id: selectedLoja.id,
-        observacao_check_in: observacaoCheckIn || undefined
-      })
-
-      toast({
-        title: '✅ Check-in realizado!',
-        description: `${selectedPromotor.promotor_nome} iniciou atendimento em ${selectedLoja.nome_loja}`,
-      })
-
-      // Resetar formulário
-      setDialogAberto(false)
-      setObservacaoCheckIn('')
-      setSelectedPromotor(null)
-      setSelectedLoja(null)
-
-      // Recarregar
-      await recarregarVisitas()
-
-    } catch (error: any) {
-      toast({
-        variant: 'destructive',
-        title: 'Erro ao fazer check-in',
-        description: error.message,
-      })
-    } finally {
-      setLoadingAction(false)
-    }
-  }
-
-  const handleCheckOut = async () => {
-    if (!visitaSelecionada) return
-
-    setLoadingAction(true)
-    try {
-      // ⚠️ NÃO ENVIAMOS check_out - o trigger faz isso automaticamente!
-      await finalizarCheckIn(visitaSelecionada.id, {
-        observacao_check_out: observacaoCheckOut || undefined
-      })
-
-      toast({
-        title: '✅ Check-out realizado!',
-        description: `Atendimento finalizado`,
-      })
-
-      setDialogAberto(false)
-      setObservacaoCheckOut('')
-      setVisitaSelecionada(null)
-
-      // Recarregar
-      await recarregarVisitas()
-
-    } catch (error: any) {
-      toast({
-        variant: 'destructive',
-        title: 'Erro ao fazer check-out',
-        description: error.message,
-      })
-    } finally {
-      setLoadingAction(false)
-    }
-  }
-
-  // ============================================
-  // FUNÇÕES AUXILIARES
-  // ============================================
 
   const getInitials = (name: string) => {
     if (!name || typeof name !== 'string') return '??'
@@ -300,13 +178,8 @@ export default function CheckIn() {
     return formatDistanceToNow(new Date(data), { addSuffix: true, locale: ptBR })
   }
 
-  // ============================================
-  // RENDERIZAÇÃO
-  // ============================================
-
   return (
     <div className="space-y-6">
-      {/* Cabeçalho */}
       <div className="flex flex-col sm:flex-row justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Check-in / Check-out</h1>
@@ -331,7 +204,6 @@ export default function CheckIn() {
         </div>
       </div>
 
-      {/* Resumo */}
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <Card>
           <CardContent className="p-4 flex items-center gap-4">
@@ -379,7 +251,6 @@ export default function CheckIn() {
         </Card>
       </div>
 
-      {/* Check-ins em Andamento */}
       {visitasEmAndamento.length > 0 && (
         <div>
           <h2 className="font-semibold text-lg mb-3 flex items-center gap-2">
@@ -396,7 +267,7 @@ export default function CheckIn() {
                     <div className="flex items-center gap-4">
                       <Avatar className="h-10 w-10">
                         <AvatarFallback className="bg-green-100 text-green-700">
-                          {getInitials(promotor?.promotor_nome || 'Desconhecido')}
+                          {getInitials(promotor?.promotor_nome || '')}
                         </AvatarFallback>
                       </Avatar>
                       <div>
@@ -441,7 +312,6 @@ export default function CheckIn() {
         </div>
       )}
 
-      {/* Últimos Atendimentos */}
       <div>
         <h2 className="font-semibold text-lg mb-3 flex items-center gap-2">
           <Clock className="h-5 w-5 text-muted-foreground" />
@@ -469,7 +339,7 @@ export default function CheckIn() {
                     <div className="flex items-center gap-4">
                       <Avatar className="h-10 w-10">
                         <AvatarFallback className="bg-gray-100">
-                          {getInitials(promotor?.promotor_nome || 'Desconhecido')}
+                          {getInitials(promotor?.promotor_nome || '')}
                         </AvatarFallback>
                       </Avatar>
                       <div>
@@ -509,7 +379,6 @@ export default function CheckIn() {
         )}
       </div>
 
-      {/* ====== DIALOG DE CHECK-IN / CHECK-OUT ====== */}
       <Dialog open={dialogAberto} onOpenChange={setDialogAberto}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
@@ -550,9 +419,7 @@ export default function CheckIn() {
                       </Avatar>
                       <div>
                         <p className="text-sm font-medium">{p.promotor_nome}</p>
-                        {p.telefone && (
-                          <p className="text-xs text-muted-foreground">{p.telefone}</p>
-                        )}
+                        {p.telefone && <p className="text-xs text-muted-foreground">{p.telefone}</p>}
                       </div>
                     </div>
                   ))}
@@ -665,14 +532,87 @@ export default function CheckIn() {
               Cancelar
             </Button>
             {dialogTipo === 'check-in' && (
-              <Button onClick={handleCheckIn} disabled={!selectedPromotor || !selectedLoja || loadingAction}>
+              <Button
+                onClick={async () => {
+                  if (!selectedPromotor || !selectedLoja) {
+                    toast({
+                      variant: 'destructive',
+                      title: 'Erro',
+                      description: 'Selecione um promotor e uma loja',
+                    })
+                    return
+                  }
+
+                  setLoadingAction(true)
+                  try {
+                    const { error } = await supabase.from('visitas').insert({
+                      promotor_id: selectedPromotor.id,
+                      loja_id: selectedLoja.id,
+                      observacao_check_in: observacaoCheckIn || null,
+                      status: 'em_andamento',
+                    })
+                    if (error) throw error
+
+                    toast({
+                      title: '✅ Check-in realizado!',
+                      description: `${selectedPromotor.promotor_nome} iniciou atendimento em ${selectedLoja.nome_loja}`,
+                    })
+
+                    setDialogAberto(false)
+                    setObservacaoCheckIn('')
+                    setSelectedPromotor(null)
+                    setSelectedLoja(null)
+                    await loadData()
+                  } catch (error: any) {
+                    toast({
+                      variant: 'destructive',
+                      title: 'Erro ao fazer check-in',
+                      description: error.message,
+                    })
+                  } finally {
+                    setLoadingAction(false)
+                  }
+                }}
+                disabled={!selectedPromotor || !selectedLoja || loadingAction}
+              >
                 {loadingAction ? 'Processando...' : 'Confirmar Check-in'}
               </Button>
             )}
             {dialogTipo === 'check-out' && visitaSelecionada && (
               <Button
                 variant="destructive"
-                onClick={handleCheckOut}
+                onClick={async () => {
+                  setLoadingAction(true)
+                  try {
+                    const { error } = await supabase
+                      .from('visitas')
+                      .update({
+                        observacao_check_out: observacaoCheckOut || null,
+                        status: 'concluida',
+                      })
+                      .eq('id', visitaSelecionada.id)
+
+                    if (error) throw error
+
+                    toast({
+                      title: '✅ Check-out realizado!',
+                      description: 'Atendimento finalizado',
+                    })
+
+                    setDialogAberto(false)
+                    setObservacaoCheckOut('')
+                    setVisitaSelecionada(null)
+                    await loadData()
+                  } catch (error: any) {
+                    toast({
+                      variant: 'destructive',
+                      title: 'Erro ao fazer check-out',
+                      description: error.message,
+                    })
+                  } finally {
+                    setLoadingAction(false)
+                  }
+                }}
                 disabled={loadingAction}
               >
                 {loadingAction ? 'Processando...' : 'Confirmar Check-out'}
