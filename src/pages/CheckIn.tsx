@@ -33,7 +33,6 @@ import {
 interface Promotor {
   id: string
   promotor_nome: string
-  telefone: string | null
   status: string
 }
 
@@ -114,7 +113,7 @@ export default function CheckIn() {
       const [promotoresResult, lojasResult] = await Promise.all([
         supabase
           .from('promotores')
-          .select('id, promotor_nome, telefone, status')
+          .select('id, promotor_nome, status')
           .eq('status', 'ativo')
           .order('promotor_nome'),
         supabase
