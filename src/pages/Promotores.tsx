@@ -1,10 +1,13 @@
-import { useEffect, useState, useMemo, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Search, Store, Plus, Edit, Trash2, AlertCircle, Phone, Calendar, FileText, Upload, X, ChevronRight as ChevronRightIcon, User } from 'lucide-react'
+import { Search, MapPin, Store, Plus, Edit, Trash2, AlertCircle, Phone, Calendar, FileText, Upload, X, ChevronRight as ChevronRightIcon, User } from 'lucide-react'
+import { getPromotores, Promotor, createPromotor, updatePromotor, deletePromotor, getMarcasDisponiveis, Marca, getGerentesDisponiveis } from '@/services/promotores'
+import { uploadCartaPromotor, deleteCartaPromotor } from '@/services/uploadCarta'
+import { getLojas } from '@/services/lojas'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/hooks/use-auth'
 import { supabase } from '@/lib/supabase'
@@ -32,33 +35,11 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
 
-// ============================================
-// SERVICES
-// ============================================
-
-import {
-  getPromotoresCompletos,
-  getLojasCompletas,
-  type UserPermissions,
-  type AppRole,
-  type PromotorCompleto,
-  type LojaPermitida
-} from '@/services/permissoes'
-
-import {
-  getMarcasDisponiveis,
-  getGerentesDisponiveis,
-  createPromotor,
-  updatePromotor,
-  deletePromotor,
-  uploadCartaPromotor,
-  deleteCartaPromotor,
-  type Marca
-} from '@/services/promotores'
-
-// ============================================
-// TIPOS LOCAIS
-// ============================================
+interface Loja {
+  id: string
+  cod_loja: string
+  nome_loja: string
+}
 
 interface Gerente {
   id: string
@@ -67,10 +48,7 @@ interface Gerente {
   cod_loja: string | null
 }
 
-// ============================================
-// COMPONENTE DE ERRO
-// ============================================
-
+// Componente de erro
 function ErrorFallback({ error, resetError }: { error: Error; resetError: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center p-12 text-center">
@@ -91,23 +69,9 @@ function ErrorFallback({ error, resetError }: { error: Error; resetError: () => 
   )
 }
 
-// ============================================
-// COMPONENTE PRINCIPAL
-// ============================================
-
-export default function Promotores() {
-  const { toast } = useToast()
-  const { user, userLojaId } = useAuth()
-
-  const permissions: UserPermissions = useMemo(() => ({
-    id: user?.id || '',
-    app_role: (user?.app_role || 'promotor') as AppRole,
-    loja_id: userLojaId || null
-  }), [user, userLojaId])
-
-  // Estados
-  const [promotores, setPromotores] = useState<PromotorCompleto[]>([])
-  const [lojas, setLojas] = useState<LojaPermitida[]>([])
+function Promotores() {
+  const [promotores, setPromotores] = useState<Promotor[]>([])
+  const [lojas, setLojas] = useState<Loja[]>([])
   const [gerentes, setGerentes] = useState<Gerente[]>([])
   const [marcasDisponiveis, setMarcasDisponiveis] = useState<Marca[]>([])
   const [search, setSearch] = useState('')
@@ -115,21 +79,23 @@ export default function Promotores() {
   const [error, setError] = useState<Error | null>(null)
   const [open, setOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
-  const [editingPromotor, setEditingPromotor] = useState<PromotorCompleto | null>(null)
+  const [editingPromotor, setEditingPromotor] = useState<Promotor | null>(null)
   const [saving, setSaving] = useState(false)
   const [uploadingCarta, setUploadingCarta] = useState(false)
+  const { toast } = useToast()
 
-  // 🔥 Formulário novo - sem gerente_ids
+  const { user, isAdmin, isGerente, isRegional, userLojaId } = useAuth() as any
+
   const [newPromotor, setNewPromotor] = useState({
     promotor_nome: '',
     loja_ids: [] as string[],
+    gerente_ids: [] as string[], // Mantido para compatibilidade, mas não será usado
     marca_ids: [] as string[],
     dias_semana: '',
     contato_responsavel: '',
     status: 'ativo'
   })
 
-  // Popovers
   const [lojasPopoverOpenNew, setLojasPopoverOpenNew] = useState(false)
   const [buscaLojasNew, setBuscaLojasNew] = useState('')
   const [lojasSelecionadasTempNew, setLojasSelecionadasTempNew] = useState<string[]>([])
@@ -138,36 +104,200 @@ export default function Promotores() {
   const [buscaLojasEdit, setBuscaLojasEdit] = useState('')
   const [lojasSelecionadasTempEdit, setLojasSelecionadasTempEdit] = useState<string[]>([])
 
-  // 🔥 REMOVIDO: estados de gerentes (não são mais usados)
+  const [gerentesPopoverOpenNew, setGerentesPopoverOpenNew] = useState(false)
+  const [buscaGerentesNew, setBuscaGerentesNew] = useState('')
+  const [gerentesSelecionadosTempNew, setGerentesSelecionadosTempNew] = useState<string[]>([])
 
-  // ============================================
-  // LOAD DATA
-  // ============================================
+  const [gerentesPopoverOpenEdit, setGerentesPopoverOpenEdit] = useState(false)
+  const [buscaGerentesEdit, setBuscaGerentesEdit] = useState('')
+  const [gerentesSelecionadosTempEdit, setGerentesSelecionadosTempEdit] = useState<string[]>([])
 
-  const loadData = useCallback(async () => {
+  // 🔥 FUNÇÃO PARA BUSCAR LOJAS DO REGIONAL
+  const getLojasRegional = async () => {
+    if (!isRegional || !userLojaId) return []
+    const { data } = await supabase
+      .from('gerentes_regionais_lojas')
+      .select('loja_id')
+      .eq('gerente_regional_id', userLojaId)
+    return data?.map(l => l.loja_id) || []
+  }
+
+  // 🔥 FUNÇÃO CORRIGIDA - USANDO JOIN DO SUPABASE
+  const carregarPromotoresComLojas = async (promotorIds: string[]) => {
+    if (promotorIds.length === 0) return []
+
+    const { data: promotoresData, error: promotoresError } = await supabase
+      .from('promotores')
+      .select(`
+        *,
+        promotores_lojas(
+          lojas(
+            id,
+            cod_loja,
+            nome_loja,
+            gerente_id,
+            gerentes(
+              id,
+              nome_gerente,
+              telefone,
+              cod_loja
+            )
+          )
+        ),
+        promotores_marcas(
+          marcas(
+            id,
+            nome
+          )
+        )
+      `)
+      .eq('status', 'ativo')
+      .in('id', promotorIds)
+      .order('promotor_nome')
+
+    if (promotoresError) throw promotoresError
+
+    // Buscar cartas separadamente (para preservar as existentes)
+    const { data: cartasData } = await supabase
+      .from('promotores_cartas')
+      .select('*')
+      .eq('status', 'valido')
+      .order('created_at', { ascending: false })
+
+    const cartasPorPromotor: Record<string, any> = {}
+    if (cartasData) {
+      cartasData.forEach(carta => {
+        if (!cartasPorPromotor[carta.promotor_id]) {
+          cartasPorPromotor[carta.promotor_id] = carta
+        }
+      })
+    }
+
+    return promotoresData.map((promotor) => {
+      // Extrair lojas com seus gerentes
+      const lojasComGerentes = promotor.promotores_lojas
+        ?.map((pl: any) => pl.lojas)
+        .filter(Boolean) || []
+
+      // Extrair gerentes únicos das lojas
+      const gerentesMap = new Map()
+      lojasComGerentes.forEach((loja: any) => {
+        if (loja.gerentes) {
+          gerentesMap.set(loja.gerentes.id, loja.gerentes)
+        }
+      })
+      const gerentes = Array.from(gerentesMap.values())
+
+      // Extrair marcas
+      const marcas = promotor.promotores_marcas
+        ?.map((pm: any) => pm.marcas)
+        .filter(Boolean) || []
+
+      // Extrair lojas (sem os gerentes aninhados)
+      const lojas = lojasComGerentes.map((loja: any) => ({
+        id: loja.id,
+        cod_loja: loja.cod_loja,
+        nome_loja: loja.nome_loja,
+        gerente_id: loja.gerente_id
+      }))
+
+      return {
+        ...promotor,
+        lojas,
+        gerentes,
+        marcas,
+        carta: cartasPorPromotor[promotor.id] || null
+      }
+    })
+  }
+
+  // 🔥 FUNÇÃO LOAD DATA
+  const loadData = async () => {
     setLoading(true)
     setError(null)
-
+    
     try {
-      const [promotoresData, lojasData, gerentesData, marcasData] = await Promise.all([
-        getPromotoresCompletos(permissions),
-        getLojasCompletas(permissions),
+      console.log('🚀 Carregando dados...')
+      
+      // 🔥 BUSCAR LOJAS PERMITIDAS
+      let lojaIdsPermitidas: string[] = []
+      
+      if (isAdmin) {
+        const { data: lojas } = await supabase.from('lojas').select('id')
+        lojaIdsPermitidas = lojas?.map(l => l.id) || []
+        console.log('🏪 Admin - todas:', lojaIdsPermitidas.length)
+      }
+      else if (isRegional && userLojaId) {
+        const lojaIds = await getLojasRegional()
+        lojaIdsPermitidas = lojaIds
+        console.log('🏪 Regional - lojas:', lojaIdsPermitidas.length)
+      }
+      else if (isGerente && userLojaId) {
+        lojaIdsPermitidas = [userLojaId]
+        console.log('🏪 Gerente - loja:', lojaIdsPermitidas.length)
+      }
+      else {
+        const { data: lojas } = await supabase.from('lojas').select('id')
+        lojaIdsPermitidas = lojas?.map(l => l.id) || []
+        console.log('🏪 Fallback - todas:', lojaIdsPermitidas.length)
+      }
+
+      // 🔥 BUSCAR PROMOTORES FILTRADOS
+      let promotoresData = []
+      
+      if (lojaIdsPermitidas.length > 0) {
+        const { data: promotoresLojas } = await supabase
+          .from('promotores_lojas')
+          .select('promotor_id')
+          .in('loja_id', lojaIdsPermitidas)
+        
+        const promotorIds = [...new Set(promotoresLojas?.map(p => p.promotor_id) || [])]
+        console.log('👤 Promotores encontrados nas lojas:', promotorIds.length)
+        
+        if (promotorIds.length > 0) {
+          promotoresData = await carregarPromotoresComLojas(promotorIds)
+        } else {
+          console.log('⚠️ Nenhum promotor encontrado nas lojas permitidas')
+          promotoresData = []
+        }
+      } else {
+        console.log('⚠️ Nenhuma loja permitida, buscando todos os promotores')
+        promotoresData = await getPromotores()
+      }
+
+      // 🔥 BUSCAR LOJAS (filtradas)
+      let lojasData = []
+      if (lojaIdsPermitidas.length > 0) {
+        const { data, error } = await supabase
+          .from('lojas')
+          .select('*')
+          .in('id', lojaIdsPermitidas)
+          .order('nome_loja')
+        
+        if (error) throw error
+        lojasData = data || []
+      } else {
+        lojasData = await getLojas()
+      }
+
+      // 🔥 BUSCAR GERENTES E MARCAS
+      const [gerentesData, marcasData] = await Promise.all([
         getGerentesDisponiveis(),
         getMarcasDisponiveis()
       ])
-
-      setPromotores(promotoresData)
-      setLojas(lojasData)
-      setGerentes(gerentesData)
-      setMarcasDisponiveis(marcasData)
-
-      console.log('📊 Dados carregados:', {
-        promotores: promotoresData.length,
-        lojas: lojasData.length,
-        gerentes: gerentesData.length,
-        marcas: marcasData.length
+      
+      console.log('📊 Dados recebidos:', {
+        promotores: promotoresData?.length || 0,
+        lojas: lojasData?.length || 0,
+        gerentes: gerentesData?.length || 0,
+        marcas: marcasData?.length || 0
       })
-
+      
+      setPromotores(Array.isArray(promotoresData) ? promotoresData : [])
+      setLojas(Array.isArray(lojasData) ? lojasData : [])
+      setGerentes(Array.isArray(gerentesData) ? gerentesData : [])
+      setMarcasDisponiveis(Array.isArray(marcasData) ? marcasData : [])
+      
     } catch (err: any) {
       console.error('❌ Erro ao carregar:', err)
       setError(err instanceof Error ? err : new Error(err?.message || 'Erro desconhecido'))
@@ -179,16 +309,13 @@ export default function Promotores() {
     } finally {
       setLoading(false)
     }
-  }, [permissions, toast])
+  }
 
   useEffect(() => {
     loadData()
-  }, [loadData])
+  }, [userLojaId, isRegional, isGerente, isAdmin])
 
-  // ============================================
-  // SELEÇÃO DE LOJAS (NEW)
-  // ============================================
-
+  // Funções para seleção de lojas e gerentes
   const abrirSelecionarLojasNew = () => {
     setLojasSelecionadasTempNew([...newPromotor.loja_ids])
     setBuscaLojasNew('')
@@ -203,10 +330,6 @@ export default function Promotores() {
   const cancelarSelecaoLojasNew = () => {
     setLojasPopoverOpenNew(false)
   }
-
-  // ============================================
-  // SELEÇÃO DE LOJAS (EDIT)
-  // ============================================
 
   const abrirSelecionarLojasEdit = () => {
     setLojasSelecionadasTempEdit(editingPromotor?.loja_ids || [])
@@ -225,11 +348,8 @@ export default function Promotores() {
     setLojasPopoverOpenEdit(false)
   }
 
-  // 🔥 REMOVIDO: funções de seleção de gerentes
-
-  // ============================================
-  // CRUD
-  // ============================================
+  // 🔥 REMOVIDO: seleção de gerentes (agora derivado das lojas)
+  // As funções de gerentes foram removidas
 
   const handleCreatePromotor = async () => {
     if (!newPromotor.promotor_nome?.trim()) {
@@ -243,16 +363,17 @@ export default function Promotores() {
 
     setSaving(true)
     try {
-      // 🔥 SEM gerente_ids
+      // 🔥 gerente_ids é enviado vazio - será derivado das lojas
       const result = await createPromotor({
         promotor_nome: newPromotor.promotor_nome.trim(),
         loja_ids: newPromotor.loja_ids,
+        gerente_ids: [], // 🔥 AGORA VAZIO
         marca_ids: newPromotor.marca_ids,
         dias_semana: newPromotor.dias_semana || undefined,
         contato_responsavel: newPromotor.contato_responsavel || undefined,
         status: newPromotor.status
       })
-
+      
       if (result) {
         toast({
           title: 'Sucesso',
@@ -262,12 +383,15 @@ export default function Promotores() {
         setNewPromotor({
           promotor_nome: '',
           loja_ids: [],
+          gerente_ids: [],
           marca_ids: [],
           dias_semana: '',
           contato_responsavel: '',
           status: 'ativo'
         })
         await loadData()
+      } else {
+        throw new Error('Erro ao criar promotor')
       }
     } catch (err: any) {
       toast({
@@ -293,20 +417,21 @@ export default function Promotores() {
 
     setSaving(true)
     try {
-      const marcaIds = editingPromotor.marcas && Array.isArray(editingPromotor.marcas)
+      const marcaIds = editingPromotor.marcas && Array.isArray(editingPromotor.marcas) 
         ? editingPromotor.marcas.map(m => m?.id).filter(Boolean)
         : []
-
-      // 🔥 SEM gerente_ids
+      
+      // 🔥 gerente_ids é enviado vazio - será derivado das lojas
       const result = await updatePromotor(editingPromotor.id, {
         promotor_nome: editingPromotor.promotor_nome.trim(),
         loja_ids: editingPromotor.loja_ids || [],
+        gerente_ids: [], // 🔥 AGORA VAZIO
         marca_ids: marcaIds,
         dias_semana: editingPromotor.dias_semana || undefined,
         contato_responsavel: editingPromotor.contato_responsavel || undefined,
         status: editingPromotor.status || 'ativo'
       })
-
+      
       if (result) {
         toast({
           title: 'Sucesso',
@@ -315,6 +440,8 @@ export default function Promotores() {
         setEditOpen(false)
         setEditingPromotor(null)
         await loadData()
+      } else {
+        throw new Error('Erro ao atualizar promotor')
       }
     } catch (err: any) {
       toast({
@@ -327,18 +454,22 @@ export default function Promotores() {
     }
   }
 
-  const handleDeletePromotor = async (promotor: PromotorCompleto) => {
+  const handleDeletePromotor = async (promotor: Promotor) => {
     if (!promotor?.id) return
-
+    
     if (!confirm(`Deseja realmente excluir o promotor "${promotor.promotor_nome || 'este promotor'}"?`)) return
 
     try {
-      await deletePromotor(promotor.id)
-      toast({
-        title: 'Sucesso',
-        description: 'Promotor excluído com sucesso!',
-      })
-      await loadData()
+      const result = await deletePromotor(promotor.id)
+      if (result) {
+        toast({
+          title: 'Sucesso',
+          description: 'Promotor excluído com sucesso!',
+        })
+        await loadData()
+      } else {
+        throw new Error('Erro ao excluir promotor')
+      }
     } catch (err: any) {
       toast({
         variant: 'destructive',
@@ -348,20 +479,10 @@ export default function Promotores() {
     }
   }
 
-  const openEditDialog = (promotor: PromotorCompleto) => {
-    if (!promotor) return
-    setEditingPromotor({ ...promotor })
-    setEditOpen(true)
-  }
-
-  // ============================================
-  // CARTA
-  // ============================================
-
   const handleUploadCarta = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file || !editingPromotor) return
-
+    
     if (file.type !== 'application/pdf') {
       toast({
         variant: 'destructive',
@@ -370,7 +491,7 @@ export default function Promotores() {
       })
       return
     }
-
+    
     if (file.size > 5 * 1024 * 1024) {
       toast({
         variant: 'destructive',
@@ -379,7 +500,7 @@ export default function Promotores() {
       })
       return
     }
-
+    
     setUploadingCarta(true)
     try {
       const result = await uploadCartaPromotor(editingPromotor.id, file)
@@ -390,6 +511,8 @@ export default function Promotores() {
         })
         setEditingPromotor({ ...editingPromotor, carta: result.data })
         await loadData()
+      } else {
+        throw new Error(result.error || 'Erro ao fazer upload')
       }
     } catch (error: any) {
       toast({
@@ -405,20 +528,20 @@ export default function Promotores() {
 
   const handleRemoverCarta = async () => {
     if (!editingPromotor?.carta) return
-
+    
     if (!confirm('Deseja realmente remover a carta de apresentação?')) return
-
+    
     try {
       const url = editingPromotor.carta.arquivo
       const filePath = url.split('/documentos/')[1]
-
+      
       await deleteCartaPromotor(editingPromotor.carta.id, filePath)
-
+      
       toast({
         title: 'Sucesso',
         description: 'Carta removida com sucesso!',
       })
-
+      
       setEditingPromotor({ ...editingPromotor, carta: null })
       await loadData()
     } catch (error: any) {
@@ -430,9 +553,11 @@ export default function Promotores() {
     }
   }
 
-  // ============================================
-  // UTILITÁRIOS
-  // ============================================
+  const openEditDialog = (promotor: Promotor) => {
+    if (!promotor) return
+    setEditingPromotor({ ...promotor })
+    setEditOpen(true)
+  }
 
   const filteredPromotores = Array.isArray(promotores) && promotores.length > 0
     ? promotores.filter((p) => {
@@ -447,11 +572,11 @@ export default function Promotores() {
     return name.substring(0, 2).toUpperCase()
   }
 
-  const getMarcasBadges = (promoter: PromotorCompleto) => {
+  const getMarcasBadges = (promoter: Promotor) => {
     if (!promoter || !promoter.marcas || promoter.marcas.length === 0) {
       return <span className="text-sm text-muted-foreground">Sem marcas</span>
     }
-
+    
     return (
       <div className="flex flex-wrap gap-1 justify-center">
         {promoter.marcas.slice(0, 3).map((marca) => (
@@ -468,15 +593,11 @@ export default function Promotores() {
     )
   }
 
-  // ============================================
-  // COMPONENTES DE SELEÇÃO
-  // ============================================
+  // 🔥 COMPONENTE DE SELEÇÃO DE GERENTES REMOVIDO - não é mais necessário
 
-  // 🔥 REMOVIDO: GerentesMultiSelect (não é mais usado)
-
-  const LojasMultiSelect = ({
-    selectedIds,
-    onChange,
+  const LojasMultiSelect = ({ 
+    selectedIds, 
+    onChange, 
     label,
     open,
     onOpenChange,
@@ -486,8 +607,8 @@ export default function Promotores() {
     setTempIds,
     onAplicar,
     onCancelar
-  }: {
-    selectedIds: string[],
+  }: { 
+    selectedIds: string[], 
     onChange: (ids: string[]) => void,
     label: string,
     open: boolean,
@@ -500,8 +621,8 @@ export default function Promotores() {
     onCancelar: () => void
   }) => {
     const safeLojas = Array.isArray(lojas) ? lojas : []
-
-    const filteredLojas = safeLojas.filter(loja =>
+    
+    const filteredLojas = safeLojas.filter(loja => 
       loja?.nome_loja?.toLowerCase().includes(buscaTemp.toLowerCase()) ||
       loja?.cod_loja?.toLowerCase().includes(buscaTemp.toLowerCase())
     )
@@ -612,12 +733,12 @@ export default function Promotores() {
     )
   }
 
-  const MarcasMultiSelect = ({
-    selectedIds,
-    onChange,
-    disabled = false
-  }: {
-    selectedIds: string[],
+  const MarcasMultiSelect = ({ 
+    selectedIds, 
+    onChange, 
+    disabled = false 
+  }: { 
+    selectedIds: string[], 
     onChange: (ids: string[]) => void,
     disabled?: boolean
   }) => {
@@ -626,8 +747,8 @@ export default function Promotores() {
 
     const safeSelectedIds = Array.isArray(selectedIds) ? selectedIds : []
     const safeMarcas = Array.isArray(marcasDisponiveis) ? marcasDisponiveis : []
-
-    const filteredMarcas = safeMarcas.filter(marca =>
+    
+    const filteredMarcas = safeMarcas.filter(marca => 
       marca?.nome?.toLowerCase().includes(marcaSearch.toLowerCase())
     )
 
@@ -684,9 +805,9 @@ export default function Promotores() {
             <div className="max-h-64 overflow-y-auto p-2">
               <div className="flex items-center justify-between p-2 border-b mb-2">
                 <span className="text-sm font-medium">Marcas disponíveis</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
                   onClick={handleSelectAll}
                   className="text-xs"
                 >
@@ -726,17 +847,12 @@ export default function Promotores() {
     )
   }
 
-  // ============================================
-  // RENDER
-  // ============================================
-
   if (error) {
     return <ErrorFallback error={error} resetError={loadData} />
   }
 
   return (
     <div className="space-y-6">
-      {/* Cabeçalho */}
       <div className="flex flex-col sm:flex-row justify-between gap-4">
         <div className="relative w-full sm:w-96">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -747,7 +863,7 @@ export default function Promotores() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-
+        
         <div className="flex gap-2">
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
@@ -788,7 +904,7 @@ export default function Promotores() {
                   onCancelar={cancelarSelecaoLojasNew}
                 />
 
-                {/* 🔥 Gerentes removido - agora derivado das lojas */}
+                {/* 🔥 GERENTES REMOVIDO - será derivado das lojas */}
 
                 <MarcasMultiSelect
                   selectedIds={newPromotor.marca_ids}
@@ -861,14 +977,14 @@ export default function Promotores() {
                   onCancelar={cancelarSelecaoLojasEdit}
                 />
 
-                {/* 🔥 Gerentes removido - agora derivado das lojas */}
+                {/* 🔥 GERENTES REMOVIDO - será derivado das lojas */}
 
                 <MarcasMultiSelect
                   selectedIds={editingPromotor.marcas?.map(m => m?.id).filter(Boolean) || []}
                   onChange={(ids) => {
                     const selectedMarcas = marcasDisponiveis.filter(m => ids.includes(m.id))
-                    setEditingPromotor({
-                      ...editingPromotor,
+                    setEditingPromotor({ 
+                      ...editingPromotor, 
                       marcas: selectedMarcas
                     })
                   }}
@@ -912,13 +1028,13 @@ export default function Promotores() {
 
                 <div className="space-y-2 pt-4 border-t">
                   <Label className="text-base font-semibold">Carta de Apresentação</Label>
-
+                  
                   {editingPromotor.carta ? (
                     <div className="flex items-center gap-2 p-3 border rounded-md bg-muted/50">
                       <FileText className="h-5 w-5 text-blue-500 flex-shrink-0" />
-                      <a
-                        href={editingPromotor.carta.arquivo}
-                        target="_blank"
+                      <a 
+                        href={editingPromotor.carta.arquivo} 
+                        target="_blank" 
                         rel="noopener noreferrer"
                         className="text-sm text-blue-600 hover:underline flex-1 truncate"
                       >
@@ -969,7 +1085,6 @@ export default function Promotores() {
         </Dialog>
       </div>
 
-      {/* Lista de Promotores */}
       {loading ? (
         <div className="flex justify-center p-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -991,9 +1106,9 @@ export default function Promotores() {
                       <div className="flex items-center justify-center gap-2">
                         <h3 className="font-semibold text-lg">{promoter.promotor_nome}</h3>
                         {promoter.carta && (
-                          <a
-                            href={promoter.carta.arquivo}
-                            target="_blank"
+                          <a 
+                            href={promoter.carta.arquivo} 
+                            target="_blank" 
                             rel="noopener noreferrer"
                             className="text-blue-500 hover:text-blue-700 transition-colors"
                             title="Ver carta de apresentação"
@@ -1011,7 +1126,7 @@ export default function Promotores() {
                         <div className="flex-1">
                           {promoter.lojas && promoter.lojas.length > 0 ? (
                             <div className="flex flex-wrap gap-1">
-                              {promoter.lojas.map((loja) => (
+                              {promoter.lojas.map(loja => (
                                 <Badge key={loja.id} variant="outline" className="text-xs">
                                   {loja.cod_loja}
                                 </Badge>
@@ -1022,13 +1137,13 @@ export default function Promotores() {
                           )}
                         </div>
                       </div>
-
+                      
                       <div className="flex items-start gap-2">
                         <User className="h-4 w-4 shrink-0 mt-0.5" />
                         <div className="flex-1">
                           {promoter.gerentes && promoter.gerentes.length > 0 ? (
                             <div className="flex flex-wrap gap-1">
-                              {promoter.gerentes.map((gerente) => (
+                              {promoter.gerentes.map(gerente => (
                                 <Badge key={gerente.id} variant="outline" className="text-xs">
                                   {gerente.nome_gerente}
                                   {gerente.telefone && ` (${gerente.telefone})`}
@@ -1056,18 +1171,18 @@ export default function Promotores() {
                     </div>
 
                     <div className="w-full pt-4 border-t mt-4 flex justify-end gap-2">
-                      <Button
-                        variant="secondary"
-                        size="sm"
+                      <Button 
+                        variant="secondary" 
+                        size="sm" 
                         className="flex-1"
                         onClick={() => openEditDialog(promoter)}
                       >
                         <Edit className="h-4 w-4 mr-1" />
                         Editar
                       </Button>
-                      <Button
-                        variant="destructive"
-                        size="sm"
+                      <Button 
+                        variant="destructive" 
+                        size="sm" 
                         className="flex-1"
                         onClick={() => handleDeletePromotor(promoter)}
                       >
@@ -1089,3 +1204,5 @@ export default function Promotores() {
     </div>
   )
 }
+
+export default Promotores
