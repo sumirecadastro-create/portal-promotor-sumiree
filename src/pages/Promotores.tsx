@@ -41,7 +41,7 @@ import {
   getLojasCompletas,
   type UserPermissions,
   type AppRole,
-  type PromotorPermitido,
+  type PromotorCompleto,
   type LojaPermitida
 } from '@/services/permissoes'
 
@@ -53,9 +53,7 @@ import {
   deletePromotor,
   uploadCartaPromotor,
   deleteCartaPromotor,
-  type Marca,
-  type Promotor,
-  type PromotorCarta
+  type Marca
 } from '@/services/promotores'
 
 // ============================================
@@ -101,7 +99,6 @@ export default function Promotores() {
   const { toast } = useToast()
   const { user, userLojaId } = useAuth()
 
-  // 🔥 Permissões centralizadas
   const permissions: UserPermissions = useMemo(() => ({
     id: user?.id || '',
     app_role: (user?.app_role || 'promotor') as AppRole,
@@ -109,7 +106,7 @@ export default function Promotores() {
   }), [user, userLojaId])
 
   // Estados
-  const [promotores, setPromotores] = useState<PromotorPermitido[]>([])
+  const [promotores, setPromotores] = useState<PromotorCompleto[]>([])
   const [lojas, setLojas] = useState<LojaPermitida[]>([])
   const [gerentes, setGerentes] = useState<Gerente[]>([])
   const [marcasDisponiveis, setMarcasDisponiveis] = useState<Marca[]>([])
@@ -118,15 +115,14 @@ export default function Promotores() {
   const [error, setError] = useState<Error | null>(null)
   const [open, setOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
-  const [editingPromotor, setEditingPromotor] = useState<Promotor | null>(null)
+  const [editingPromotor, setEditingPromotor] = useState<PromotorCompleto | null>(null)
   const [saving, setSaving] = useState(false)
   const [uploadingCarta, setUploadingCarta] = useState(false)
 
-  // Formulário novo
+  // 🔥 Formulário novo - sem gerente_ids
   const [newPromotor, setNewPromotor] = useState({
     promotor_nome: '',
     loja_ids: [] as string[],
-    gerente_ids: [] as string[],
     marca_ids: [] as string[],
     dias_semana: '',
     contato_responsavel: '',
@@ -142,16 +138,10 @@ export default function Promotores() {
   const [buscaLojasEdit, setBuscaLojasEdit] = useState('')
   const [lojasSelecionadasTempEdit, setLojasSelecionadasTempEdit] = useState<string[]>([])
 
-  const [gerentesPopoverOpenNew, setGerentesPopoverOpenNew] = useState(false)
-  const [buscaGerentesNew, setBuscaGerentesNew] = useState('')
-  const [gerentesSelecionadosTempNew, setGerentesSelecionadosTempNew] = useState<string[]>([])
-
-  const [gerentesPopoverOpenEdit, setGerentesPopoverOpenEdit] = useState(false)
-  const [buscaGerentesEdit, setBuscaGerentesEdit] = useState('')
-  const [gerentesSelecionadosTempEdit, setGerentesSelecionadosTempEdit] = useState<string[]>([])
+  // 🔥 REMOVIDO: estados de gerentes (não são mais usados)
 
   // ============================================
-  // LOAD DATA SIMPLIFICADO
+  // LOAD DATA
   // ============================================
 
   const loadData = useCallback(async () => {
@@ -235,59 +225,7 @@ export default function Promotores() {
     setLojasPopoverOpenEdit(false)
   }
 
-  // ============================================
-  // SELEÇÃO DE GERENTES (NEW)
-  // ============================================
-
-  const abrirSelecionarGerentesNew = () => {
-    setGerentesSelecionadosTempNew([...newPromotor.gerente_ids])
-    setBuscaGerentesNew('')
-    setGerentesPopoverOpenNew(true)
-  }
-
-  const aplicarSelecaoGerentesNew = () => {
-    setNewPromotor({ ...newPromotor, gerente_ids: [...gerentesSelecionadosTempNew] })
-    setGerentesPopoverOpenNew(false)
-  }
-
-  const cancelarSelecaoGerentesNew = () => {
-    setGerentesPopoverOpenNew(false)
-  }
-
-  const limparGerentesNew = () => {
-    setGerentesSelecionadosTempNew([])
-    setNewPromotor({ ...newPromotor, gerente_ids: [] })
-    setGerentesPopoverOpenNew(false)
-  }
-
-  // ============================================
-  // SELEÇÃO DE GERENTES (EDIT)
-  // ============================================
-
-  const abrirSelecionarGerentesEdit = () => {
-    setGerentesSelecionadosTempEdit(editingPromotor?.gerente_ids || [])
-    setBuscaGerentesEdit('')
-    setGerentesPopoverOpenEdit(true)
-  }
-
-  const aplicarSelecaoGerentesEdit = () => {
-    if (editingPromotor) {
-      setEditingPromotor({ ...editingPromotor, gerente_ids: [...gerentesSelecionadosTempEdit] })
-    }
-    setGerentesPopoverOpenEdit(false)
-  }
-
-  const cancelarSelecaoGerentesEdit = () => {
-    setGerentesPopoverOpenEdit(false)
-  }
-
-  const limparGerentesEdit = () => {
-    setGerentesSelecionadosTempEdit([])
-    if (editingPromotor) {
-      setEditingPromotor({ ...editingPromotor, gerente_ids: [] })
-    }
-    setGerentesPopoverOpenEdit(false)
-  }
+  // 🔥 REMOVIDO: funções de seleção de gerentes
 
   // ============================================
   // CRUD
@@ -305,10 +243,10 @@ export default function Promotores() {
 
     setSaving(true)
     try {
+      // 🔥 SEM gerente_ids
       const result = await createPromotor({
         promotor_nome: newPromotor.promotor_nome.trim(),
         loja_ids: newPromotor.loja_ids,
-        gerente_ids: newPromotor.gerente_ids,
         marca_ids: newPromotor.marca_ids,
         dias_semana: newPromotor.dias_semana || undefined,
         contato_responsavel: newPromotor.contato_responsavel || undefined,
@@ -324,7 +262,6 @@ export default function Promotores() {
         setNewPromotor({
           promotor_nome: '',
           loja_ids: [],
-          gerente_ids: [],
           marca_ids: [],
           dias_semana: '',
           contato_responsavel: '',
@@ -360,10 +297,10 @@ export default function Promotores() {
         ? editingPromotor.marcas.map(m => m?.id).filter(Boolean)
         : []
 
+      // 🔥 SEM gerente_ids
       const result = await updatePromotor(editingPromotor.id, {
         promotor_nome: editingPromotor.promotor_nome.trim(),
         loja_ids: editingPromotor.loja_ids || [],
-        gerente_ids: editingPromotor.gerente_ids || [],
         marca_ids: marcaIds,
         dias_semana: editingPromotor.dias_semana || undefined,
         contato_responsavel: editingPromotor.contato_responsavel || undefined,
@@ -390,7 +327,7 @@ export default function Promotores() {
     }
   }
 
-  const handleDeletePromotor = async (promotor: Promotor) => {
+  const handleDeletePromotor = async (promotor: PromotorCompleto) => {
     if (!promotor?.id) return
 
     if (!confirm(`Deseja realmente excluir o promotor "${promotor.promotor_nome || 'este promotor'}"?`)) return
@@ -411,7 +348,7 @@ export default function Promotores() {
     }
   }
 
-  const openEditDialog = (promotor: Promotor) => {
+  const openEditDialog = (promotor: PromotorCompleto) => {
     if (!promotor) return
     setEditingPromotor({ ...promotor })
     setEditOpen(true)
@@ -510,7 +447,7 @@ export default function Promotores() {
     return name.substring(0, 2).toUpperCase()
   }
 
-  const getMarcasBadges = (promoter: Promotor) => {
+  const getMarcasBadges = (promoter: PromotorCompleto) => {
     if (!promoter || !promoter.marcas || promoter.marcas.length === 0) {
       return <span className="text-sm text-muted-foreground">Sem marcas</span>
     }
@@ -535,166 +472,7 @@ export default function Promotores() {
   // COMPONENTES DE SELEÇÃO
   // ============================================
 
-  const GerentesMultiSelect = ({
-    selectedIds,
-    onChange,
-    label,
-    open,
-    onOpenChange,
-    buscaTemp,
-    setBuscaTemp,
-    tempIds,
-    setTempIds,
-    onAplicar,
-    onCancelar,
-    onLimpar
-  }: {
-    selectedIds: string[],
-    onChange: (ids: string[]) => void,
-    label: string,
-    open: boolean,
-    onOpenChange: (open: boolean) => void,
-    buscaTemp: string,
-    setBuscaTemp: (busca: string) => void,
-    tempIds: string[],
-    setTempIds: (ids: string[]) => void,
-    onAplicar: () => void,
-    onCancelar: () => void,
-    onLimpar: () => void
-  }) => {
-    const safeGerentes = Array.isArray(gerentes) ? gerentes : []
-
-    const filteredGerentes = safeGerentes.filter(gerente =>
-      gerente?.nome_gerente?.toLowerCase().includes(buscaTemp.toLowerCase()) ||
-      (gerente?.telefone && gerente.telefone.toLowerCase().includes(buscaTemp.toLowerCase()))
-    )
-
-    const selectedGerentes = safeGerentes.filter(g => selectedIds.includes(g.id))
-
-    return (
-      <div className="space-y-2">
-        <Label>{label}</Label>
-        <Popover open={open} onOpenChange={onOpenChange}>
-          <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              role="combobox"
-              className="w-full justify-between min-h-[40px] h-auto"
-              onClick={() => onOpenChange(true)}
-            >
-              <div className="flex flex-wrap gap-1">
-                {selectedIds.length === 0 ? (
-                  <span className="text-muted-foreground">Selecione os gerentes...</span>
-                ) : (
-                  <>
-                    <Badge variant="secondary" className="text-xs">
-                      👤 {selectedIds.length} gerente(s)
-                    </Badge>
-                    {selectedGerentes.slice(0, 2).map(gerente => (
-                      <Badge key={gerente.id} variant="outline" className="text-xs">
-                        {gerente.nome_gerente}
-                      </Badge>
-                    ))}
-                    {selectedIds.length > 2 && (
-                      <Badge variant="outline" className="text-xs">
-                        +{selectedIds.length - 2}
-                      </Badge>
-                    )}
-                  </>
-                )}
-              </div>
-              <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-[400px] p-0" align="start">
-            <div className="p-2 border-b">
-              <Input
-                placeholder="🔍 Buscar gerente por nome ou telefone..."
-                value={buscaTemp}
-                onChange={(e) => setBuscaTemp(e.target.value)}
-                className="h-8"
-              />
-            </div>
-            <div className="max-h-[300px] overflow-y-auto p-2">
-              <div
-                className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer border-b pb-2 mb-1"
-                onClick={onLimpar}
-              >
-                <Checkbox checked={tempIds.length === 0} />
-                <Label className="cursor-pointer font-semibold flex-1 text-red-500">
-                  Nenhum gerente
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer border-b pb-2 mb-1">
-                <Checkbox
-                  checked={tempIds.length === safeGerentes.length && safeGerentes.length > 0}
-                  onCheckedChange={() => {
-                    if (tempIds.length === safeGerentes.length) {
-                      setTempIds([])
-                    } else {
-                      setTempIds(safeGerentes.map(g => g.id))
-                    }
-                  }}
-                />
-                <Label className="cursor-pointer font-semibold flex-1">
-                  Selecionar todos os gerentes ({safeGerentes.length})
-                </Label>
-              </div>
-              {filteredGerentes.map((gerente) => (
-                <div
-                  key={gerente.id}
-                  className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
-                  onClick={() => {
-                    setTempIds(prev =>
-                      prev.includes(gerente.id)
-                        ? prev.filter(id => id !== gerente.id)
-                        : [...prev, gerente.id]
-                    )
-                  }}
-                >
-                  <Checkbox checked={tempIds.includes(gerente.id)} />
-                  <div className="flex-1">
-                    <div className="text-sm font-medium">{gerente.nome_gerente}</div>
-                    {gerente.telefone && (
-                      <div className="text-xs text-muted-foreground">{gerente.telefone}</div>
-                    )}
-                    {gerente.cod_loja && (
-                      <div className="text-xs text-muted-foreground">Loja: {gerente.cod_loja}</div>
-                    )}
-                  </div>
-                </div>
-              ))}
-              {filteredGerentes.length === 0 && (
-                <div className="text-center py-4 text-muted-foreground text-sm">
-                  Nenhum gerente encontrado
-                </div>
-              )}
-            </div>
-            <div className="p-2 border-t flex justify-between">
-              <Button variant="ghost" size="sm" onClick={() => setTempIds([])}>
-                Limpar tudo
-              </Button>
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={onCancelar}>
-                  Cancelar
-                </Button>
-                <Button size="sm" onClick={onAplicar} style={{ background: '#FF1686' }}>
-                  Aplicar ({tempIds.length})
-                </Button>
-              </div>
-            </div>
-          </PopoverContent>
-        </Popover>
-        {selectedIds.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            <span className="text-xs text-muted-foreground">
-              {selectedIds.length} gerente(s) selecionado(s)
-            </span>
-          </div>
-        )}
-      </div>
-    )
-  }
+  // 🔥 REMOVIDO: GerentesMultiSelect (não é mais usado)
 
   const LojasMultiSelect = ({
     selectedIds,
@@ -1010,20 +788,7 @@ export default function Promotores() {
                   onCancelar={cancelarSelecaoLojasNew}
                 />
 
-                <GerentesMultiSelect
-                  selectedIds={newPromotor.gerente_ids}
-                  onChange={(ids) => setNewPromotor({ ...newPromotor, gerente_ids: ids })}
-                  label="Gerentes Responsáveis"
-                  open={gerentesPopoverOpenNew}
-                  onOpenChange={setGerentesPopoverOpenNew}
-                  buscaTemp={buscaGerentesNew}
-                  setBuscaTemp={setBuscaGerentesNew}
-                  tempIds={gerentesSelecionadosTempNew}
-                  setTempIds={setGerentesSelecionadosTempNew}
-                  onAplicar={aplicarSelecaoGerentesNew}
-                  onCancelar={cancelarSelecaoGerentesNew}
-                  onLimpar={limparGerentesNew}
-                />
+                {/* 🔥 Gerentes removido - agora derivado das lojas */}
 
                 <MarcasMultiSelect
                   selectedIds={newPromotor.marca_ids}
@@ -1096,20 +861,7 @@ export default function Promotores() {
                   onCancelar={cancelarSelecaoLojasEdit}
                 />
 
-                <GerentesMultiSelect
-                  selectedIds={editingPromotor.gerente_ids || []}
-                  onChange={(ids) => setEditingPromotor({ ...editingPromotor, gerente_ids: ids })}
-                  label="Gerentes Responsáveis"
-                  open={gerentesPopoverOpenEdit}
-                  onOpenChange={setGerentesPopoverOpenEdit}
-                  buscaTemp={buscaGerentesEdit}
-                  setBuscaTemp={setBuscaGerentesEdit}
-                  tempIds={gerentesSelecionadosTempEdit}
-                  setTempIds={setGerentesSelecionadosTempEdit}
-                  onAplicar={aplicarSelecaoGerentesEdit}
-                  onCancelar={cancelarSelecaoGerentesEdit}
-                  onLimpar={limparGerentesEdit}
-                />
+                {/* 🔥 Gerentes removido - agora derivado das lojas */}
 
                 <MarcasMultiSelect
                   selectedIds={editingPromotor.marcas?.map(m => m?.id).filter(Boolean) || []}
@@ -1238,9 +990,9 @@ export default function Promotores() {
                     <div className="space-y-2 w-full">
                       <div className="flex items-center justify-center gap-2">
                         <h3 className="font-semibold text-lg">{promoter.promotor_nome}</h3>
-                        {(promoter as any).carta && (
+                        {promoter.carta && (
                           <a
-                            href={(promoter as any).carta.arquivo}
+                            href={promoter.carta.arquivo}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-blue-500 hover:text-blue-700 transition-colors"
@@ -1250,16 +1002,16 @@ export default function Promotores() {
                           </a>
                         )}
                       </div>
-                      {getMarcasBadges(promoter as any)}
+                      {getMarcasBadges(promoter)}
                     </div>
 
                     <div className="flex flex-col gap-2 w-full text-sm text-muted-foreground mt-4 text-left border-t pt-4">
                       <div className="flex items-start gap-2">
                         <Store className="h-4 w-4 shrink-0 mt-0.5" />
                         <div className="flex-1">
-                          {(promoter as any).lojas && (promoter as any).lojas.length > 0 ? (
+                          {promoter.lojas && promoter.lojas.length > 0 ? (
                             <div className="flex flex-wrap gap-1">
-                              {(promoter as any).lojas.map((loja: any) => (
+                              {promoter.lojas.map((loja) => (
                                 <Badge key={loja.id} variant="outline" className="text-xs">
                                   {loja.cod_loja}
                                 </Badge>
@@ -1274,9 +1026,9 @@ export default function Promotores() {
                       <div className="flex items-start gap-2">
                         <User className="h-4 w-4 shrink-0 mt-0.5" />
                         <div className="flex-1">
-                          {(promoter as any).gerentes && (promoter as any).gerentes.length > 0 ? (
+                          {promoter.gerentes && promoter.gerentes.length > 0 ? (
                             <div className="flex flex-wrap gap-1">
-                              {(promoter as any).gerentes.map((gerente: any) => (
+                              {promoter.gerentes.map((gerente) => (
                                 <Badge key={gerente.id} variant="outline" className="text-xs">
                                   {gerente.nome_gerente}
                                   {gerente.telefone && ` (${gerente.telefone})`}
@@ -1308,7 +1060,7 @@ export default function Promotores() {
                         variant="secondary"
                         size="sm"
                         className="flex-1"
-                        onClick={() => openEditDialog(promoter as any)}
+                        onClick={() => openEditDialog(promoter)}
                       >
                         <Edit className="h-4 w-4 mr-1" />
                         Editar
@@ -1317,7 +1069,7 @@ export default function Promotores() {
                         variant="destructive"
                         size="sm"
                         className="flex-1"
-                        onClick={() => handleDeletePromotor(promoter as any)}
+                        onClick={() => handleDeletePromotor(promoter)}
                       >
                         <Trash2 className="h-4 w-4 mr-1" />
                         Excluir
