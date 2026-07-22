@@ -16,7 +16,7 @@ export interface Promotor {
   id: string
   promotor_nome: string
   loja_ids: string[]
-  gerente_ids: string[] | null  // 🔥 MUDOU: agora é array
+  gerente_ids: string[] | null
   dias_semana: string | null
   contato_responsavel: string | null
   status: string | null
@@ -26,9 +26,9 @@ export interface Promotor {
     id: string
     nome_loja: string
     cod_loja: string
-    numero_loja?: string  // Adicionado campo numero_loja
+    numero_loja?: string
   }[]
-  gerentes?: {  // 🔥 MUDOU: agora é array
+  gerentes?: {
     id: string
     nome_gerente: string
     telefone: string | null
@@ -53,7 +53,7 @@ export interface Marca {
 export interface CreatePromotorData {
   promotor_nome: string
   loja_ids?: string[]
-  gerente_ids?: string[]  // 🔥 MUDOU: agora é array
+  gerente_ids?: string[]
   marca_ids?: string[]
   dias_semana?: string
   contato_responsavel?: string
@@ -63,7 +63,7 @@ export interface CreatePromotorData {
 export interface UpdatePromotorData {
   promotor_nome?: string
   loja_ids?: string[]
-  gerente_ids?: string[]  // 🔥 MUDOU: agora é array
+  gerente_ids?: string[]
   marca_ids?: string[]
   dias_semana?: string
   contato_responsavel?: string
@@ -150,16 +150,13 @@ export async function getPromotores(): Promise<Promotor[]> {
     const todosLojasIds = [...new Set(Object.values(lojasIdsPorPromotor).flat())]
     let lojasData: any[] = []
     if (todosLojasIds.length > 0) {
-      // CORREÇÃO: Buscar também o campo numero_loja
       const { data: lojas } = await supabase
         .from('lojas')
         .select('id, nome_loja, cod_loja, numero_loja')
         .in('id', todosLojasIds)
       
-      // CORREÇÃO: Garantir que nome_loja tenha um valor significativo
       lojasData = (lojas || []).map(loja => ({
         ...loja,
-        // Se nome_loja estiver vazio ou for igual ao código, usar numero_loja
         nome_loja: (!loja.nome_loja || loja.nome_loja === loja.cod_loja) && loja.numero_loja 
           ? loja.numero_loja 
           : loja.nome_loja
@@ -173,7 +170,7 @@ export async function getPromotores(): Promise<Promotor[]> {
       lojasPorPromotor[promotorId] = lojaIds
         .map(id => lojasMap.get(id))
         .filter(Boolean)
-        .filter(loja => loja !== undefined) // Filtrar lojas que existem
+        .filter(loja => loja !== undefined)
     })
 
     // Buscar todas as cartas de uma vez
@@ -198,8 +195,7 @@ export async function getPromotores(): Promise<Promotor[]> {
       console.log(`📄 Encontradas ${Object.keys(cartasPorPromotor).length} cartas`)
     }
 
-    // 🔥 BUSCAR TODOS OS GERENTES DE UMA VEZ (novo método)
-    // Primeiro, coletar todos os gerente_ids de todos os promotores
+    // Buscar todos os gerentes de uma vez
     const todosGerenteIds = promotores
       .filter(p => p.gerente_ids && Array.isArray(p.gerente_ids) && p.gerente_ids.length > 0)
       .flatMap(p => p.gerente_ids as string[])
@@ -212,25 +208,43 @@ export async function getPromotores(): Promise<Promotor[]> {
         .select('id, nome_gerente, telefone, cod_loja')
         .in('id', [...new Set(todosGerenteIds)])
 
-        // CORREÇÃO: Log para debug
-        const lojasDoPromotor = lojasPorPromotor[promotor.id] || []
-        if (lojasDoPromotor.length === 0 && lojasIdsPorPromotor[promotor.id]?.length > 0) {
-          console.warn(`⚠️ Promotor ${promotor.promotor_nome} tem ${lojasIdsPorPromotor[promotor.id].length} loja(s) vinculada(s) mas nenhuma foi encontrada na tabela lojas`)
-        }
+      if (gerentesData) {
+        gerentesData.forEach(g => {
+          gerentesMap.set(g.id, g)
+        })
+      }
+    }
 
-        return {
-          ...promotor,
-          loja_ids: lojasIdsPorPromotor[promotor.id] || [],
-          lojas: lojasDoPromotor,
-          gerentes: gerente,
-          marcas: marcasPorPromotor[promotor.id] || [],
-          carta: cartasPorPromotor[promotor.id] || null
-        }
-      })
-    )
+    // Mapear gerentes por promotor
+    const gerentesPorPromotor: Record<string, any[]> = {}
+    promotores.forEach(p => {
+      if (p.gerente_ids && Array.isArray(p.gerente_ids)) {
+        gerentesPorPromotor[p.id] = p.gerente_ids
+          .map(id => gerentesMap.get(id))
+          .filter(Boolean)
+      }
+    })
+
+    // Construir lista final de promotores com todos os dados
+    const promotoresComDados = promotores.map((promotor) => {
+      const lojasDoPromotor = lojasPorPromotor[promotor.id] || []
+      if (lojasDoPromotor.length === 0 && lojasIdsPorPromotor[promotor.id]?.length > 0) {
+        console.warn(`⚠️ Promotor ${promotor.promotor_nome} tem ${lojasIdsPorPromotor[promotor.id].length} loja(s) vinculada(s) mas nenhuma foi encontrada na tabela lojas`)
+      }
+
+      return {
+        ...promotor,
+        loja_ids: lojasIdsPorPromotor[promotor.id] || [],
+        lojas: lojasDoPromotor,
+        gerentes: gerentesPorPromotor[promotor.id] || [],
+        marcas: marcasPorPromotor[promotor.id] || [],
+        carta: cartasPorPromotor[promotor.id] || null
+      }
+    })
 
     const promotoresComLojas = promotoresComDados.filter(p => p.lojas && p.lojas.length > 0).length
     const promotoresComMarcas = promotoresComDados.filter(p => p.marcas && p.marcas.length > 0).length
+    const promotoresComGerentes = promotoresComDados.filter(p => p.gerentes && p.gerentes.length > 0).length
     const totalVinculosLojas = promotoresComDados.reduce((sum, p) => sum + (p.loja_ids?.length || 0), 0)
     
     console.log(`✅ ${promotoresComDados.length} promotores carregados`)
@@ -275,13 +289,11 @@ export async function getPromotorById(id: string): Promise<Promotor | null> {
     
     let lojasData: any[] = []
     if (lojaIds.length > 0) {
-      // CORREÇÃO: Buscar também o campo numero_loja
       const { data: lojas } = await supabase
         .from('lojas')
         .select('id, nome_loja, cod_loja, numero_loja')
         .in('id', lojaIds)
       
-      // CORREÇÃO: Garantir que nome_loja tenha um valor significativo
       lojasData = (lojas || []).map(loja => ({
         ...loja,
         nome_loja: (!loja.nome_loja || loja.nome_loja === loja.cod_loja) && loja.numero_loja 
@@ -327,7 +339,7 @@ export async function getPromotorById(id: string): Promise<Promotor | null> {
       console.error('Erro ao buscar carta:', cartaError)
     }
 
-    // 🔥 Buscar TODOS os gerentes do promotor
+    // Buscar todos os gerentes do promotor
     let gerentes: any[] = []
     if (promotor.gerente_ids && Array.isArray(promotor.gerente_ids) && promotor.gerente_ids.length > 0) {
       const { data: gerentesData, error: gerentesError } = await supabase
@@ -344,7 +356,7 @@ export async function getPromotorById(id: string): Promise<Promotor | null> {
       ...promotor,
       loja_ids: lojaIds,
       lojas: lojasData,
-      gerentes: gerentes,  // 🔥 Agora é um array
+      gerentes: gerentes,
       marcas,
       carta: carta || null
     }
@@ -376,7 +388,6 @@ export async function getMarcasDisponiveis(): Promise<Marca[]> {
 }
 
 // Buscar todas as lojas disponíveis para vinculação
-// CORREÇÃO: Adicionar numero_loja ao retorno
 export async function getLojasDisponiveis(): Promise<{ id: string; cod_loja: string; nome_loja: string; numero_loja: string }[]> {
   try {
     const { data, error } = await supabase
@@ -389,7 +400,6 @@ export async function getLojasDisponiveis(): Promise<{ id: string; cod_loja: str
       throw error
     }
 
-    // CORREÇÃO: Garantir que nome_loja tenha um valor significativo
     const lojasCorrigidas = (data || []).map(loja => ({
       ...loja,
       nome_loja: (!loja.nome_loja || loja.nome_loja === loja.cod_loja) && loja.numero_loja 
@@ -404,7 +414,7 @@ export async function getLojasDisponiveis(): Promise<{ id: string; cod_loja: str
   }
 }
 
-// 🔥 NOVA FUNÇÃO: Buscar gerentes disponíveis
+// Buscar gerentes disponíveis
 export async function getGerentesDisponiveis(): Promise<{ id: string; nome_gerente: string; telefone: string | null; cod_loja: string | null }[]> {
   try {
     const { data, error } = await supabase
@@ -432,7 +442,6 @@ export async function createPromotor(data: CreatePromotorData): Promise<Promotor
     console.log('   Gerentes:', data.gerente_ids?.length || 0)
     console.log('   Marcas:', data.marca_ids?.length || 0)
     
-    // 🔥 Inserir o promotor com gerente_ids como array
     const { data: novoPromotor, error: promotorError } = await supabase
       .from('promotores')
       .insert({
@@ -486,7 +495,6 @@ export async function createPromotor(data: CreatePromotorData): Promise<Promotor
       }
     }
 
-    // Buscar o promotor criado com seus relacionamentos
     if (novoPromotor) {
       return await getPromotorById(novoPromotor.id)
     }
@@ -506,7 +514,6 @@ export async function updatePromotor(id: string, data: UpdatePromotorData): Prom
     console.log('   Gerentes:', data.gerente_ids?.length || 0)
     console.log('   Marcas:', data.marca_ids?.length || 0)
     
-    // Preparar os dados para atualização
     const updateData: any = {}
     if (data.promotor_nome !== undefined) updateData.promotor_nome = data.promotor_nome
     if (data.gerente_ids !== undefined) {
@@ -517,7 +524,6 @@ export async function updatePromotor(id: string, data: UpdatePromotorData): Prom
     if (data.status !== undefined) updateData.status = data.status
     updateData.updated_at = new Date().toISOString()
 
-    // Atualizar o promotor
     const { error: promotorError } = await supabase
       .from('promotores')
       .update(updateData)
@@ -528,16 +534,12 @@ export async function updatePromotor(id: string, data: UpdatePromotorData): Prom
       throw promotorError
     }
 
-    // Atualizar lojas - deletar todas e recriar
+    // Atualizar lojas
     if (data.loja_ids !== undefined) {
-      const { error: deleteLojasError } = await supabase
+      await supabase
         .from('promotores_lojas')
         .delete()
         .eq('promotor_id', id)
-
-      if (deleteLojasError) {
-        console.error('Erro ao deletar relações antigas de lojas:', deleteLojasError)
-      }
 
       if (data.loja_ids.length > 0) {
         const relacoesLojas = data.loja_ids.map(loja_id => ({
@@ -545,28 +547,18 @@ export async function updatePromotor(id: string, data: UpdatePromotorData): Prom
           loja_id: loja_id
         }))
 
-        const { error: insertLojasError } = await supabase
+        await supabase
           .from('promotores_lojas')
           .insert(relacoesLojas)
-
-        if (insertLojasError) {
-          console.error('Erro ao inserir novas relações de lojas:', insertLojasError)
-        } else {
-          console.log(`✅ Atualizadas ${relacoesLojas.length} lojas`)
-        }
       }
     }
 
-    // Atualizar marcas - deletar todas e recriar
+    // Atualizar marcas
     if (data.marca_ids !== undefined) {
-      const { error: deleteMarcasError } = await supabase
+      await supabase
         .from('promotores_marcas')
         .delete()
         .eq('promotor_id', id)
-
-      if (deleteMarcasError) {
-        console.error('Erro ao deletar relações antigas de marcas:', deleteMarcasError)
-      }
 
       if (data.marca_ids.length > 0) {
         const relacoesMarcas = data.marca_ids.map(marca_id => ({
@@ -574,19 +566,12 @@ export async function updatePromotor(id: string, data: UpdatePromotorData): Prom
           marca_id: marca_id
         }))
 
-        const { error: insertMarcasError } = await supabase
+        await supabase
           .from('promotores_marcas')
           .insert(relacoesMarcas)
-
-        if (insertMarcasError) {
-          console.error('Erro ao inserir novas relações de marcas:', insertMarcasError)
-        } else {
-          console.log(`✅ Atualizadas ${relacoesMarcas.length} marcas`)
-        }
       }
     }
 
-    // Buscar o promotor atualizado com seus relacionamentos
     return await getPromotorById(id)
   } catch (error) {
     console.error('Erro inesperado em updatePromotor:', error)
@@ -594,18 +579,16 @@ export async function updatePromotor(id: string, data: UpdatePromotorData): Prom
   }
 }
 
-// Deletar um promotor (incluindo cartas do storage e todos os relacionamentos)
+// Deletar um promotor
 export async function deletePromotor(id: string): Promise<boolean> {
   try {
     console.log('🗑️ Deletando promotor:', id)
     
-    // Buscar cartas do promotor para deletar os arquivos do storage
     const { data: cartas } = await supabase
       .from('promotores_cartas')
       .select('id, arquivo')
       .eq('promotor_id', id)
 
-    // Deletar arquivos do storage
     if (cartas && cartas.length > 0) {
       for (const carta of cartas) {
         try {
@@ -620,37 +603,21 @@ export async function deletePromotor(id: string): Promise<boolean> {
       }
     }
 
-    // Deletar registros de cartas
-    const { error: deleteCartasError } = await supabase
+    await supabase
       .from('promotores_cartas')
       .delete()
       .eq('promotor_id', id)
 
-    if (deleteCartasError) {
-      console.error('Erro ao deletar cartas:', deleteCartasError)
-    }
-
-    // Deletar relações com lojas
-    const { error: deleteLojasError } = await supabase
+    await supabase
       .from('promotores_lojas')
       .delete()
       .eq('promotor_id', id)
 
-    if (deleteLojasError) {
-      console.error('Erro ao deletar relações com lojas:', deleteLojasError)
-    }
-
-    // Deletar relações com marcas
-    const { error: deleteMarcasError } = await supabase
+    await supabase
       .from('promotores_marcas')
       .delete()
       .eq('promotor_id', id)
 
-    if (deleteMarcasError) {
-      console.error('Erro ao deletar relações com marcas:', deleteMarcasError)
-    }
-
-    // Deletar o promotor
     const { error: promotorError } = await supabase
       .from('promotores')
       .delete()
