@@ -89,8 +89,15 @@ export default function CheckIn() {
   const [observacaoCheckOut, setObservacaoCheckOut] = useState('')
   const [visitaSelecionada, setVisitaSelecionada] = useState<VisitaUI | null>(null)
 
-  // 🔥 DATA/HORA MANUAL (datetime-local)
+  // 🔥 DATA/HORA MANUAL - CHECK-IN
   const [checkinDataHora, setCheckinDataHora] = useState<string>(() => {
+    const now = new Date()
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
+    return now.toISOString().slice(0, 16)
+  })
+
+  // 🔥 DATA/HORA MANUAL - CHECK-OUT
+  const [checkoutDataHora, setCheckoutDataHora] = useState<string>(() => {
     const now = new Date()
     now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
     return now.toISOString().slice(0, 16)
@@ -172,6 +179,10 @@ export default function CheckIn() {
     return new Date(checkinDataHora)
   }, [checkinDataHora])
 
+  const getDataHoraCheckout = useCallback(() => {
+    return new Date(checkoutDataHora)
+  }, [checkoutDataHora])
+
   const handleCheckIn = async () => {
     if (!selectedPromotor || !selectedLoja) {
       toast({
@@ -215,7 +226,6 @@ export default function CheckIn() {
       setSelectedPromotor(null)
       setSelectedLoja(null)
 
-      // Resetar data/hora para atual
       const now = new Date()
       now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
       setCheckinDataHora(now.toISOString().slice(0, 16))
@@ -238,18 +248,25 @@ export default function CheckIn() {
 
     setLoadingAction(true)
     try {
+      const dataHoraCheckout = getDataHoraCheckout()
+
       await registrarCheckOut(visitaSelecionada.id, {
-        observacao_check_out: observacaoCheckOut || undefined
+        observacao_check_out: observacaoCheckOut || undefined,
+        check_out_manual: dataHoraCheckout.toISOString() // 🔥 ENVIA HORÁRIO MANUAL
       })
 
       toast({
         title: '✅ Check-out realizado!',
-        description: 'Atendimento finalizado',
+        description: `Atendimento finalizado às ${format(dataHoraCheckout, 'HH:mm')}`,
       })
 
       setDialogAberto(false)
       setObservacaoCheckOut('')
       setVisitaSelecionada(null)
+
+      const now = new Date()
+      now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
+      setCheckoutDataHora(now.toISOString().slice(0, 16))
 
       await loadData()
 
@@ -410,6 +427,10 @@ export default function CheckIn() {
                         setVisitaSelecionada(visita)
                         setDialogTipo('check-out')
                         setObservacaoCheckOut('')
+                        // 🔥 Resetar checkout para horário atual
+                        const now = new Date()
+                        now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
+                        setCheckoutDataHora(now.toISOString().slice(0, 16))
                         setDialogAberto(true)
                       }}
                     >
@@ -492,136 +513,146 @@ export default function CheckIn() {
         )}
       </div>
 
-      {/* ====== DIALOG ====== */}
-      <Dialog open={dialogAberto} onOpenChange={setDialogAberto}>
+      {/* ====== DIALOG CHECK-IN ====== */}
+      <Dialog open={dialogAberto && dialogTipo === 'check-in'} onOpenChange={(open) => {
+        if (!open) setDialogAberto(false)
+      }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>
-              {dialogTipo === 'check-in' && 'Novo Check-in'}
-              {dialogTipo === 'check-out' && 'Finalizar Check-out'}
-            </DialogTitle>
+            <DialogTitle>Novo Check-in</DialogTitle>
             <DialogDescription>
-              {dialogTipo === 'check-in' && 'Selecione o promotor, a loja e a data/hora para iniciar o atendimento'}
-              {dialogTipo === 'check-out' && 'Confirme o encerramento do atendimento'}
+              Selecione o promotor, a loja e a data/hora para iniciar o atendimento
             </DialogDescription>
           </DialogHeader>
 
-          {dialogTipo === 'check-in' && (
-            <div className="space-y-4 py-4">
-              {/* Seleção de Promotor */}
-              <div className="space-y-2">
-                <Label>Promotor *</Label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar promotor..."
-                    className="pl-9"
-                    value={searchPromotor}
-                    onChange={(e) => setSearchPromotor(e.target.value)}
-                  />
-                </div>
-                <div className="max-h-40 overflow-y-auto border rounded-md">
-                  {promotoresFiltrados.map((p) => (
-                    <div
-                      key={p.id}
-                      className={`p-2 cursor-pointer hover:bg-muted flex items-center gap-2 ${
-                        selectedPromotor?.id === p.id ? 'bg-muted' : ''
-                      }`}
-                      onClick={() => setSelectedPromotor(p)}
-                    >
-                      <Avatar className="h-8 w-8">
-                        <AvatarFallback className="text-xs">{getInitials(p.promotor_nome)}</AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="text-sm font-medium">{p.promotor_nome}</p>
-                      </div>
-                    </div>
-                  ))}
-                  {promotoresFiltrados.length === 0 && (
-                    <p className="p-2 text-center text-muted-foreground text-sm">
-                      Nenhum promotor encontrado
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Seleção de Loja */}
-              <div className="space-y-2">
-                <Label>Loja *</Label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Buscar loja..."
-                    className="pl-9"
-                    value={searchLoja}
-                    onChange={(e) => setSearchLoja(e.target.value)}
-                  />
-                </div>
-                <div className="max-h-40 overflow-y-auto border rounded-md">
-                  {lojasFiltradas.map((l) => (
-                    <div
-                      key={l.id}
-                      className={`p-2 cursor-pointer hover:bg-muted flex items-center gap-2 ${
-                        selectedLoja?.id === l.id ? 'bg-muted' : ''
-                      }`}
-                      onClick={() => setSelectedLoja(l)}
-                    >
-                      <Store className="h-4 w-4 text-muted-foreground" />
-                      <div>
-                        <p className="text-sm font-medium">{l.nome_loja}</p>
-                        <p className="text-xs text-muted-foreground">{l.cod_loja} - {l.cidade}</p>
-                      </div>
-                    </div>
-                  ))}
-                  {lojasFiltradas.length === 0 && (
-                    <p className="p-2 text-center text-muted-foreground text-sm">
-                      Nenhuma loja encontrada
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* 🔥 DATA E HORA MANUAL (datetime-local) */}
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">📅 Data e Hora do Check-in *</Label>
+          <div className="space-y-4 py-4">
+            {/* Seleção de Promotor */}
+            <div className="space-y-2">
+              <Label>Promotor *</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  type="datetime-local"
-                  value={checkinDataHora}
-                  onChange={(e) => setCheckinDataHora(e.target.value)}
-                  className="w-full"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Clique no campo para selecionar a data e hora desejadas.
-                </p>
-              </div>
-
-              {/* Observação */}
-              <div className="space-y-2">
-                <Label htmlFor="obs-checkin">Observação do Check-in</Label>
-                <Textarea
-                  id="obs-checkin"
-                  placeholder="Adicione uma observação para este check-in..."
-                  value={observacaoCheckIn}
-                  onChange={(e) => setObservacaoCheckIn(e.target.value)}
-                  rows={2}
+                  placeholder="Buscar promotor..."
+                  className="pl-9"
+                  value={searchPromotor}
+                  onChange={(e) => setSearchPromotor(e.target.value)}
                 />
               </div>
-
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setDialogAberto(false)}>
-                  Cancelar
-                </Button>
-                <Button
-                  onClick={handleCheckIn}
-                  disabled={!selectedPromotor || !selectedLoja || loadingAction}
-                >
-                  {loadingAction ? 'Processando...' : 'Confirmar Check-in'}
-                </Button>
-              </DialogFooter>
+              <div className="max-h-40 overflow-y-auto border rounded-md">
+                {promotoresFiltrados.map((p) => (
+                  <div
+                    key={p.id}
+                    className={`p-2 cursor-pointer hover:bg-muted flex items-center gap-2 ${
+                      selectedPromotor?.id === p.id ? 'bg-muted' : ''
+                    }`}
+                    onClick={() => setSelectedPromotor(p)}
+                  >
+                    <Avatar className="h-8 w-8">
+                      <AvatarFallback className="text-xs">{getInitials(p.promotor_nome)}</AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <p className="text-sm font-medium">{p.promotor_nome}</p>
+                    </div>
+                  </div>
+                ))}
+                {promotoresFiltrados.length === 0 && (
+                  <p className="p-2 text-center text-muted-foreground text-sm">
+                    Nenhum promotor encontrado
+                  </p>
+                )}
+              </div>
             </div>
-          )}
 
-          {dialogTipo === 'check-out' && visitaSelecionada && (
+            {/* Seleção de Loja */}
+            <div className="space-y-2">
+              <Label>Loja *</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar loja..."
+                  className="pl-9"
+                  value={searchLoja}
+                  onChange={(e) => setSearchLoja(e.target.value)}
+                />
+              </div>
+              <div className="max-h-40 overflow-y-auto border rounded-md">
+                {lojasFiltradas.map((l) => (
+                  <div
+                    key={l.id}
+                    className={`p-2 cursor-pointer hover:bg-muted flex items-center gap-2 ${
+                      selectedLoja?.id === l.id ? 'bg-muted' : ''
+                    }`}
+                    onClick={() => setSelectedLoja(l)}
+                  >
+                    <Store className="h-4 w-4 text-muted-foreground" />
+                    <div>
+                      <p className="text-sm font-medium">{l.nome_loja}</p>
+                      <p className="text-xs text-muted-foreground">{l.cod_loja} - {l.cidade}</p>
+                    </div>
+                  </div>
+                ))}
+                {lojasFiltradas.length === 0 && (
+                  <p className="p-2 text-center text-muted-foreground text-sm">
+                    Nenhuma loja encontrada
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* 🔥 DATA E HORA MANUAL - CHECK-IN */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">📅 Data e Hora do Check-in *</Label>
+              <Input
+                type="datetime-local"
+                value={checkinDataHora}
+                onChange={(e) => setCheckinDataHora(e.target.value)}
+                className="w-full"
+              />
+              <p className="text-xs text-muted-foreground">
+                Clique no campo para selecionar a data e hora desejadas.
+              </p>
+            </div>
+
+            {/* Observação */}
+            <div className="space-y-2">
+              <Label htmlFor="obs-checkin">Observação do Check-in</Label>
+              <Textarea
+                id="obs-checkin"
+                placeholder="Adicione uma observação para este check-in..."
+                value={observacaoCheckIn}
+                onChange={(e) => setObservacaoCheckIn(e.target.value)}
+                rows={2}
+              />
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDialogAberto(false)}>
+                Cancelar
+              </Button>
+              <Button
+                onClick={handleCheckIn}
+                disabled={!selectedPromotor || !selectedLoja || loadingAction}
+              >
+                {loadingAction ? 'Processando...' : 'Confirmar Check-in'}
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ====== DIALOG CHECK-OUT ====== */}
+      <Dialog open={dialogAberto && dialogTipo === 'check-out'} onOpenChange={(open) => {
+        if (!open) setDialogAberto(false)
+      }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Finalizar Check-out</DialogTitle>
+            <DialogDescription>
+              Selecione a data/hora de saída e confirme o encerramento do atendimento
+            </DialogDescription>
+          </DialogHeader>
+
+          {visitaSelecionada && (
             <div className="space-y-4 py-4">
               {/* Resumo da visita */}
               <div className="bg-muted p-4 rounded-md space-y-2">
@@ -641,16 +672,26 @@ export default function CheckIn() {
                   <span className="text-muted-foreground">Check-in:</span>
                   <span className="font-medium">{formatarData(visitaSelecionada.check_in)}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Duração:</span>
-                  <span className="font-medium">{formatarDistancia(visitaSelecionada.check_in)}</span>
-                </div>
                 {visitaSelecionada.observacao_check_in && (
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Obs. Check-in:</span>
                     <span className="font-medium text-sm">{visitaSelecionada.observacao_check_in}</span>
                   </div>
                 )}
+              </div>
+
+              {/* 🔥 DATA E HORA MANUAL - CHECK-OUT */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">📅 Data e Hora do Check-out *</Label>
+                <Input
+                  type="datetime-local"
+                  value={checkoutDataHora}
+                  onChange={(e) => setCheckoutDataHora(e.target.value)}
+                  className="w-full"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Clique no campo para selecionar a data e hora de saída.
+                </p>
               </div>
 
               {/* Observação de saída */}
@@ -664,10 +705,6 @@ export default function CheckIn() {
                   rows={2}
                 />
               </div>
-
-              <p className="text-xs text-muted-foreground">
-                ⚠️ O horário de saída será registrado automaticamente pelo sistema.
-              </p>
 
               <DialogFooter>
                 <Button variant="outline" onClick={() => setDialogAberto(false)}>
@@ -688,4 +725,3 @@ export default function CheckIn() {
     </div>
   )
 }
-  
