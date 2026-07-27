@@ -14,11 +14,13 @@ import {
   CheckCircle,
   XCircle,
   RefreshCw,
-  FileText
+  FileText,
+  AlertTriangle,
+  CalendarIcon
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/hooks/use-auth'
-import { format, formatDistanceToNow } from 'date-fns'
+import { format, formatDistanceToNow, isBefore, subHours } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import {
   Dialog,
@@ -28,6 +30,12 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { Calendar } from '@/components/ui/calendar'
 
 // ============================================
 // SERVICES
@@ -48,6 +56,9 @@ import {
   registrarCheckIn,
   registrarCheckOut,
   temCheckInAtivo,
+  formatarDataHora,
+  calcularDuracao,
+  isVisitaAtrasada,
   type VisitaCompleta
 } from '@/services/visitas'
 
@@ -90,17 +101,17 @@ export default function CheckIn() {
   const [visitaSelecionada, setVisitaSelecionada] = useState<VisitaUI | null>(null)
 
   // 🔥 DATA/HORA MANUAL - CHECK-IN
-  const [checkinDataHora, setCheckinDataHora] = useState<string>(() => {
+  const [checkinData, setCheckinData] = useState<Date>(new Date())
+  const [checkinHora, setCheckinHora] = useState<string>(() => {
     const now = new Date()
-    now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
-    return now.toISOString().slice(0, 16)
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
   })
 
   // 🔥 DATA/HORA MANUAL - CHECK-OUT
-  const [checkoutDataHora, setCheckoutDataHora] = useState<string>(() => {
+  const [checkoutData, setCheckoutData] = useState<Date>(new Date())
+  const [checkoutHora, setCheckoutHora] = useState<string>(() => {
     const now = new Date()
-    now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
-    return now.toISOString().slice(0, 16)
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
   })
 
   // Dialog
@@ -176,12 +187,18 @@ export default function CheckIn() {
   // ============================================
 
   const getDataHoraCheckin = useCallback(() => {
-    return new Date(checkinDataHora)
-  }, [checkinDataHora])
+    const dataHora = new Date(checkinData)
+    const [horas, minutos] = checkinHora.split(':').map(Number)
+    dataHora.setHours(horas, minutos, 0, 0)
+    return dataHora
+  }, [checkinData, checkinHora])
 
   const getDataHoraCheckout = useCallback(() => {
-    return new Date(checkoutDataHora)
-  }, [checkoutDataHora])
+    const dataHora = new Date(checkoutData)
+    const [horas, minutos] = checkoutHora.split(':').map(Number)
+    dataHora.setHours(horas, minutos, 0, 0)
+    return dataHora
+  }, [checkoutData, checkoutHora])
 
   const handleCheckIn = async () => {
     if (!selectedPromotor || !selectedLoja) {
@@ -226,9 +243,10 @@ export default function CheckIn() {
       setSelectedPromotor(null)
       setSelectedLoja(null)
 
+      // Resetar data/hora para atual
       const now = new Date()
-      now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
-      setCheckinDataHora(now.toISOString().slice(0, 16))
+      setCheckinData(now)
+      setCheckinHora(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`)
 
       await loadData()
 
@@ -250,9 +268,21 @@ export default function CheckIn() {
     try {
       const dataHoraCheckout = getDataHoraCheckout()
 
+      // Validar se o checkout não é antes do check-in
+      const checkInDate = new Date(visitaSelecionada.check_in)
+      if (isBefore(dataHoraCheckout, checkInDate)) {
+        toast({
+          variant: 'destructive',
+          title: 'Erro',
+          description: 'O horário de saída não pode ser anterior ao horário de entrada',
+        })
+        setLoadingAction(false)
+        return
+      }
+
       await registrarCheckOut(visitaSelecionada.id, {
         observacao_check_out: observacaoCheckOut || undefined,
-        check_out_manual: dataHoraCheckout.toISOString() // 🔥 ENVIA HORÁRIO MANUAL
+        check_out_manual: dataHoraCheckout.toISOString()
       })
 
       toast({
@@ -265,8 +295,8 @@ export default function CheckIn() {
       setVisitaSelecionada(null)
 
       const now = new Date()
-      now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
-      setCheckoutDataHora(now.toISOString().slice(0, 16))
+      setCheckoutData(now)
+      setCheckoutHora(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`)
 
       await loadData()
 
@@ -321,6 +351,10 @@ export default function CheckIn() {
           </Button>
           <Button
             onClick={() => {
+              // Resetar para horário atual
+              const now = new Date()
+              setCheckinData(now)
+              setCheckinHora(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`)
               setDialogTipo('check-in')
               setDialogAberto(true)
             }}
@@ -390,12 +424,16 @@ export default function CheckIn() {
             {visitasEmAndamento.map((visita) => {
               const promotor = promotoresMap.get(visita.promotor_id)
               const loja = lojasMap.get(visita.loja_id)
+              const atrasada = isVisitaAtrasada(visita.check_in)
               return (
-                <Card key={visita.id} className="border-green-200 dark:border-green-800">
+                <Card 
+                  key={visita.id} 
+                  className={`border ${atrasada ? 'border-red-200 dark:border-red-800' : 'border-green-200 dark:border-green-800'}`}
+                >
                   <CardContent className="p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
                     <div className="flex items-center gap-4">
                       <Avatar className="h-10 w-10">
-                        <AvatarFallback className="bg-green-100 text-green-700">
+                        <AvatarFallback className={`${atrasada ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
                           {getInitials(promotor?.promotor_nome || 'Desconhecido')}
                         </AvatarFallback>
                       </Avatar>
@@ -408,8 +446,15 @@ export default function CheckIn() {
                           <span className="text-xs">•</span>
                           <Clock className="h-3 w-3" />
                           <span>Desde {formatarData(visita.check_in)}</span>
-                          <Badge variant="outline" className="text-green-600 border-green-600 text-xs">
-                            {formatarDistancia(visita.check_in)}
+                          <Badge variant="outline" className={`text-xs ${atrasada ? 'text-red-600 border-red-600' : 'text-green-600 border-green-600'}`}>
+                            {atrasada ? (
+                              <span className="flex items-center gap-1">
+                                <AlertTriangle className="h-3 w-3" />
+                                Atrasado
+                              </span>
+                            ) : (
+                              formatarDistancia(visita.check_in)
+                            )}
                           </Badge>
                         </div>
                         {visita.observacao_check_in && (
@@ -425,12 +470,12 @@ export default function CheckIn() {
                       size="sm"
                       onClick={() => {
                         setVisitaSelecionada(visita)
+                        // 🔥 Pré-preencher checkout com data/hora atual
+                        const now = new Date()
+                        setCheckoutData(now)
+                        setCheckoutHora(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`)
                         setDialogTipo('check-out')
                         setObservacaoCheckOut('')
-                        // 🔥 Resetar checkout para horário atual
-                        const now = new Date()
-                        now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
-                        setCheckoutDataHora(now.toISOString().slice(0, 16))
                         setDialogAberto(true)
                       }}
                     >
@@ -467,6 +512,7 @@ export default function CheckIn() {
             {visitasConcluidas.map((visita) => {
               const promotor = promotoresMap.get(visita.promotor_id)
               const loja = lojasMap.get(visita.loja_id)
+              const duracao = calcularDuracao(visita.check_in, visita.check_out)
               return (
                 <Card key={visita.id}>
                   <CardContent className="p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -489,6 +535,9 @@ export default function CheckIn() {
                             <>
                               <span className="text-xs">•</span>
                               <span>Saída: {formatarData(visita.check_out)}</span>
+                              <Badge variant="outline" className="text-xs">
+                                ⏱️ {duracao}
+                              </Badge>
                             </>
                           )}
                         </div>
@@ -517,7 +566,7 @@ export default function CheckIn() {
       <Dialog open={dialogAberto && dialogTipo === 'check-in'} onOpenChange={(open) => {
         if (!open) setDialogAberto(false)
       }}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Novo Check-in</DialogTitle>
             <DialogDescription>
@@ -532,30 +581,31 @@ export default function CheckIn() {
               <div className="relative">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Buscar promotor..."
+                  placeholder="Buscar promotor por nome ou marca..."
                   className="pl-9"
                   value={searchPromotor}
                   onChange={(e) => setSearchPromotor(e.target.value)}
                 />
               </div>
               <div className="max-h-40 overflow-y-auto border rounded-md">
-                {promotoresFiltrados.map((p) => (
-                  <div
-                    key={p.id}
-                    className={`p-2 cursor-pointer hover:bg-muted flex items-center gap-2 ${
-                      selectedPromotor?.id === p.id ? 'bg-muted' : ''
-                    }`}
-                    onClick={() => setSelectedPromotor(p)}
-                  >
-                    <Avatar className="h-8 w-8">
-                      <AvatarFallback className="text-xs">{getInitials(p.promotor_nome)}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="text-sm font-medium">{p.promotor_nome}</p>
+                {promotoresFiltrados.length > 0 ? (
+                  promotoresFiltrados.map((p) => (
+                    <div
+                      key={p.id}
+                      className={`p-2 cursor-pointer hover:bg-muted flex items-center gap-2 ${
+                        selectedPromotor?.id === p.id ? 'bg-muted' : ''
+                      }`}
+                      onClick={() => setSelectedPromotor(p)}
+                    >
+                      <Avatar className="h-8 w-8">
+                        <AvatarFallback className="text-xs">{getInitials(p.promotor_nome)}</AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="text-sm font-medium">{p.promotor_nome}</p>
+                      </div>
                     </div>
-                  </div>
-                ))}
-                {promotoresFiltrados.length === 0 && (
+                  ))
+                ) : (
                   <p className="p-2 text-center text-muted-foreground text-sm">
                     Nenhum promotor encontrado
                   </p>
@@ -569,29 +619,30 @@ export default function CheckIn() {
               <div className="relative">
                 <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Buscar loja..."
+                  placeholder="Buscar loja por nome ou código..."
                   className="pl-9"
                   value={searchLoja}
                   onChange={(e) => setSearchLoja(e.target.value)}
                 />
               </div>
               <div className="max-h-40 overflow-y-auto border rounded-md">
-                {lojasFiltradas.map((l) => (
-                  <div
-                    key={l.id}
-                    className={`p-2 cursor-pointer hover:bg-muted flex items-center gap-2 ${
-                      selectedLoja?.id === l.id ? 'bg-muted' : ''
-                    }`}
-                    onClick={() => setSelectedLoja(l)}
-                  >
-                    <Store className="h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <p className="text-sm font-medium">{l.nome_loja}</p>
-                      <p className="text-xs text-muted-foreground">{l.cod_loja} - {l.cidade}</p>
+                {lojasFiltradas.length > 0 ? (
+                  lojasFiltradas.map((l) => (
+                    <div
+                      key={l.id}
+                      className={`p-2 cursor-pointer hover:bg-muted flex items-center gap-2 ${
+                        selectedLoja?.id === l.id ? 'bg-muted' : ''
+                      }`}
+                      onClick={() => setSelectedLoja(l)}
+                    >
+                      <Store className="h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm font-medium">{l.nome_loja}</p>
+                        <p className="text-xs text-muted-foreground">{l.cod_loja} - {l.cidade}</p>
+                      </div>
                     </div>
-                  </div>
-                ))}
-                {lojasFiltradas.length === 0 && (
+                  ))
+                ) : (
                   <p className="p-2 text-center text-muted-foreground text-sm">
                     Nenhuma loja encontrada
                   </p>
@@ -602,14 +653,46 @@ export default function CheckIn() {
             {/* 🔥 DATA E HORA MANUAL - CHECK-IN */}
             <div className="space-y-2">
               <Label className="text-sm font-medium">📅 Data e Hora do Check-in *</Label>
-              <Input
-                type="datetime-local"
-                value={checkinDataHora}
-                onChange={(e) => setCheckinDataHora(e.target.value)}
-                className="w-full"
-              />
-              <p className="text-xs text-muted-foreground">
-                Clique no campo para selecionar a data e hora desejadas.
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Input
+                    type="datetime-local"
+                    value={(() => {
+                      const d = new Date(checkinData)
+                      d.setHours(parseInt(checkinHora.split(':')[0]), parseInt(checkinHora.split(':')[1]), 0, 0)
+                      d.setMinutes(d.getMinutes() - d.getTimezoneOffset())
+                      return d.toISOString().slice(0, 16)
+                    })()}
+                    onChange={(e) => {
+                      if (e.target.value) {
+                        const date = new Date(e.target.value)
+                        setCheckinData(date)
+                        setCheckinHora(
+                          `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+                        )
+                      }
+                    }}
+                    className="w-full"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const now = new Date()
+                    setCheckinData(now)
+                    setCheckinHora(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`)
+                  }}
+                  className="shrink-0"
+                >
+                  <Clock className="h-4 w-4 mr-1" />
+                  Agora
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground flex items-center gap-2">
+                <span>💡</span>
+                <span>Clique no campo para selecionar ou use o botão "Agora" para preencher com a data/hora atual.</span>
               </p>
             </div>
 
@@ -632,6 +715,7 @@ export default function CheckIn() {
               <Button
                 onClick={handleCheckIn}
                 disabled={!selectedPromotor || !selectedLoja || loadingAction}
+                className="bg-green-600 hover:bg-green-700 text-white"
               >
                 {loadingAction ? 'Processando...' : 'Confirmar Check-in'}
               </Button>
@@ -683,14 +767,46 @@ export default function CheckIn() {
               {/* 🔥 DATA E HORA MANUAL - CHECK-OUT */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium">📅 Data e Hora do Check-out *</Label>
-                <Input
-                  type="datetime-local"
-                  value={checkoutDataHora}
-                  onChange={(e) => setCheckoutDataHora(e.target.value)}
-                  className="w-full"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Clique no campo para selecionar a data e hora de saída.
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      type="datetime-local"
+                      value={(() => {
+                        const d = new Date(checkoutData)
+                        d.setHours(parseInt(checkoutHora.split(':')[0]), parseInt(checkoutHora.split(':')[1]), 0, 0)
+                        d.setMinutes(d.getMinutes() - d.getTimezoneOffset())
+                        return d.toISOString().slice(0, 16)
+                      })()}
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          const date = new Date(e.target.value)
+                          setCheckoutData(date)
+                          setCheckoutHora(
+                            `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+                          )
+                        }
+                      }}
+                      className="w-full"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const now = new Date()
+                      setCheckoutData(now)
+                      setCheckoutHora(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`)
+                    }}
+                    className="shrink-0"
+                  >
+                    <Clock className="h-4 w-4 mr-1" />
+                    Agora
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground flex items-center gap-2">
+                  <span>💡</span>
+                  <span>Clique no campo para selecionar ou use o botão "Agora" para preencher com a data/hora atual.</span>
                 </p>
               </div>
 
