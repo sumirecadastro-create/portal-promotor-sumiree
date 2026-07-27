@@ -24,12 +24,12 @@ export interface CreateCheckInDTO {
     promotor_id: string
     loja_id: string
     observacao_check_in?: string
-    check_in_manual?: string  // 🔥 NOVO: permite enviar data/hora manual
+    check_in_manual?: string
 }
 
 export interface FinishCheckOutDTO {
     observacao_check_out?: string
-    check_out_manual?: string  // 🔥 NOVO: permite enviar data/hora manual
+    check_out_manual?: string
 }
 
 export interface VisitaCompleta extends Visita {
@@ -66,10 +66,60 @@ function isVisitaCompleta(data: unknown): data is VisitaCompleta {
     )
 }
 
+/**
+ * 🔥 Formata data/hora para exibição amigável
+ */
+export function formatarDataHora(data: string | null): string {
+    if (!data) return '—'
+    return new Date(data).toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    })
+}
+
+/**
+ * 🔥 Calcula duração entre duas datas
+ */
+export function calcularDuracao(checkIn: string, checkOut: string | null): string {
+    if (!checkOut) return 'Em andamento'
+    
+    const inicio = new Date(checkIn)
+    const fim = new Date(checkOut)
+    const diffMs = fim.getTime() - inicio.getTime()
+    
+    if (diffMs < 0) return 'Data inválida'
+    
+    const diffMin = Math.floor(diffMs / 60000)
+    const diffHoras = Math.floor(diffMin / 60)
+    const diffMinutos = diffMin % 60
+    
+    if (diffHoras > 0) {
+        return `${diffHoras}h ${diffMinutos}min`
+    }
+    return `${diffMinutos}min`
+}
+
+/**
+ * 🔥 Verifica se uma visita está atrasada (mais de 4 horas)
+ */
+export function isVisitaAtrasada(checkIn: string): boolean {
+    const inicio = new Date(checkIn)
+    const agora = new Date()
+    const diffMs = agora.getTime() - inicio.getTime()
+    const diffHoras = diffMs / (1000 * 60 * 60)
+    return diffHoras > 4
+}
+
 // ============================================
 // FUNÇÕES DE CONSULTA (COM FILTRO DE PERMISSÃO)
 // ============================================
 
+/**
+ * Buscar visitas em andamento (filtradas por permissão do usuário)
+ */
 export async function getVisitasEmAndamento(
     permissions: UserPermissions
 ): Promise<VisitaCompleta[]> {
@@ -93,6 +143,9 @@ export async function getVisitasEmAndamento(
     return (data || []).filter(isVisitaCompleta)
 }
 
+/**
+ * Buscar últimas visitas concluídas (filtradas por permissão do usuário)
+ */
 export async function getVisitasConcluidas(
     permissions: UserPermissions,
     limit: number = 20
@@ -118,6 +171,9 @@ export async function getVisitasConcluidas(
     return (data || []).filter(isVisitaCompleta)
 }
 
+/**
+ * Buscar todas as visitas (filtradas por permissão do usuário)
+ */
 export async function getVisitas(
     permissions: UserPermissions,
     limit: number = 50
@@ -142,6 +198,9 @@ export async function getVisitas(
     return (data || []).filter(isVisitaCompleta)
 }
 
+/**
+ * Buscar visitas de um promotor específico (com verificação de permissão)
+ */
 export async function getVisitasByPromotor(
     permissions: UserPermissions,
     promotorId: string
@@ -165,6 +224,9 @@ export async function getVisitasByPromotor(
     return (data || []).filter(isVisitaCompleta)
 }
 
+/**
+ * Buscar visitas de uma loja específica (com verificação de permissão)
+ */
 export async function getVisitasByLoja(
     permissions: UserPermissions,
     lojaId: string
@@ -189,6 +251,9 @@ export async function getVisitasByLoja(
     return (data || []).filter(isVisitaCompleta)
 }
 
+/**
+ * Buscar uma visita por ID (com verificação de permissão)
+ */
 export async function getVisitaById(
     permissions: UserPermissions,
     id: string
@@ -207,6 +272,7 @@ export async function getVisitaById(
         return null
     }
 
+    // Verificar se o usuário tem permissão para ver esta visita
     const promotoresIds = await getPromotoresIds(permissions)
     if (!promotoresIds.includes(data.promotor_id)) {
         return null
@@ -219,6 +285,9 @@ export async function getVisitaById(
 // FUNÇÕES DE ESCRITA
 // ============================================
 
+/**
+ * Verificar se um promotor tem check-in ativo
+ */
 export async function temCheckInAtivo(promotorId: string): Promise<boolean> {
     const { data, error } = await supabase
         .from('visitas')
@@ -234,6 +303,9 @@ export async function temCheckInAtivo(promotorId: string): Promise<boolean> {
     return !!data
 }
 
+/**
+ * Buscar check-in ativo de um promotor
+ */
 export async function getCheckInAtivo(promotorId: string): Promise<VisitaCompleta | null> {
     const { data, error } = await supabase
         .from('visitas')
@@ -254,10 +326,10 @@ export async function getCheckInAtivo(promotorId: string): Promise<VisitaComplet
 }
 
 /**
- * 🔥 Criar um novo check-in (com suporte a data/hora manual)
+ * 🔥 Criar um novo check-in com suporte a data/hora manual
  */
 export async function registrarCheckIn(data: CreateCheckInDTO): Promise<VisitaCompleta> {
-    // 🔥 Usa check_in_manual se fornecido, senão usa o horário atual
+    // Usa check_in_manual se fornecido, senão usa o horário atual
     const checkIn = data.check_in_manual || new Date().toISOString()
 
     const { data: result, error } = await supabase
@@ -265,7 +337,7 @@ export async function registrarCheckIn(data: CreateCheckInDTO): Promise<VisitaCo
         .insert({
             promotor_id: data.promotor_id,
             loja_id: data.loja_id,
-            check_in: checkIn, // 🔥 AGORA ENVIA O check_in!
+            check_in: checkIn,
             observacao_check_in: data.observacao_check_in || null,
             status: 'em_andamento'
         })
@@ -284,19 +356,19 @@ export async function registrarCheckIn(data: CreateCheckInDTO): Promise<VisitaCo
 }
 
 /**
- * 🔥 Finalizar um check-out (com suporte a data/hora manual)
+ * 🔥 Finalizar um check-out com suporte a data/hora manual
  */
 export async function registrarCheckOut(
     id: string,
     data: FinishCheckOutDTO
 ): Promise<VisitaCompleta> {
-    // 🔥 Usa check_out_manual se fornecido, senão usa o horário atual
+    // Usa check_out_manual se fornecido, senão usa o horário atual
     const checkOut = data.check_out_manual || new Date().toISOString()
 
     const { data: result, error } = await supabase
         .from('visitas')
         .update({
-            check_out: checkOut, // 🔥 AGORA ENVIA O check_out!
+            check_out: checkOut,
             observacao_check_out: data.observacao_check_out || null,
             status: 'concluida'
         })
@@ -315,6 +387,9 @@ export async function registrarCheckOut(
     return result
 }
 
+/**
+ * Cancelar um check-in em andamento
+ */
 export async function cancelarCheckIn(id: string): Promise<void> {
     const { error } = await supabase
         .from('visitas')
@@ -331,6 +406,9 @@ export async function cancelarCheckIn(id: string): Promise<void> {
 // FUNÇÕES AGREGADORAS
 // ============================================
 
+/**
+ * Contar visitas por período (filtradas por permissão)
+ */
 export async function countVisitasByPeriod(
     permissions: UserPermissions,
     startDate: Date,
@@ -356,6 +434,9 @@ export async function countVisitasByPeriod(
     return count || 0
 }
 
+/**
+ * Buscar resumo de visitas do dia (filtrado por permissão)
+ */
 export async function getResumoVisitasHoje(
     permissions: UserPermissions
 ): Promise<{ em_andamento: number; concluidas: number; total: number }> {
@@ -385,5 +466,85 @@ export async function getResumoVisitasHoje(
         em_andamento,
         concluidas,
         total: data?.length || 0
+    }
+}
+
+/**
+ * 🔥 Buscar estatísticas detalhadas de visitas
+ */
+export async function getEstatisticasVisitas(
+    permissions: UserPermissions,
+    periodo?: { inicio: Date; fim: Date }
+): Promise<{
+    total: number
+    em_andamento: number
+    concluidas: number
+    tempo_medio_minutos: number
+    visitas_por_dia: { data: string; total: number }[]
+}> {
+    const promotoresIds = await getPromotoresIds(permissions)
+
+    if (promotoresIds.length === 0) {
+        return {
+            total: 0,
+            em_andamento: 0,
+            concluidas: 0,
+            tempo_medio_minutos: 0,
+            visitas_por_dia: []
+        }
+    }
+
+    let query = supabase
+        .from('visitas')
+        .select('*')
+        .in('promotor_id', promotoresIds)
+
+    if (periodo) {
+        query = query
+            .gte('check_in', periodo.inicio.toISOString())
+            .lte('check_in', periodo.fim.toISOString())
+    }
+
+    const { data, error } = await query
+
+    if (error) {
+        handleError(error, 'Erro ao buscar estatísticas de visitas')
+    }
+
+    const visitas = data || []
+    const em_andamento = visitas.filter(v => v.status === 'em_andamento').length
+    const concluidas = visitas.filter(v => v.status === 'concluida').length
+
+    // Calcular tempo médio (apenas visitas concluídas com check_out)
+    const tempos = visitas
+        .filter(v => v.status === 'concluida' && v.check_out)
+        .map(v => {
+            const inicio = new Date(v.check_in)
+            const fim = new Date(v.check_out)
+            return (fim.getTime() - inicio.getTime()) / 60000 // minutos
+        })
+        .filter(t => t > 0)
+
+    const tempo_medio_minutos = tempos.length > 0
+        ? Math.round(tempos.reduce((a, b) => a + b, 0) / tempos.length)
+        : 0
+
+    // Agrupar por dia
+    const visitasPorDia: Record<string, number> = {}
+    visitas.forEach(v => {
+        const dia = new Date(v.check_in).toLocaleDateString('pt-BR')
+        visitasPorDia[dia] = (visitasPorDia[dia] || 0) + 1
+    })
+
+    const visitas_por_dia = Object.entries(visitasPorDia)
+        .map(([data, total]) => ({ data, total }))
+        .sort((a, b) => a.data.localeCompare(b.data))
+
+    return {
+        total: visitas.length,
+        em_andamento,
+        concluidas,
+        tempo_medio_minutos,
+        visitas_por_dia
     }
 }
