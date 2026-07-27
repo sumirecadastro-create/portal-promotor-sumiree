@@ -14,7 +14,8 @@ import {
   CheckCircle,
   XCircle,
   RefreshCw,
-  FileText
+  FileText,
+  CalendarIcon
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/hooks/use-auth'
@@ -28,6 +29,12 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { Calendar } from '@/components/ui/calendar'
 
 // ============================================
 // SERVICES
@@ -98,6 +105,13 @@ export default function CheckIn() {
   const [observacaoCheckIn, setObservacaoCheckIn] = useState('')
   const [observacaoCheckOut, setObservacaoCheckOut] = useState('')
   const [visitaSelecionada, setVisitaSelecionada] = useState<VisitaUI | null>(null)
+
+  // 🔥 NOVOS ESTADOS PARA DATA/HORA MANUAL
+  const [checkinData, setCheckinData] = useState<Date>(new Date())
+  const [checkinHora, setCheckinHora] = useState<string>(() => {
+    const now = new Date()
+    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+  })
 
   // Dialog
   const [dialogAberto, setDialogAberto] = useState(false)
@@ -171,6 +185,14 @@ export default function CheckIn() {
   // CHECK-IN / CHECK-OUT
   // ============================================
 
+  // 🔥 FUNÇÃO PARA COMBINAR DATA E HORA
+  const getDataHoraCheckin = useCallback(() => {
+    const [horas, minutos] = checkinHora.split(':').map(Number)
+    const dataHora = new Date(checkinData)
+    dataHora.setHours(horas, minutos, 0, 0)
+    return dataHora
+  }, [checkinData, checkinHora])
+
   const handleCheckIn = async () => {
     if (!selectedPromotor || !selectedLoja) {
       toast({
@@ -195,15 +217,19 @@ export default function CheckIn() {
         return
       }
 
+      // 🔥 USAR DATA/HORA MANUAL
+      const dataHoraCheckin = getDataHoraCheckin()
+
       await registrarCheckIn({
         promotor_id: selectedPromotor.id,
         loja_id: selectedLoja.id,
-        observacao_check_in: observacaoCheckIn || undefined
+        observacao_check_in: observacaoCheckIn || undefined,
+        check_in_manual: dataHoraCheckin.toISOString() // 🔥 ENVIA DATA/HORA MANUAL
       })
 
       toast({
         title: '✅ Check-in realizado!',
-        description: `${selectedPromotor.promotor_nome} iniciou atendimento em ${selectedLoja.nome_loja}`,
+        description: `${selectedPromotor.promotor_nome} iniciou atendimento em ${selectedLoja.nome_loja} às ${format(dataHoraCheckin, 'HH:mm')}`,
       })
 
       // Resetar formulário
@@ -211,6 +237,10 @@ export default function CheckIn() {
       setObservacaoCheckIn('')
       setSelectedPromotor(null)
       setSelectedLoja(null)
+      // 🔥 Resetar data/hora para atual
+      setCheckinData(new Date())
+      const now = new Date()
+      setCheckinHora(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`)
 
       // Recarregar
       await loadData()
@@ -494,7 +524,7 @@ export default function CheckIn() {
               {dialogTipo === 'check-out' && 'Finalizar Check-out'}
             </DialogTitle>
             <DialogDescription>
-              {dialogTipo === 'check-in' && 'Selecione o promotor e a loja para iniciar o atendimento'}
+              {dialogTipo === 'check-in' && 'Selecione o promotor, a loja e a data/hora para iniciar o atendimento'}
               {dialogTipo === 'check-out' && 'Confirme o encerramento do atendimento'}
             </DialogDescription>
           </DialogHeader>
@@ -571,6 +601,48 @@ export default function CheckIn() {
                       Nenhuma loja encontrada
                     </p>
                   )}
+                </div>
+              </div>
+
+              {/* 🔥 NOVO: DATA E HORA MANUAL */}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Data */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">📅 Data do Check-in *</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full justify-start text-left font-normal"
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {format(checkinData, "dd/MM/yyyy", { locale: ptBR })}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={checkinData}
+                        onSelect={(date) => date && setCheckinData(date)}
+                        initialFocus
+                        locale={ptBR}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {/* Hora */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">🕐 Hora do Check-in *</Label>
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="time"
+                      value={checkinHora}
+                      onChange={(e) => setCheckinHora(e.target.value)}
+                      className="flex-1"
+                    />
+                  </div>
                 </div>
               </div>
 
