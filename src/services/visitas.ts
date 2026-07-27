@@ -24,10 +24,12 @@ export interface CreateCheckInDTO {
     promotor_id: string
     loja_id: string
     observacao_check_in?: string
+    check_in_manual?: string  // 🔥 NOVO: permite enviar data/hora manual
 }
 
 export interface FinishCheckOutDTO {
     observacao_check_out?: string
+    check_out_manual?: string  // 🔥 NOVO: permite enviar data/hora manual
 }
 
 export interface VisitaCompleta extends Visita {
@@ -68,9 +70,6 @@ function isVisitaCompleta(data: unknown): data is VisitaCompleta {
 // FUNÇÕES DE CONSULTA (COM FILTRO DE PERMISSÃO)
 // ============================================
 
-/**
- * Buscar visitas em andamento (filtradas por permissão do usuário)
- */
 export async function getVisitasEmAndamento(
     permissions: UserPermissions
 ): Promise<VisitaCompleta[]> {
@@ -94,9 +93,6 @@ export async function getVisitasEmAndamento(
     return (data || []).filter(isVisitaCompleta)
 }
 
-/**
- * Buscar últimas visitas concluídas (filtradas por permissão do usuário)
- */
 export async function getVisitasConcluidas(
     permissions: UserPermissions,
     limit: number = 20
@@ -122,9 +118,6 @@ export async function getVisitasConcluidas(
     return (data || []).filter(isVisitaCompleta)
 }
 
-/**
- * Buscar todas as visitas (filtradas por permissão do usuário)
- */
 export async function getVisitas(
     permissions: UserPermissions,
     limit: number = 50
@@ -149,9 +142,6 @@ export async function getVisitas(
     return (data || []).filter(isVisitaCompleta)
 }
 
-/**
- * Buscar visitas de um promotor específico (com verificação de permissão)
- */
 export async function getVisitasByPromotor(
     permissions: UserPermissions,
     promotorId: string
@@ -175,9 +165,6 @@ export async function getVisitasByPromotor(
     return (data || []).filter(isVisitaCompleta)
 }
 
-/**
- * Buscar visitas de uma loja específica (com verificação de permissão)
- */
 export async function getVisitasByLoja(
     permissions: UserPermissions,
     lojaId: string
@@ -202,9 +189,6 @@ export async function getVisitasByLoja(
     return (data || []).filter(isVisitaCompleta)
 }
 
-/**
- * Buscar uma visita por ID (com verificação de permissão)
- */
 export async function getVisitaById(
     permissions: UserPermissions,
     id: string
@@ -223,7 +207,6 @@ export async function getVisitaById(
         return null
     }
 
-    // Verificar se o usuário tem permissão para ver esta visita
     const promotoresIds = await getPromotoresIds(permissions)
     if (!promotoresIds.includes(data.promotor_id)) {
         return null
@@ -233,12 +216,9 @@ export async function getVisitaById(
 }
 
 // ============================================
-// FUNÇÕES DE ESCRITA (SEM FILTRO DE PERMISSÃO - APENAS VALIDAÇÃO)
+// FUNÇÕES DE ESCRITA
 // ============================================
 
-/**
- * Verificar se um promotor tem check-in ativo
- */
 export async function temCheckInAtivo(promotorId: string): Promise<boolean> {
     const { data, error } = await supabase
         .from('visitas')
@@ -254,9 +234,6 @@ export async function temCheckInAtivo(promotorId: string): Promise<boolean> {
     return !!data
 }
 
-/**
- * Buscar check-in ativo de um promotor
- */
 export async function getCheckInAtivo(promotorId: string): Promise<VisitaCompleta | null> {
     const { data, error } = await supabase
         .from('visitas')
@@ -277,15 +254,18 @@ export async function getCheckInAtivo(promotorId: string): Promise<VisitaComplet
 }
 
 /**
- * Criar um novo check-in
- * ⚠️ O campo check_in é preenchido automaticamente pelo banco com now()
+ * 🔥 Criar um novo check-in (com suporte a data/hora manual)
  */
 export async function registrarCheckIn(data: CreateCheckInDTO): Promise<VisitaCompleta> {
+    // 🔥 Usa check_in_manual se fornecido, senão usa o horário atual
+    const checkIn = data.check_in_manual || new Date().toISOString()
+
     const { data: result, error } = await supabase
         .from('visitas')
         .insert({
             promotor_id: data.promotor_id,
             loja_id: data.loja_id,
+            check_in: checkIn, // 🔥 AGORA ENVIA O check_in!
             observacao_check_in: data.observacao_check_in || null,
             status: 'em_andamento'
         })
@@ -304,16 +284,19 @@ export async function registrarCheckIn(data: CreateCheckInDTO): Promise<VisitaCo
 }
 
 /**
- * Finalizar um check-out
- * ⚠️ O check_out é preenchido automaticamente pelo trigger do banco!
+ * 🔥 Finalizar um check-out (com suporte a data/hora manual)
  */
 export async function registrarCheckOut(
     id: string,
     data: FinishCheckOutDTO
 ): Promise<VisitaCompleta> {
+    // 🔥 Usa check_out_manual se fornecido, senão usa o horário atual
+    const checkOut = data.check_out_manual || new Date().toISOString()
+
     const { data: result, error } = await supabase
         .from('visitas')
         .update({
+            check_out: checkOut, // 🔥 AGORA ENVIA O check_out!
             observacao_check_out: data.observacao_check_out || null,
             status: 'concluida'
         })
@@ -332,9 +315,6 @@ export async function registrarCheckOut(
     return result
 }
 
-/**
- * Cancelar um check-in em andamento
- */
 export async function cancelarCheckIn(id: string): Promise<void> {
     const { error } = await supabase
         .from('visitas')
@@ -351,9 +331,6 @@ export async function cancelarCheckIn(id: string): Promise<void> {
 // FUNÇÕES AGREGADORAS
 // ============================================
 
-/**
- * Contar visitas por período (filtradas por permissão)
- */
 export async function countVisitasByPeriod(
     permissions: UserPermissions,
     startDate: Date,
@@ -379,9 +356,6 @@ export async function countVisitasByPeriod(
     return count || 0
 }
 
-/**
- * Buscar resumo de visitas do dia (filtrado por permissão)
- */
 export async function getResumoVisitasHoje(
     permissions: UserPermissions
 ): Promise<{ em_andamento: number; concluidas: number; total: number }> {
@@ -398,7 +372,7 @@ export async function getResumoVisitasHoje(
         .from('visitas')
         .select('status')
         .in('promotor_id', promotoresIds)
-        .gte('created_at', hoje.toISOString())
+        .gte('check_in', hoje.toISOString())
 
     if (error) {
         handleError(error, 'Erro ao buscar resumo de visitas de hoje')
