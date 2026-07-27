@@ -14,8 +14,7 @@ import {
   CheckCircle,
   XCircle,
   RefreshCw,
-  FileText,
-  CalendarIcon
+  FileText
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/hooks/use-auth'
@@ -29,12 +28,6 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
-import { Calendar } from '@/components/ui/calendar'
 
 // ============================================
 // SERVICES
@@ -43,7 +36,6 @@ import { Calendar } from '@/components/ui/calendar'
 import {
   getPromotoresCompletos,
   getLojasCompletas,
-  getPromotoresIds,
   type UserPermissions,
   type AppRole,
   type PromotorPermitido,
@@ -63,17 +55,9 @@ import {
 // TIPOS LOCAIS
 // ============================================
 
-interface PromotorUI extends PromotorPermitido {
-  // Campos extras para UI, se necessário
-}
-
-interface LojaUI extends LojaPermitida {
-  // Campos extras para UI, se necessário
-}
-
-interface VisitaUI extends VisitaCompleta {
-  // Campos extras para UI, se necessário
-}
+interface PromotorUI extends PromotorPermitido {}
+interface LojaUI extends LojaPermitida {}
+interface VisitaUI extends VisitaCompleta {}
 
 // ============================================
 // COMPONENTE PRINCIPAL
@@ -83,7 +67,6 @@ export default function CheckIn() {
   const { toast } = useToast()
   const { user, userLojaId } = useAuth()
 
-  // 🔥 Construir permissões a partir do useAuth()
   const permissions: UserPermissions = useMemo(() => ({
     id: user?.id || '',
     app_role: (user?.app_role || 'promotor') as AppRole,
@@ -106,11 +89,11 @@ export default function CheckIn() {
   const [observacaoCheckOut, setObservacaoCheckOut] = useState('')
   const [visitaSelecionada, setVisitaSelecionada] = useState<VisitaUI | null>(null)
 
-  // 🔥 NOVOS ESTADOS PARA DATA/HORA MANUAL
-  const [checkinData, setCheckinData] = useState<Date>(new Date())
-  const [checkinHora, setCheckinHora] = useState<string>(() => {
+  // 🔥 DATA/HORA MANUAL (datetime-local)
+  const [checkinDataHora, setCheckinDataHora] = useState<string>(() => {
     const now = new Date()
-    return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+    now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
+    return now.toISOString().slice(0, 16)
   })
 
   // Dialog
@@ -185,13 +168,9 @@ export default function CheckIn() {
   // CHECK-IN / CHECK-OUT
   // ============================================
 
-  // 🔥 FUNÇÃO PARA COMBINAR DATA E HORA
   const getDataHoraCheckin = useCallback(() => {
-    const [horas, minutos] = checkinHora.split(':').map(Number)
-    const dataHora = new Date(checkinData)
-    dataHora.setHours(horas, minutos, 0, 0)
-    return dataHora
-  }, [checkinData, checkinHora])
+    return new Date(checkinDataHora)
+  }, [checkinDataHora])
 
   const handleCheckIn = async () => {
     if (!selectedPromotor || !selectedLoja) {
@@ -205,7 +184,6 @@ export default function CheckIn() {
 
     setLoadingAction(true)
     try {
-      // Verificar se já há check-in ativo
       const temAtivo = await temCheckInAtivo(selectedPromotor.id)
 
       if (temAtivo) {
@@ -217,14 +195,13 @@ export default function CheckIn() {
         return
       }
 
-      // 🔥 USAR DATA/HORA MANUAL
       const dataHoraCheckin = getDataHoraCheckin()
 
       await registrarCheckIn({
         promotor_id: selectedPromotor.id,
         loja_id: selectedLoja.id,
         observacao_check_in: observacaoCheckIn || undefined,
-        check_in_manual: dataHoraCheckin.toISOString() // 🔥 ENVIA DATA/HORA MANUAL
+        check_in_manual: dataHoraCheckin.toISOString()
       })
 
       toast({
@@ -237,12 +214,12 @@ export default function CheckIn() {
       setObservacaoCheckIn('')
       setSelectedPromotor(null)
       setSelectedLoja(null)
-      // 🔥 Resetar data/hora para atual
-      setCheckinData(new Date())
-      const now = new Date()
-      setCheckinHora(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`)
 
-      // Recarregar
+      // Resetar data/hora para atual
+      const now = new Date()
+      now.setMinutes(now.getMinutes() - now.getTimezoneOffset())
+      setCheckinDataHora(now.toISOString().slice(0, 16))
+
       await loadData()
 
     } catch (error: any) {
@@ -604,46 +581,18 @@ export default function CheckIn() {
                 </div>
               </div>
 
-              {/* 🔥 NOVO: DATA E HORA MANUAL */}
-              <div className="grid grid-cols-2 gap-4">
-                {/* Data */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">📅 Data do Check-in *</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className="w-full justify-start text-left font-normal"
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {format(checkinData, "dd/MM/yyyy", { locale: ptBR })}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={checkinData}
-                        onSelect={(date) => date && setCheckinData(date)}
-                        initialFocus
-                        locale={ptBR}
-                      />
-                    </PopoverContent>
-                  </Popover>
-                </div>
-
-                {/* Hora */}
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">🕐 Hora do Check-in *</Label>
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-muted-foreground" />
-                    <Input
-                      type="time"
-                      value={checkinHora}
-                      onChange={(e) => setCheckinHora(e.target.value)}
-                      className="flex-1"
-                    />
-                  </div>
-                </div>
+              {/* 🔥 DATA E HORA MANUAL (datetime-local) */}
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">📅 Data e Hora do Check-in *</Label>
+                <Input
+                  type="datetime-local"
+                  value={checkinDataHora}
+                  onChange={(e) => setCheckinDataHora(e.target.value)}
+                  className="w-full"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Clique no campo para selecionar a data e hora desejadas.
+                </p>
               </div>
 
               {/* Observação */}
@@ -739,3 +688,4 @@ export default function CheckIn() {
     </div>
   )
 }
+  
