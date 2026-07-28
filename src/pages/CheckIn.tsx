@@ -55,7 +55,9 @@ import {
   getVisitasConcluidas,
   registrarCheckIn,
   registrarCheckOut,
-  temCheckInAtivo,
+  temCheckInAtivoNaLoja,
+  getCheckInsAtivosDoPromotor,
+  finalizarCheckInsAntigos,
   formatarDataHora,
   calcularDuracao,
   isVisitaAtrasada,
@@ -155,6 +157,12 @@ export default function CheckIn() {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
+      // 🔥 Finalizar check-ins antigos automaticamente ao carregar
+      const finalizados = await finalizarCheckInsAntigos()
+      if (finalizados > 0) {
+        console.log(`🔄 ${finalizados} check-ins antigos foram finalizados automaticamente`)
+      }
+
       const [promotoresData, lojasData, emAndamentoResult, concluidasResult] = await Promise.all([
         getPromotoresCompletos(permissions),
         getLojasCompletas(permissions),
@@ -212,14 +220,26 @@ export default function CheckIn() {
 
     setLoadingAction(true)
     try {
-      const temAtivo = await temCheckInAtivo(selectedPromotor.id)
+      // 🔥 Finalizar check-ins antigos automaticamente
+      const finalizados = await finalizarCheckInsAntigos()
+      if (finalizados > 0) {
+        console.log(`🔄 ${finalizados} check-ins antigos foram finalizados automaticamente`)
+      }
 
-      if (temAtivo) {
+      // 🔥 VERIFICAR APENAS se já tem check-in na MESMA loja
+      // (não bloqueia outras lojas)
+      const temAtivoNaLoja = await temCheckInAtivoNaLoja(
+        selectedPromotor.id,
+        selectedLoja.id
+      )
+
+      if (temAtivoNaLoja) {
         toast({
           variant: 'destructive',
           title: 'Check-in já realizado',
-          description: 'Este promotor já está em atendimento em outra loja',
+          description: `Este promotor já está em atendimento nesta loja.`,
         })
+        setLoadingAction(false)
         return
       }
 
@@ -232,9 +252,20 @@ export default function CheckIn() {
         check_in_manual: dataHoraCheckin.toISOString()
       })
 
+      // 🔥 VERIFICAR se o promotor tem outros check-ins ativos (apenas para aviso)
+      const outrosCheckIns = await getCheckInsAtivosDoPromotor(selectedPromotor.id)
+      
+      let mensagemAdicional = ''
+      if (outrosCheckIns.length > 0) {
+        const lojasNomes = outrosCheckIns
+          .map(v => lojasMap.get(v.loja_id)?.cod_loja || 'Desconhecida')
+          .join(', ')
+        mensagemAdicional = ` ⚠️ Atenção: Este promotor também está em atendimento nas lojas: ${lojasNomes}`
+      }
+
       toast({
         title: '✅ Check-in realizado!',
-        description: `${selectedPromotor.promotor_nome} iniciou atendimento em ${selectedLoja.nome_loja} às ${format(dataHoraCheckin, 'HH:mm')}`,
+        description: `${selectedPromotor.promotor_nome} iniciou atendimento em ${selectedLoja.nome_loja} às ${format(dataHoraCheckin, 'HH:mm')}${mensagemAdicional}`,
       })
 
       // Resetar formulário
@@ -243,7 +274,6 @@ export default function CheckIn() {
       setSelectedPromotor(null)
       setSelectedLoja(null)
 
-      // Resetar data/hora para atual
       const now = new Date()
       setCheckinData(now)
       setCheckinHora(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`)
