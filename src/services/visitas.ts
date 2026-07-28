@@ -282,11 +282,35 @@ export async function getVisitaById(
 }
 
 // ============================================
-// FUNÇÕES DE ESCRITA
+// FUNÇÕES DE ESCRITA (NOVAS E MODIFICADAS)
 // ============================================
 
 /**
- * Verificar se um promotor tem check-in ativo
+ * 🔥 VERIFICAR se um promotor tem check-in ativo em uma loja ESPECÍFICA
+ * (não bloqueia check-in em outras lojas)
+ */
+export async function temCheckInAtivoNaLoja(
+    promotorId: string,
+    lojaId: string
+): Promise<boolean> {
+    const { data, error } = await supabase
+        .from('visitas')
+        .select('id')
+        .eq('promotor_id', promotorId)
+        .eq('loja_id', lojaId)
+        .eq('status', 'em_andamento')
+        .maybeSingle()
+
+    if (error) {
+        handleError(error, `Erro ao verificar check-in ativo do promotor ${promotorId} na loja ${lojaId}`)
+    }
+
+    return !!data
+}
+
+/**
+ * 🔥 VERIFICAR se um promotor tem check-in ativo em QUALQUER loja
+ * (usado apenas para alerta, não para bloquear)
  */
 export async function temCheckInAtivo(promotorId: string): Promise<boolean> {
     const { data, error } = await supabase
@@ -304,7 +328,102 @@ export async function temCheckInAtivo(promotorId: string): Promise<boolean> {
 }
 
 /**
- * Buscar check-in ativo de um promotor
+ * 🔥 BUSCAR TODOS os check-ins ativos de um promotor
+ */
+export async function getCheckInsAtivosDoPromotor(
+    promotorId: string
+): Promise<VisitaCompleta[]> {
+    const { data, error } = await supabase
+        .from('visitas')
+        .select(VISITA_SELECT)
+        .eq('promotor_id', promotorId)
+        .eq('status', 'em_andamento')
+        .order('check_in', { ascending: true })
+
+    if (error) {
+        handleError(error, `Erro ao buscar check-ins ativos do promotor ${promotorId}`)
+    }
+
+    return (data || []).filter(isVisitaCompleta)
+}
+
+/**
+ * 🔥 BUSCAR check-ins ativos por loja
+ */
+export async function getCheckInsAtivosPorLoja(
+    lojaId: string
+): Promise<VisitaCompleta[]> {
+    const { data, error } = await supabase
+        .from('visitas')
+        .select(VISITA_SELECT)
+        .eq('loja_id', lojaId)
+        .eq('status', 'em_andamento')
+        .order('check_in', { ascending: true })
+
+    if (error) {
+        handleError(error, `Erro ao buscar check-ins ativos da loja ${lojaId}`)
+    }
+
+    return (data || []).filter(isVisitaCompleta)
+}
+
+/**
+ * 🔥 FINALIZAR AUTOMATICAMENTE check-ins antigos (mais de 24h)
+ * Deve ser chamado por um cron job ou ao carregar a página
+ */
+export async function finalizarCheckInsAntigos(): Promise<number> {
+    const dataLimite = new Date()
+    dataLimite.setHours(dataLimite.getHours() - 24)
+
+    const { data, error } = await supabase
+        .from('visitas')
+        .update({
+            check_out: dataLimite.toISOString(),
+            status: 'concluida',
+            observacao_check_out: 'Finalizado automaticamente (excedeu 24h)'
+        })
+        .eq('status', 'em_andamento')
+        .lt('check_in', dataLimite.toISOString())
+        .select('id')
+
+    if (error) {
+        handleError(error, 'Erro ao finalizar check-ins antigos')
+    }
+
+    return data?.length || 0
+}
+
+/**
+ * 🔥 FINALIZAR AUTOMATICAMENTE todos os check-ins do dia anterior
+ * Deve ser chamado por um cron job à meia-noite
+ */
+export async function finalizarCheckInsDiaAnterior(): Promise<number> {
+    const hoje = new Date()
+    hoje.setHours(0, 0, 0, 0)
+    
+    const ontem = new Date(hoje)
+    ontem.setDate(ontem.getDate() - 1)
+
+    const { data, error } = await supabase
+        .from('visitas')
+        .update({
+            check_out: ontem.toISOString(),
+            status: 'concluida',
+            observacao_check_out: 'Finalizado automaticamente (fim do dia)'
+        })
+        .eq('status', 'em_andamento')
+        .lt('check_in', hoje.toISOString())
+        .select('id')
+
+    if (error) {
+        handleError(error, 'Erro ao finalizar check-ins do dia anterior')
+    }
+
+    return data?.length || 0
+}
+
+/**
+ * Buscar check-in ativo de um promotor (retorna apenas um)
  */
 export async function getCheckInAtivo(promotorId: string): Promise<VisitaCompleta | null> {
     const { data, error } = await supabase
@@ -326,9 +445,16 @@ export async function getCheckInAtivo(promotorId: string): Promise<VisitaComplet
 }
 
 /**
- * 🔥 Criar um novo check-in com suporte a data/hora manual
+ * 🔥 CRIAR CHECK-IN (sem bloquear outras lojas)
  */
 export async function registrarCheckIn(data: CreateCheckInDTO): Promise<VisitaCompleta> {
+    // 🔥 Verificar se já tem check-in ativo na MESMA loja
+    const temAtivoNaLoja = await temCheckInAtivoNaLoja(data.promotor_id, data.loja_id)
+
+    if (temAtivoNaLoja) {
+        throw new Error('Este promotor já tem um check-in ativo nesta loja')
+    }
+
     // Usa check_in_manual se fornecido, senão usa o horário atual
     const checkIn = data.check_in_manual || new Date().toISOString()
 
@@ -356,14 +482,34 @@ export async function registrarCheckIn(data: CreateCheckInDTO): Promise<VisitaCo
 }
 
 /**
- * 🔥 Finalizar um check-out com suporte a data/hora manual
+ * 🔥 FINALIZAR CHECK-OUT (com validação de data)
  */
 export async function registrarCheckOut(
     id: string,
     data: FinishCheckOutDTO
 ): Promise<VisitaCompleta> {
+    // 🔥 Verificar se a visita existe e está em andamento
+    const { data: visitaAtual, error: buscaError } = await supabase
+        .from('visitas')
+        .select('*')
+        .eq('id', id)
+        .eq('status', 'em_andamento')
+        .maybeSingle()
+
+    if (buscaError || !visitaAtual) {
+        throw new Error('Visita não encontrada ou já finalizada')
+    }
+
     // Usa check_out_manual se fornecido, senão usa o horário atual
     const checkOut = data.check_out_manual || new Date().toISOString()
+
+    // 🔥 Validar se o checkout não é antes do check-in
+    const checkInDate = new Date(visitaAtual.check_in)
+    const checkOutDate = new Date(checkOut)
+    
+    if (checkOutDate < checkInDate) {
+        throw new Error('O horário de saída não pode ser anterior ao horário de entrada')
+    }
 
     const { data: result, error } = await supabase
         .from('visitas')
