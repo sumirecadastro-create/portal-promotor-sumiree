@@ -16,11 +16,11 @@ import {
   RefreshCw,
   FileText,
   AlertTriangle,
-  CalendarIcon
+  Pencil
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/hooks/use-auth'
-import { format, formatDistanceToNow, isBefore, subHours } from 'date-fns'
+import { format, formatDistanceToNow, isBefore } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import {
   Dialog,
@@ -30,12 +30,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@/components/ui/popover'
-import { Calendar } from '@/components/ui/calendar'
+import { supabase } from '@/lib/supabase'
 
 // ============================================
 // SERVICES
@@ -102,19 +97,28 @@ export default function CheckIn() {
   const [observacaoCheckOut, setObservacaoCheckOut] = useState('')
   const [visitaSelecionada, setVisitaSelecionada] = useState<VisitaUI | null>(null)
 
-  // 🔥 DATA/HORA MANUAL - CHECK-IN
+  // DATA/HORA MANUAL - CHECK-IN
   const [checkinData, setCheckinData] = useState<Date>(new Date())
   const [checkinHora, setCheckinHora] = useState<string>(() => {
     const now = new Date()
     return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
   })
 
-  // 🔥 DATA/HORA MANUAL - CHECK-OUT
+  // DATA/HORA MANUAL - CHECK-OUT
   const [checkoutData, setCheckoutData] = useState<Date>(new Date())
   const [checkoutHora, setCheckoutHora] = useState<string>(() => {
     const now = new Date()
     return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
   })
+
+  // EDIÇÃO DE HORÁRIOS
+  const [editandoHorario, setEditandoHorario] = useState<{
+    visitaId: string
+    tipo: 'check-in' | 'check-out'
+    data: Date
+    hora: string
+  } | null>(null)
+  const [dialogEditarHorarioAberto, setDialogEditarHorarioAberto] = useState(false)
 
   // Dialog
   const [dialogAberto, setDialogAberto] = useState(false)
@@ -157,7 +161,7 @@ export default function CheckIn() {
   const loadData = useCallback(async () => {
     setLoading(true)
     try {
-      // 🔥 Finalizar check-ins antigos automaticamente ao carregar
+      // Finalizar check-ins antigos automaticamente
       const finalizados = await finalizarCheckInsAntigos()
       if (finalizados > 0) {
         console.log(`🔄 ${finalizados} check-ins antigos foram finalizados automaticamente`)
@@ -220,14 +224,10 @@ export default function CheckIn() {
 
     setLoadingAction(true)
     try {
-      // 🔥 Finalizar check-ins antigos automaticamente
-      const finalizados = await finalizarCheckInsAntigos()
-      if (finalizados > 0) {
-        console.log(`🔄 ${finalizados} check-ins antigos foram finalizados automaticamente`)
-      }
+      // Finalizar check-ins antigos automaticamente
+      await finalizarCheckInsAntigos()
 
       // 🔥 VERIFICAR APENAS se já tem check-in na MESMA loja
-      // (não bloqueia outras lojas)
       const temAtivoNaLoja = await temCheckInAtivoNaLoja(
         selectedPromotor.id,
         selectedLoja.id
@@ -252,15 +252,21 @@ export default function CheckIn() {
         check_in_manual: dataHoraCheckin.toISOString()
       })
 
-      // 🔥 VERIFICAR se o promotor tem outros check-ins ativos (apenas para aviso)
-      const outrosCheckIns = await getCheckInsAtivosDoPromotor(selectedPromotor.id)
-      
+      // 🔥 AVISO SOBRE OUTROS CHECK-INS (APENAS PARA ADMIN/REGIONAL)
       let mensagemAdicional = ''
-      if (outrosCheckIns.length > 0) {
-        const lojasNomes = outrosCheckIns
-          .map(v => lojasMap.get(v.loja_id)?.cod_loja || 'Desconhecida')
-          .join(', ')
-        mensagemAdicional = ` ⚠️ Atenção: Este promotor também está em atendimento nas lojas: ${lojasNomes}`
+      if (permissions.app_role === 'admin' || permissions.app_role === 'regional') {
+        const outrosCheckIns = await getCheckInsAtivosDoPromotor(selectedPromotor.id)
+        if (outrosCheckIns.length > 0) {
+          // Filtrar a loja atual para não mostrar ela mesma
+          const outrasLojas = outrosCheckIns
+            .filter(v => v.loja_id !== selectedLoja.id)
+            .map(v => lojasMap.get(v.loja_id)?.cod_loja || 'Desconhecida')
+            .filter(Boolean)
+          
+          if (outrasLojas.length > 0) {
+            mensagemAdicional = ` ⚠️ Atenção: Este promotor também está em atendimento nas lojas: ${outrasLojas.join(', ')}`
+          }
+        }
       }
 
       toast({
@@ -342,6 +348,86 @@ export default function CheckIn() {
   }
 
   // ============================================
+  // EDIÇÃO DE HORÁRIOS
+  // ============================================
+
+  const handleAtualizarHorario = async () => {
+    if (!editandoHorario) return
+
+    setLoadingAction(true)
+    try {
+      const { visitaId, tipo, data, hora } = editandoHorario
+      const dataHora = new Date(data)
+      const [horas, minutos] = hora.split(':').map(Number)
+      dataHora.setHours(horas, minutos, 0, 0)
+
+      const campo = tipo === 'check-in' ? 'check_in' : 'check_out'
+      
+      // Buscar a visita atual para validação
+      const { data: visitaAtual, error: buscaError } = await supabase
+        .from('visitas')
+        .select('check_in, check_out')
+        .eq('id', visitaId)
+        .single()
+
+      if (buscaError) throw buscaError
+
+      // Se for check-out, validar se não é antes do check-in
+      if (tipo === 'check-out') {
+        const checkInDate = new Date(visitaAtual.check_in)
+        if (isBefore(dataHora, checkInDate)) {
+          toast({
+            variant: 'destructive',
+            title: 'Erro',
+            description: 'O horário de saída não pode ser anterior ao horário de entrada',
+          })
+          setLoadingAction(false)
+          return
+        }
+      }
+
+      // Se for check-in, validar se não é depois do check-out (se existir)
+      if (tipo === 'check-in' && visitaAtual.check_out) {
+        const checkOutDate = new Date(visitaAtual.check_out)
+        if (isBefore(checkOutDate, dataHora)) {
+          toast({
+            variant: 'destructive',
+            title: 'Erro',
+            description: 'O horário de entrada não pode ser posterior ao horário de saída',
+          })
+          setLoadingAction(false)
+          return
+        }
+      }
+
+      const { error } = await supabase
+        .from('visitas')
+        .update({ [campo]: dataHora.toISOString() })
+        .eq('id', visitaId)
+
+      if (error) throw error
+
+      toast({
+        title: '✅ Horário atualizado!',
+        description: `${tipo === 'check-in' ? 'Entrada' : 'Saída'} alterada para ${format(dataHora, 'HH:mm')}`,
+      })
+
+      setDialogEditarHorarioAberto(false)
+      setEditandoHorario(null)
+      await loadData()
+
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro ao atualizar horário',
+        description: error.message,
+      })
+    } finally {
+      setLoadingAction(false)
+    }
+  }
+
+  // ============================================
   // UTILITÁRIOS
   // ============================================
 
@@ -381,7 +467,6 @@ export default function CheckIn() {
           </Button>
           <Button
             onClick={() => {
-              // Resetar para horário atual
               const now = new Date()
               setCheckinData(now)
               setCheckinHora(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`)
@@ -476,6 +561,23 @@ export default function CheckIn() {
                           <span className="text-xs">•</span>
                           <Clock className="h-3 w-3" />
                           <span>Desde {formatarData(visita.check_in)}</span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            onClick={() => {
+                              const data = new Date(visita.check_in)
+                              setEditandoHorario({
+                                visitaId: visita.id,
+                                tipo: 'check-in',
+                                data: data,
+                                hora: `${String(data.getHours()).padStart(2, '0')}:${String(data.getMinutes()).padStart(2, '0')}`
+                              })
+                              setDialogEditarHorarioAberto(true)
+                            }}
+                          >
+                            <Pencil className="h-3 w-3 text-muted-foreground hover:text-primary" />
+                          </Button>
                           <Badge variant="outline" className={`text-xs ${atrasada ? 'text-red-600 border-red-600' : 'text-green-600 border-green-600'}`}>
                             {atrasada ? (
                               <span className="flex items-center gap-1">
@@ -500,7 +602,6 @@ export default function CheckIn() {
                       size="sm"
                       onClick={() => {
                         setVisitaSelecionada(visita)
-                        // 🔥 Pré-preencher checkout com data/hora atual
                         const now = new Date()
                         setCheckoutData(now)
                         setCheckoutHora(`${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`)
@@ -561,10 +662,44 @@ export default function CheckIn() {
                           <span className="text-xs">•</span>
                           <Clock className="h-3 w-3" />
                           <span>Entrada: {formatarData(visita.check_in)}</span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 w-6 p-0"
+                            onClick={() => {
+                              const data = new Date(visita.check_in)
+                              setEditandoHorario({
+                                visitaId: visita.id,
+                                tipo: 'check-in',
+                                data: data,
+                                hora: `${String(data.getHours()).padStart(2, '0')}:${String(data.getMinutes()).padStart(2, '0')}`
+                              })
+                              setDialogEditarHorarioAberto(true)
+                            }}
+                          >
+                            <Pencil className="h-3 w-3 text-muted-foreground hover:text-primary" />
+                          </Button>
                           {visita.check_out && (
                             <>
                               <span className="text-xs">•</span>
                               <span>Saída: {formatarData(visita.check_out)}</span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0"
+                                onClick={() => {
+                                  const data = new Date(visita.check_out)
+                                  setEditandoHorario({
+                                    visitaId: visita.id,
+                                    tipo: 'check-out',
+                                    data: data,
+                                    hora: `${String(data.getHours()).padStart(2, '0')}:${String(data.getMinutes()).padStart(2, '0')}`
+                                  })
+                                  setDialogEditarHorarioAberto(true)
+                                }}
+                              >
+                                <Pencil className="h-3 w-3 text-muted-foreground hover:text-primary" />
+                              </Button>
                               <Badge variant="outline" className="text-xs">
                                 ⏱️ {duracao}
                               </Badge>
@@ -680,7 +815,7 @@ export default function CheckIn() {
               </div>
             </div>
 
-            {/* 🔥 DATA E HORA MANUAL - CHECK-IN */}
+            {/* DATA E HORA MANUAL - CHECK-IN */}
             <div className="space-y-2">
               <Label className="text-sm font-medium">📅 Data e Hora do Check-in *</Label>
               <div className="flex gap-2">
@@ -794,7 +929,7 @@ export default function CheckIn() {
                 )}
               </div>
 
-              {/* 🔥 DATA E HORA MANUAL - CHECK-OUT */}
+              {/* DATA E HORA MANUAL - CHECK-OUT */}
               <div className="space-y-2">
                 <Label className="text-sm font-medium">📅 Data e Hora do Check-out *</Label>
                 <div className="flex gap-2">
@@ -862,6 +997,83 @@ export default function CheckIn() {
                   disabled={loadingAction}
                 >
                   {loadingAction ? 'Processando...' : 'Confirmar Check-out'}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ====== DIALOG EDITAR HORÁRIO ====== */}
+      <Dialog open={dialogEditarHorarioAberto} onOpenChange={setDialogEditarHorarioAberto}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar Horário</DialogTitle>
+            <DialogDescription>
+              {editandoHorario?.tipo === 'check-in' ? 'Altere o horário de entrada do promotor' : 'Altere o horário de saída do promotor'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {editandoHorario && (
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">📅 Data e Hora</Label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      type="datetime-local"
+                      value={(() => {
+                        const d = new Date(editandoHorario.data)
+                        d.setHours(
+                          parseInt(editandoHorario.hora.split(':')[0]),
+                          parseInt(editandoHorario.hora.split(':')[1]),
+                          0, 0
+                        )
+                        d.setMinutes(d.getMinutes() - d.getTimezoneOffset())
+                        return d.toISOString().slice(0, 16)
+                      })()}
+                      onChange={(e) => {
+                        if (e.target.value) {
+                          const date = new Date(e.target.value)
+                          setEditandoHorario({
+                            ...editandoHorario,
+                            data: date,
+                            hora: `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+                          })
+                        }
+                      }}
+                      className="w-full"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const now = new Date()
+                      setEditandoHorario({
+                        ...editandoHorario,
+                        data: now,
+                        hora: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+                      })
+                    }}
+                    className="shrink-0"
+                  >
+                    <Clock className="h-4 w-4 mr-1" />
+                    Agora
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Clique no campo para selecionar ou use o botão "Agora" para preencher com a data/hora atual.
+                </p>
+              </div>
+
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDialogEditarHorarioAberto(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleAtualizarHorario} disabled={loadingAction}>
+                  {loadingAction ? 'Salvando...' : 'Salvar'}
                 </Button>
               </DialogFooter>
             </div>
