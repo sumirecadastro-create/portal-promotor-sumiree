@@ -227,7 +227,8 @@ export default function CheckIn() {
       // Finalizar check-ins antigos automaticamente
       await finalizarCheckInsAntigos()
 
-      // Verificar apenas se já tem check-in na MESMA loja
+      // 🔥 VERIFICAR APENAS se já tem check-in na MESMA loja
+      // (não bloqueia outras lojas)
       const temAtivoNaLoja = await temCheckInAtivoNaLoja(
         selectedPromotor.id,
         selectedLoja.id
@@ -252,7 +253,7 @@ export default function CheckIn() {
         check_in_manual: dataHoraCheckin.toISOString()
       })
 
-      // Verificar se o promotor tem outros check-ins ativos (apenas para aviso)
+      // 🔥 VERIFICAR se o promotor tem outros check-ins ativos (apenas para aviso)
       const outrosCheckIns = await getCheckInsAtivosDoPromotor(selectedPromotor.id)
       
       let mensagemAdicional = ''
