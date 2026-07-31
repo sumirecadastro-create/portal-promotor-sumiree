@@ -1,4 +1,5 @@
 // src/services/visitas.ts
+
 import { supabase } from '@/lib/supabase'
 import { getPromotoresIds, type UserPermissions } from './permissoes'
 
@@ -114,11 +115,17 @@ export function isVisitaAtrasada(checkIn: string): boolean {
 }
 
 // ============================================
-// FUNÇÕES DE CONSULTA (COM FILTRO DE PERMISSÃO)
+// FUNÇÕES DE CONSULTA
 // ============================================
 
 /**
- * Buscar visitas em andamento (filtradas por permissão do usuário)
+ * 🔥 BUSCAR VISITAS EM ANDAMENTO (filtradas por permissão)
+ * 
+ * REGRAS:
+ * - ADMIN: vê todas as visitas em andamento
+ * - GERENTE: vê APENAS visitas da sua loja
+ * - REGIONAL: vê visitas das lojas que gerencia
+ * - PROMOTOR: vê apenas suas próprias visitas
  */
 export async function getVisitasEmAndamento(
     permissions: UserPermissions
@@ -129,12 +136,21 @@ export async function getVisitasEmAndamento(
         return []
     }
 
-    const { data, error } = await supabase
+    let query = supabase
         .from('visitas')
         .select(VISITA_SELECT)
-        .in('promotor_id', promotoresIds)
         .eq('status', 'em_andamento')
         .order('check_in', { ascending: false })
+
+    // 🔥 GERENTE: filtra APENAS pela loja dele
+    if (permissions.app_role === 'gerente' && permissions.loja_id) {
+        query = query.eq('loja_id', permissions.loja_id)
+    } else {
+        // ADMIN, REGIONAL, PROMOTOR: usa a lista de promotores permitidos
+        query = query.in('promotor_id', promotoresIds)
+    }
+
+    const { data, error } = await query
 
     if (error) {
         handleError(error, 'Erro ao buscar visitas em andamento')
@@ -144,7 +160,13 @@ export async function getVisitasEmAndamento(
 }
 
 /**
- * Buscar últimas visitas concluídas (filtradas por permissão do usuário)
+ * 🔥 BUSCAR VISITAS CONCLUÍDAS (filtradas por permissão)
+ * 
+ * REGRAS:
+ * - ADMIN: vê todas as visitas concluídas
+ * - GERENTE: vê APENAS visitas da sua loja
+ * - REGIONAL: vê visitas das lojas que gerencia
+ * - PROMOTOR: vê apenas suas próprias visitas
  */
 export async function getVisitasConcluidas(
     permissions: UserPermissions,
@@ -156,13 +178,22 @@ export async function getVisitasConcluidas(
         return []
     }
 
-    const { data, error } = await supabase
+    let query = supabase
         .from('visitas')
         .select(VISITA_SELECT)
-        .in('promotor_id', promotoresIds)
         .eq('status', 'concluida')
         .order('check_out', { ascending: false })
         .limit(limit)
+
+    // 🔥 GERENTE: filtra APENAS pela loja dele
+    if (permissions.app_role === 'gerente' && permissions.loja_id) {
+        query = query.eq('loja_id', permissions.loja_id)
+    } else {
+        // ADMIN, REGIONAL, PROMOTOR: usa a lista de promotores permitidos
+        query = query.in('promotor_id', promotoresIds)
+    }
+
+    const { data, error } = await query
 
     if (error) {
         handleError(error, 'Erro ao buscar visitas concluídas')
@@ -172,7 +203,7 @@ export async function getVisitasConcluidas(
 }
 
 /**
- * Buscar todas as visitas (filtradas por permissão do usuário)
+ * 🔥 BUSCAR TODAS AS VISITAS (filtradas por permissão)
  */
 export async function getVisitas(
     permissions: UserPermissions,
@@ -184,12 +215,20 @@ export async function getVisitas(
         return []
     }
 
-    const { data, error } = await supabase
+    let query = supabase
         .from('visitas')
         .select(VISITA_SELECT)
-        .in('promotor_id', promotoresIds)
         .order('check_out', { ascending: false })
         .limit(limit)
+
+    // 🔥 GERENTE: filtra APENAS pela loja dele
+    if (permissions.app_role === 'gerente' && permissions.loja_id) {
+        query = query.eq('loja_id', permissions.loja_id)
+    } else {
+        query = query.in('promotor_id', promotoresIds)
+    }
+
+    const { data, error } = await query
 
     if (error) {
         handleError(error, 'Erro ao buscar visitas')
@@ -199,7 +238,7 @@ export async function getVisitas(
 }
 
 /**
- * Buscar visitas de um promotor específico (com verificação de permissão)
+ * 🔥 BUSCAR VISITAS POR PROMOTOR
  */
 export async function getVisitasByPromotor(
     permissions: UserPermissions,
@@ -211,11 +250,18 @@ export async function getVisitasByPromotor(
         return []
     }
 
-    const { data, error } = await supabase
+    let query = supabase
         .from('visitas')
         .select(VISITA_SELECT)
         .eq('promotor_id', promotorId)
         .order('check_in', { ascending: false })
+
+    // 🔥 GERENTE: filtra APENAS pela loja dele
+    if (permissions.app_role === 'gerente' && permissions.loja_id) {
+        query = query.eq('loja_id', permissions.loja_id)
+    }
+
+    const { data, error } = await query
 
     if (error) {
         handleError(error, `Erro ao buscar visitas do promotor ${promotorId}`)
@@ -225,7 +271,7 @@ export async function getVisitasByPromotor(
 }
 
 /**
- * Buscar visitas de uma loja específica (com verificação de permissão)
+ * 🔥 BUSCAR VISITAS POR LOJA
  */
 export async function getVisitasByLoja(
     permissions: UserPermissions,
@@ -237,12 +283,22 @@ export async function getVisitasByLoja(
         return []
     }
 
-    const { data, error } = await supabase
+    let query = supabase
         .from('visitas')
         .select(VISITA_SELECT)
-        .in('promotor_id', promotoresIds)
         .eq('loja_id', lojaId)
         .order('check_in', { ascending: false })
+
+    // 🔥 GERENTE: só pode ver se for a sua loja
+    if (permissions.app_role === 'gerente' && permissions.loja_id) {
+        if (permissions.loja_id !== lojaId) {
+            return []
+        }
+    } else {
+        query = query.in('promotor_id', promotoresIds)
+    }
+
+    const { data, error } = await query
 
     if (error) {
         handleError(error, `Erro ao buscar visitas da loja ${lojaId}`)
@@ -252,7 +308,7 @@ export async function getVisitasByLoja(
 }
 
 /**
- * Buscar uma visita por ID (com verificação de permissão)
+ * 🔥 BUSCAR UMA VISITA POR ID
  */
 export async function getVisitaById(
     permissions: UserPermissions,
@@ -272,22 +328,30 @@ export async function getVisitaById(
         return null
     }
 
-    // Verificar se o usuário tem permissão para ver esta visita
+    // Verificar permissão
     const promotoresIds = await getPromotoresIds(permissions)
-    if (!promotoresIds.includes(data.promotor_id)) {
-        return null
+    
+    // 🔥 GERENTE: só pode ver se for da sua loja
+    if (permissions.app_role === 'gerente' && permissions.loja_id) {
+        if (data.loja_id !== permissions.loja_id) {
+            return null
+        }
+    } else {
+        if (!promotoresIds.includes(data.promotor_id)) {
+            return null
+        }
     }
 
     return isVisitaCompleta(data) ? data : null
 }
 
 // ============================================
-// FUNÇÕES DE ESCRITA (NOVAS E MODIFICADAS)
+// FUNÇÕES DE ESCRITA
 // ============================================
 
 /**
- * 🔥 VERIFICAR se um promotor tem check-in ativo em uma loja ESPECÍFICA
- * (não bloqueia check-in em outras lojas)
+ * 🔥 VERIFICAR SE PROMOTOR TEM CHECK-IN ATIVO EM UMA LOJA ESPECÍFICA
+ * (NÃO BLOQUEIA CHECK-INS EM OUTRAS LOJAS)
  */
 export async function temCheckInAtivoNaLoja(
     promotorId: string,
@@ -309,8 +373,8 @@ export async function temCheckInAtivoNaLoja(
 }
 
 /**
- * 🔥 VERIFICAR se um promotor tem check-in ativo em QUALQUER loja
- * (usado apenas para alerta, não para bloquear)
+ * 🔥 VERIFICAR SE PROMOTOR TEM CHECK-IN ATIVO EM QUALQUER LOJA
+ * (USADO APENAS PARA ALERTA, NÃO PARA BLOQUEAR)
  */
 export async function temCheckInAtivo(promotorId: string): Promise<boolean> {
     const { data, error } = await supabase
@@ -328,7 +392,8 @@ export async function temCheckInAtivo(promotorId: string): Promise<boolean> {
 }
 
 /**
- * 🔥 BUSCAR TODOS os check-ins ativos de um promotor
+ * 🔥 BUSCAR TODOS OS CHECK-INS ATIVOS DE UM PROMOTOR
+ * (RETORNA TODOS, INDEPENDENTE DA LOJA)
  */
 export async function getCheckInsAtivosDoPromotor(
     promotorId: string
@@ -348,82 +413,29 @@ export async function getCheckInsAtivosDoPromotor(
 }
 
 /**
- * 🔥 BUSCAR check-ins ativos por loja
+ * 🔥 BUSCAR CHECK-INS ATIVOS DE UM PROMOTOR EM UMA LOJA ESPECÍFICA
  */
-export async function getCheckInsAtivosPorLoja(
+export async function getCheckInsAtivosDoPromotorNaLoja(
+    promotorId: string,
     lojaId: string
 ): Promise<VisitaCompleta[]> {
     const { data, error } = await supabase
         .from('visitas')
         .select(VISITA_SELECT)
+        .eq('promotor_id', promotorId)
         .eq('loja_id', lojaId)
         .eq('status', 'em_andamento')
         .order('check_in', { ascending: true })
 
     if (error) {
-        handleError(error, `Erro ao buscar check-ins ativos da loja ${lojaId}`)
+        handleError(error, `Erro ao buscar check-ins ativos do promotor ${promotorId} na loja ${lojaId}`)
     }
 
     return (data || []).filter(isVisitaCompleta)
 }
 
 /**
- * 🔥 FINALIZAR AUTOMATICAMENTE check-ins antigos (mais de 24h)
- * Deve ser chamado por um cron job ou ao carregar a página
- */
-export async function finalizarCheckInsAntigos(): Promise<number> {
-    const dataLimite = new Date()
-    dataLimite.setHours(dataLimite.getHours() - 24)
-
-    const { data, error } = await supabase
-        .from('visitas')
-        .update({
-            check_out: dataLimite.toISOString(),
-            status: 'concluida',
-            observacao_check_out: 'Finalizado automaticamente (excedeu 24h)'
-        })
-        .eq('status', 'em_andamento')
-        .lt('check_in', dataLimite.toISOString())
-        .select('id')
-
-    if (error) {
-        handleError(error, 'Erro ao finalizar check-ins antigos')
-    }
-
-    return data?.length || 0
-}
-
-/**
- * 🔥 FINALIZAR AUTOMATICAMENTE todos os check-ins do dia anterior
- * Deve ser chamado por um cron job à meia-noite
- */
-export async function finalizarCheckInsDiaAnterior(): Promise<number> {
-    const hoje = new Date()
-    hoje.setHours(0, 0, 0, 0)
-    
-    const ontem = new Date(hoje)
-    ontem.setDate(ontem.getDate() - 1)
-
-    const { data, error } = await supabase
-        .from('visitas')
-        .update({
-            check_out: ontem.toISOString(),
-            status: 'concluida',
-            observacao_check_out: 'Finalizado automaticamente (fim do dia)'
-        })
-        .eq('status', 'em_andamento')
-        .lt('check_in', hoje.toISOString())
-        .select('id')
-
-    if (error) {
-        handleError(error, 'Erro ao finalizar check-ins do dia anterior')
-    }
-
-    return data?.length || 0
-}
-
-/**
- * Buscar check-in ativo de um promotor (retorna apenas um)
+ * 🔥 BUSCAR CHECK-IN ATIVO DE UM PROMOTOR (APENAS O PRIMEIRO)
  */
 export async function getCheckInAtivo(promotorId: string): Promise<VisitaCompleta | null> {
     const { data, error } = await supabase
@@ -445,7 +457,7 @@ export async function getCheckInAtivo(promotorId: string): Promise<VisitaComplet
 }
 
 /**
- * 🔥 CRIAR CHECK-IN (sem bloquear outras lojas)
+ * 🔥 CRIAR NOVO CHECK-IN
  */
 export async function registrarCheckIn(data: CreateCheckInDTO): Promise<VisitaCompleta> {
     // 🔥 Verificar se já tem check-in ativo na MESMA loja
@@ -482,7 +494,7 @@ export async function registrarCheckIn(data: CreateCheckInDTO): Promise<VisitaCo
 }
 
 /**
- * 🔥 FINALIZAR CHECK-OUT (com validação de data)
+ * 🔥 FINALIZAR CHECK-OUT
  */
 export async function registrarCheckOut(
     id: string,
@@ -534,7 +546,32 @@ export async function registrarCheckOut(
 }
 
 /**
- * Cancelar um check-in em andamento
+ * 🔥 FINALIZAR CHECK-INS ANTIGOS (mais de 24h)
+ */
+export async function finalizarCheckInsAntigos(): Promise<number> {
+    const dataLimite = new Date()
+    dataLimite.setHours(dataLimite.getHours() - 24)
+
+    const { data, error } = await supabase
+        .from('visitas')
+        .update({
+            check_out: dataLimite.toISOString(),
+            status: 'concluida',
+            observacao_check_out: 'Finalizado automaticamente (excedeu 24h)'
+        })
+        .eq('status', 'em_andamento')
+        .lt('check_in', dataLimite.toISOString())
+        .select('id')
+
+    if (error) {
+        handleError(error, 'Erro ao finalizar check-ins antigos')
+    }
+
+    return data?.length || 0
+}
+
+/**
+ * 🔥 CANCELAR CHECK-IN
  */
 export async function cancelarCheckIn(id: string): Promise<void> {
     const { error } = await supabase
@@ -553,7 +590,7 @@ export async function cancelarCheckIn(id: string): Promise<void> {
 // ============================================
 
 /**
- * Contar visitas por período (filtradas por permissão)
+ * 🔥 CONTAR VISITAS POR PERÍODO
  */
 export async function countVisitasByPeriod(
     permissions: UserPermissions,
@@ -566,12 +603,20 @@ export async function countVisitasByPeriod(
         return 0
     }
 
-    const { count, error } = await supabase
+    let query = supabase
         .from('visitas')
         .select('id', { count: 'exact', head: true })
-        .in('promotor_id', promotoresIds)
         .gte('check_in', startDate.toISOString())
         .lt('check_in', endDate.toISOString())
+
+    // 🔥 GERENTE: filtra APENAS pela loja dele
+    if (permissions.app_role === 'gerente' && permissions.loja_id) {
+        query = query.eq('loja_id', permissions.loja_id)
+    } else {
+        query = query.in('promotor_id', promotoresIds)
+    }
+
+    const { count, error } = await query
 
     if (error) {
         handleError(error, 'Erro ao contar visitas por período')
@@ -581,7 +626,7 @@ export async function countVisitasByPeriod(
 }
 
 /**
- * Buscar resumo de visitas do dia (filtrado por permissão)
+ * 🔥 RESUMO DE VISITAS DO DIA
  */
 export async function getResumoVisitasHoje(
     permissions: UserPermissions
@@ -595,11 +640,19 @@ export async function getResumoVisitasHoje(
     const hoje = new Date()
     hoje.setHours(0, 0, 0, 0)
 
-    const { data, error } = await supabase
+    let query = supabase
         .from('visitas')
         .select('status')
-        .in('promotor_id', promotoresIds)
         .gte('check_in', hoje.toISOString())
+
+    // 🔥 GERENTE: filtra APENAS pela loja dele
+    if (permissions.app_role === 'gerente' && permissions.loja_id) {
+        query = query.eq('loja_id', permissions.loja_id)
+    } else {
+        query = query.in('promotor_id', promotoresIds)
+    }
+
+    const { data, error } = await query
 
     if (error) {
         handleError(error, 'Erro ao buscar resumo de visitas de hoje')
@@ -616,7 +669,7 @@ export async function getResumoVisitasHoje(
 }
 
 /**
- * 🔥 Buscar estatísticas detalhadas de visitas
+ * 🔥 ESTATÍSTICAS DETALHADAS DE VISITAS
  */
 export async function getEstatisticasVisitas(
     permissions: UserPermissions,
@@ -649,6 +702,11 @@ export async function getEstatisticasVisitas(
         query = query
             .gte('check_in', periodo.inicio.toISOString())
             .lte('check_in', periodo.fim.toISOString())
+    }
+
+    // 🔥 GERENTE: filtra APENAS pela loja dele
+    if (permissions.app_role === 'gerente' && permissions.loja_id) {
+        query = query.eq('loja_id', permissions.loja_id)
     }
 
     const { data, error } = await query
