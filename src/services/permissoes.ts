@@ -1,16 +1,23 @@
 // src/services/permissoes.ts
+
 import { supabase } from '@/lib/supabase'
 
 // ============================================
 // TIPOS
 // ============================================
 
-export type AppRole = 'admin' | 'gestor' | 'gerente' | 'regional' | 'promotor'
+export type AppRole = 'admin' | 'gerente' | 'regional' | 'promotor'
 
 export interface UserPermissions {
     id: string
     app_role: AppRole
-    loja_id?: string | null
+    loja_id: string | null
+}
+
+export interface PromotorPermitido {
+    id: string
+    promotor_nome: string
+    status: string
 }
 
 export interface LojaPermitida {
@@ -18,239 +25,297 @@ export interface LojaPermitida {
     cod_loja: string
     nome_loja: string
     cidade: string
-}
-
-export interface PromotorPermitido {
-    id: string
-    promotor_nome: string
-    status: string
-    dias_semana: string | null
-    contato_responsavel: string | null
+    gerente_id: string | null
 }
 
 // ============================================
-// CONSTANTES
-// ============================================
-
-const LOJA_SELECT = 'id, cod_loja, nome_loja, cidade'
-const PROMOTOR_SELECT = 'id, promotor_nome, status, dias_semana, contato_responsavel'
-
-// ============================================
-// HELPERS
-// ============================================
-
-function handleError(error: unknown, mensagem: string): never {
-    console.error(mensagem, error)
-    throw error
-}
-
-/**
- * Remove duplicatas de um array
- */
-function unique<T>(items: T[]): T[] {
-    return [...new Set(items)]
-}
-
-/**
- * Verifica se a role está na lista de roles permitidas
- */
-function hasRole(role: AppRole, ...allowedRoles: AppRole[]): boolean {
-    return allowedRoles.includes(role)
-}
-
-// ============================================
-// NÍVEL 1: IDs DAS LOJAS PERMITIDAS
+// FUNÇÕES
 // ============================================
 
 /**
- * Retorna os IDs das lojas que o usuário tem permissão para ver
+ * 🔥 Buscar IDs dos promotores que o usuário tem permissão para ver
+ * 
+ * REGRAS:
+ * - ADMIN: vê todos os promotores ativos
+ * - GERENTE: vê apenas promotores da sua loja (via promotores_lojas)
+ * - REGIONAL: vê promotores das lojas que gerencia
+ * - PROMOTOR: vê apenas seus próprios dados
  */
-export async function getLojasPermitidas(permissions: UserPermissions): Promise<string[]> {
-    const { id, app_role, loja_id } = permissions
-
-    // Admin ou Gestor → todas as lojas
-    if (hasRole(app_role, 'admin', 'gestor')) {
-        const { data, error } = await supabase
-            .from('lojas')
-            .select('id')
-
-        if (error) {
-            handleError(error, 'Erro ao buscar lojas para admin/gestor')
+export async function getPromotoresIds(
+    permissions: UserPermissions
+): Promise<string[]> {
+    try {
+        // 🔥 ADMIN: vê todos os promotores ativos
+        if (permissions.app_role === 'admin') {
+            const { data, error } = await supabase
+                .from('promotores')
+                .select('id')
+                .eq('status', 'ativo')
+            
+            if (error) throw error
+            return data?.map(p => p.id) || []
         }
 
-        return data?.map(l => l.id) || []
-    }
-
-    // Gerente → apenas sua loja
-    if (app_role === 'gerente' && loja_id) {
-        return [loja_id]
-    }
-
-    // Regional → lojas da sua região
-    if (app_role === 'regional') {
-        const { data, error } = await supabase
-            .from('gerentes_regionais_lojas')
-            .select('loja_id')
-            .eq('gerente_regional_id', id)
-
-        if (error) {
-            handleError(error, 'Erro ao buscar lojas do regional')
+        // 🔥 GERENTE: vê apenas promotores da sua loja (via promotores_lojas)
+        if (permissions.app_role === 'gerente' && permissions.loja_id) {
+            const { data, error } = await supabase
+                .from('promotores_lojas')
+                .select('promotor_id')
+                .eq('loja_id', permissions.loja_id)
+            
+            if (error) throw error
+            
+            // Retorna os IDs dos promotores vinculados à loja do gerente
+            const ids = data?.map(p => p.promotor_id) || []
+            return [...new Set(ids)] // Remove duplicatas (segurança)
         }
 
-        return unique(data?.map(l => l.loja_id) || [])
-    }
-
-    // Promotor → suas próprias lojas
-    if (app_role === 'promotor') {
-        const { data, error } = await supabase
-            .from('promotores_lojas')
-            .select('loja_id')
-            .eq('promotor_id', id)
-
-        if (error) {
-            handleError(error, 'Erro ao buscar lojas do promotor')
+        // 🔥 REGIONAL: vê promotores das lojas que gerencia
+        if (permissions.app_role === 'regional' && permissions.loja_id) {
+            // Buscar IDs das lojas que o regional gerencia
+            const { data: lojasData, error: lojasError } = await supabase
+                .from('gerentes_regionais_lojas')
+                .select('loja_id')
+                .eq('gerente_regional_id', permissions.loja_id)
+            
+            if (lojasError) throw lojasError
+            
+            const lojaIds = lojasData?.map(l => l.loja_id) || []
+            
+            if (lojaIds.length === 0) return []
+            
+            // Buscar promotores dessas lojas
+            const { data, error } = await supabase
+                .from('promotores_lojas')
+                .select('promotor_id')
+                .in('loja_id', lojaIds)
+            
+            if (error) throw error
+            
+            const ids = data?.map(p => p.promotor_id) || []
+            return [...new Set(ids)] // Remove duplicatas
         }
 
-        return unique(data?.map(l => l.loja_id) || [])
-    }
-
-    return []
-}
-
-// ============================================
-// NÍVEL 2: IDs DOS PROMOTORES PERMITIDOS
-// ============================================
-
-/**
- * Retorna apenas os IDs dos promotores que o usuário tem permissão para ver
- */
-export async function getPromotoresIds(permissions: UserPermissions): Promise<string[]> {
-    const { id, app_role, loja_id } = permissions
-
-    // Admin ou Gestor → todos os promotores
-    if (hasRole(app_role, 'admin', 'gestor')) {
-        const { data, error } = await supabase
-            .from('promotores')
-            .select('id')
-            .eq('status', 'ativo')
-
-        if (error) {
-            handleError(error, 'Erro ao buscar IDs de promotores para admin/gestor')
+        // 🔥 PROMOTOR: vê apenas seus próprios dados
+        if (permissions.app_role === 'promotor') {
+            return [permissions.id]
         }
 
-        return data?.map(p => p.id) || []
-    }
-
-    // Gerente → promotores da sua loja
-    if (app_role === 'gerente' && loja_id) {
-        const { data, error } = await supabase
-            .from('promotores_lojas')
-            .select('promotor_id')
-            .eq('loja_id', loja_id)
-
-        if (error) {
-            handleError(error, 'Erro ao buscar IDs de promotores do gerente')
-        }
-
-        return unique(data?.map(p => p.promotor_id) || [])
-    }
-
-    // Regional, promotor, etc → via lojas permitidas
-    const lojaIds = await getLojasPermitidas(permissions)
-
-    if (lojaIds.length === 0) {
+        // Caso não se enquadre em nenhum dos papéis acima
+        return []
+    } catch (error) {
+        console.error('❌ Erro ao buscar promotores IDs:', error)
         return []
     }
-
-    const { data, error } = await supabase
-        .from('promotores_lojas')
-        .select('promotor_id')
-        .in('loja_id', lojaIds)
-
-    if (error) {
-        handleError(error, 'Erro ao buscar IDs de promotores permitidos')
-    }
-
-    return unique(data?.map(p => p.promotor_id) || [])
 }
 
-// ============================================
-// NÍVEL 3: DADOS COMPLETOS
-// ============================================
-
 /**
- * Retorna os promotores completos que o usuário tem permissão para ver
+ * 🔥 Buscar promotores completos (com permissão)
  */
 export async function getPromotoresCompletos(
     permissions: UserPermissions
 ): Promise<PromotorPermitido[]> {
-    const ids = await getPromotoresIds(permissions)
+    try {
+        const ids = await getPromotoresIds(permissions)
+        
+        if (ids.length === 0) return []
 
-    if (ids.length === 0) {
+        const { data, error } = await supabase
+            .from('promotores')
+            .select('id, promotor_nome, status')
+            .in('id', ids)
+            .eq('status', 'ativo')
+            .order('promotor_nome')
+
+        if (error) throw error
+        return data || []
+    } catch (error) {
+        console.error('❌ Erro ao buscar promotores completos:', error)
         return []
     }
-
-    const { data, error } = await supabase
-        .from('promotores')
-        .select(PROMOTOR_SELECT)
-        .in('id', ids)
-        .eq('status', 'ativo')
-        .order('promotor_nome')
-
-    if (error) {
-        handleError(error, 'Erro ao buscar promotores completos')
-    }
-
-    return data || []
 }
 
 /**
- * Retorna as lojas completas que o usuário tem permissão para ver
+ * 🔥 Buscar lojas completas (com permissão)
+ * 
+ * REGRAS:
+ * - ADMIN: vê todas as lojas
+ * - GERENTE: vê apenas sua loja
+ * - REGIONAL: vê as lojas que gerencia
+ * - PROMOTOR: vê apenas lojas onde atua
  */
 export async function getLojasCompletas(
     permissions: UserPermissions
 ): Promise<LojaPermitida[]> {
-    const lojaIds = await getLojasPermitidas(permissions)
+    try {
+        // 🔥 ADMIN: vê todas as lojas
+        if (permissions.app_role === 'admin') {
+            const { data, error } = await supabase
+                .from('lojas')
+                .select('*')
+                .order('nome_loja')
+            
+            if (error) throw error
+            return data || []
+        }
 
-    if (lojaIds.length === 0) {
+        // 🔥 GERENTE: vê apenas sua loja
+        if (permissions.app_role === 'gerente' && permissions.loja_id) {
+            const { data, error } = await supabase
+                .from('lojas')
+                .select('*')
+                .eq('id', permissions.loja_id)
+            
+            if (error) throw error
+            return data || []
+        }
+
+        // 🔥 REGIONAL: vê as lojas que gerencia
+        if (permissions.app_role === 'regional' && permissions.loja_id) {
+            const { data: lojasData, error: lojasError } = await supabase
+                .from('gerentes_regionais_lojas')
+                .select('loja_id')
+                .eq('gerente_regional_id', permissions.loja_id)
+            
+            if (lojasError) throw lojasError
+            
+            const lojaIds = lojasData?.map(l => l.loja_id) || []
+            
+            if (lojaIds.length === 0) return []
+            
+            const { data, error } = await supabase
+                .from('lojas')
+                .select('*')
+                .in('id', lojaIds)
+                .order('nome_loja')
+            
+            if (error) throw error
+            return data || []
+        }
+
+        // 🔥 PROMOTOR: vê apenas lojas onde atua
+        if (permissions.app_role === 'promotor') {
+            const { data, error } = await supabase
+                .from('promotores_lojas')
+                .select('loja_id')
+                .eq('promotor_id', permissions.id)
+            
+            if (error) throw error
+            
+            const lojaIds = data?.map(l => l.loja_id) || []
+            
+            if (lojaIds.length === 0) return []
+            
+            const { data: lojasData, error: lojasError } = await supabase
+                .from('lojas')
+                .select('*')
+                .in('id', lojaIds)
+                .order('nome_loja')
+            
+            if (lojasError) throw lojasError
+            return lojasData || []
+        }
+
+        return []
+    } catch (error) {
+        console.error('❌ Erro ao buscar lojas completas:', error)
         return []
     }
-
-    const { data, error } = await supabase
-        .from('lojas')
-        .select(LOJA_SELECT)
-        .in('id', lojaIds)
-        .order('nome_loja')
-
-    if (error) {
-        handleError(error, 'Erro ao buscar lojas completas')
-    }
-
-    return data || []
 }
 
-// ============================================
-// NÍVEL 4: FUNÇÕES DE VERIFICAÇÃO
-// ============================================
-
 /**
- * Verifica se um usuário tem acesso a uma loja específica
+ * 🔥 Verificar se um promotor está vinculado a uma loja específica
+ * 
+ * Útil para validações antes de criar check-in
  */
-export async function hasAccessToLoja(
-    permissions: UserPermissions,
+export async function promotorVinculadoLoja(
+    promotorId: string,
     lojaId: string
 ): Promise<boolean> {
-    const lojasPermitidas = await getLojasPermitidas(permissions)
-    return lojasPermitidas.includes(lojaId)
+    try {
+        const { data, error } = await supabase
+            .from('promotores_lojas')
+            .select('id')
+            .eq('promotor_id', promotorId)
+            .eq('loja_id', lojaId)
+            .maybeSingle()
+
+        if (error) throw error
+        return !!data
+    } catch (error) {
+        console.error('❌ Erro ao verificar vínculo promotor-loja:', error)
+        return false
+    }
 }
 
 /**
- * Verifica se um usuário tem acesso a um promotor específico
+ * 🔥 Buscar todas as lojas vinculadas a um promotor
  */
-export async function hasAccessToPromotor(
-    permissions: UserPermissions,
+export async function getLojasDoPromotor(
     promotorId: string
-): Promise<boolean> {
-    const promotoresPermitidos = await getPromotoresIds(permissions)
-    return promotoresPermitidos.includes(promotorId)
+): Promise<{ id: string; cod_loja: string; nome_loja: string }[]> {
+    try {
+        const { data, error } = await supabase
+            .from('promotores_lojas')
+            .select(`
+                loja_id,
+                lojas (
+                    id,
+                    cod_loja,
+                    nome_loja
+                )
+            `)
+            .eq('promotor_id', promotorId)
+
+        if (error) throw error
+        
+        return data?.map(item => ({
+            id: item.lojas.id,
+            cod_loja: item.lojas.cod_loja,
+            nome_loja: item.lojas.nome_loja
+        })) || []
+    } catch (error) {
+        console.error('❌ Erro ao buscar lojas do promotor:', error)
+        return []
+    }
+}
+
+/**
+ * 🔥 Buscar todos os gerentes vinculados a um promotor (via lojas)
+ */
+export async function getGerentesDoPromotor(
+    promotorId: string
+): Promise<{ id: string; nome_gerente: string }[]> {
+    try {
+        const { data, error } = await supabase
+            .from('promotores_lojas')
+            .select(`
+                lojas (
+                    gerente_id,
+                    gerentes (
+                        id,
+                        nome_gerente
+                    )
+                )
+            `)
+            .eq('promotor_id', promotorId)
+
+        if (error) throw error
+        
+        // Extrair gerentes únicos
+        const gerentesMap = new Map()
+        data?.forEach(item => {
+            if (item.lojas?.gerentes) {
+                gerentesMap.set(item.lojas.gerentes.id, item.lojas.gerentes)
+            }
+        })
+        
+        return Array.from(gerentesMap.values()).map(g => ({
+            id: g.id,
+            nome_gerente: g.nome_gerente
+        }))
+    } catch (error) {
+        console.error('❌ Erro ao buscar gerentes do promotor:', error)
+        return []
+    }
 }
