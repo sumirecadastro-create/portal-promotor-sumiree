@@ -228,7 +228,6 @@ export default function CheckIn() {
       await finalizarCheckInsAntigos()
 
       // 🔥 VERIFICAR APENAS se já tem check-in na MESMA loja
-      // (não bloqueia outras lojas)
       const temAtivoNaLoja = await temCheckInAtivoNaLoja(
         selectedPromotor.id,
         selectedLoja.id
@@ -253,15 +252,21 @@ export default function CheckIn() {
         check_in_manual: dataHoraCheckin.toISOString()
       })
 
-      // 🔥 VERIFICAR se o promotor tem outros check-ins ativos (apenas para aviso)
-      const outrosCheckIns = await getCheckInsAtivosDoPromotor(selectedPromotor.id)
-      
+      // 🔥 AVISO SOBRE OUTROS CHECK-INS (APENAS PARA ADMIN/REGIONAL)
       let mensagemAdicional = ''
-      if (outrosCheckIns.length > 0) {
-        const lojasNomes = outrosCheckIns
-          .map(v => lojasMap.get(v.loja_id)?.cod_loja || 'Desconhecida')
-          .join(', ')
-        mensagemAdicional = ` ⚠️ Atenção: Este promotor também está em atendimento nas lojas: ${lojasNomes}`
+      if (permissions.app_role === 'admin' || permissions.app_role === 'regional') {
+        const outrosCheckIns = await getCheckInsAtivosDoPromotor(selectedPromotor.id)
+        if (outrosCheckIns.length > 0) {
+          // Filtrar a loja atual para não mostrar ela mesma
+          const outrasLojas = outrosCheckIns
+            .filter(v => v.loja_id !== selectedLoja.id)
+            .map(v => lojasMap.get(v.loja_id)?.cod_loja || 'Desconhecida')
+            .filter(Boolean)
+          
+          if (outrasLojas.length > 0) {
+            mensagemAdicional = ` ⚠️ Atenção: Este promotor também está em atendimento nas lojas: ${outrasLojas.join(', ')}`
+          }
+        }
       }
 
       toast({
