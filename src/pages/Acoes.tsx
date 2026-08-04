@@ -855,4 +855,4 @@ export default function Acoes() {
               <p className="text-pink-100 text-sm mt-1">
                 {lojas.length} lojas cadastradas • {acoes.length} ações no período
               </p>
-            </div
+            </div>
