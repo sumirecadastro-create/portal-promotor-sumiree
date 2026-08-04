@@ -12,7 +12,7 @@ import {
   User,
   Calendar,
   Target,
-  UserPlus,  // 🔥 ADICIONE ESTA LINHA
+  UserPlus,
 } from 'lucide-react'
 import {
   Sidebar,
@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/sidebar'
 import { useAuth } from '@/hooks/use-auth'
 
+// ✅ TODOS OS ITENS DO MENU
 const allItems = [
   { title: 'Dashboard', url: '/', icon: LayoutDashboard },
   { title: 'Lojas', url: '/lojas', icon: Store },
@@ -41,7 +42,7 @@ const allItems = [
   { title: 'Solicitações de Promotores', url: '/solicitacoes-promotores', icon: UserPlus },
 ]
 
-// 🔥 PERMISSÕES POR PERFIL
+// ✅ PERMISSÕES POR PERFIL (DEFINIÇÃO ÚNICA E CENTRALIZADA)
 const rolePermissions: Record<string, string[]> = {
   admin: [
     'Dashboard',
@@ -65,7 +66,7 @@ const rolePermissions: Record<string, string[]> = {
   ],
   gerente: [
     'Dashboard',
-    'Promotores',  // 🔥 ADICIONADO
+    'Promotores',
     'Check-in (Operação)',
     'Ações',
     'Campanhas',
@@ -117,24 +118,14 @@ export function AppSidebar() {
     )
   }
 
-  // 🔥 FILTRO DE MENU BASEADO NO PERFIL (CORRIGIDO)
+  // ✅ FILTRO DE MENU BASEADO NO PERFIL (USANDO rolePermissions)
   const items = allItems.filter((item) => {
     // ADMIN: vê tudo
     if (role === 'admin') return true
     
-    // GESTOR: NÃO vê Cadastro de Usuários e Marcas
-    if (role === 'gestor')
-      return ['Dashboard', 'Lojas', 'Promotores', 'Ações', 'Campanhas', 'Relatórios'].includes(item.title)
-    
-    // 🔥 GERENTE DE LOJA: vê Dashboard, Check-in, Ações, Campanhas, Solicitações e Relatórios
-    if (role === 'gerente')
-      return ['Dashboard', 'Check-in (Operação)', 'Ações', 'Campanhas', 'Solicitações de Promotores', 'Relatórios'].includes(item.title)
-    
-    // PROMOTOR: vê apenas Dashboard e Check-in
-    if (role === 'promotor') 
-      return ['Dashboard', 'Check-in (Operação)'].includes(item.title)
-    
-    return false
+    // Pega as permissões do rolePermissions para o role atual
+    const allowed = rolePermissions[role] || []
+    return allowed.includes(item.title)
   })
 
   const handleSignOut = async () => {
@@ -144,6 +135,19 @@ export function AppSidebar() {
 
   const handleConfiguracoes = () => {
     navigate('/configuracoes')
+  }
+
+  // ✅ MAPEAMENTO DE ROLES PARA EXIBIÇÃO
+  const getRoleLabel = (role: string) => {
+    const labels: Record<string, string> = {
+      admin: 'Administrador',
+      gestor: 'Gestor',
+      gerente: 'Gerente de Loja',
+      regional: 'Gerente Regional',
+      gerente_regional: 'Gerente Regional',
+      promotor: 'Promotor',
+    }
+    return labels[role] || role || 'Sem perfil'
   }
 
   return (
@@ -198,13 +202,7 @@ export function AppSidebar() {
               {user?.nome || user?.email || 'Usuário'}
             </span>
             <span className="text-xs text-muted-foreground capitalize">
-              {role === 'admin' ? 'Administrador' :
-               role === 'gestor' ? 'Gestor' :
-               role === 'gerente' ? 'Gerente de Loja' :
-               role === 'regional' ? 'Gerente Regional' :
-               role === 'gerente_regional' ? 'Gerente Regional' :
-               role === 'promotor' ? 'Promotor' : 
-               role || 'Sem perfil'}
+              {getRoleLabel(role)}
             </span>
           </div>
         </div>
