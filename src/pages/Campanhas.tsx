@@ -276,8 +276,7 @@ function CampanhaTooltip({ campanha, children }: { campanha: Campanha; children:
 }
 
 export default function Campanhas() {
-  // 🔥 Autenticação
-  const { isAdmin, isGerente, userLojaId, loading: authLoading } = useAuth()
+  const { isAdmin, isGerente, isRegional, userLojaId, loading: authLoading } = useAuth()
   
   // Estados principais
   const [mesAtual, setMesAtual] = useState(new Date())
@@ -371,7 +370,7 @@ export default function Campanhas() {
     setPromotoresPopoverOpen(false)
   }
 
-  // 🔥 Buscar lojas do Supabase com filtro por permissão do gerente
+  // 🔥 Buscar lojas com filtro por permissão (REGIONAL, GERENTE ou ADMIN)
   async function carregarLojas() {
     try {
       let query = supabase
@@ -379,8 +378,23 @@ export default function Campanhas() {
         .select('*')
         .order('nome_loja', { ascending: true })
       
+      // 🔥 SE FOR REGIONAL: filtrar apenas as lojas que ele gerencia
+      if (isRegional && userLojaId) {
+        const { data: lojasData } = await supabase
+          .from('gerentes_regionais_lojas')
+          .select('loja_id')
+          .eq('gerente_regional_id', userLojaId)
+        
+        const lojaIds = lojasData?.map(l => l.loja_id) || []
+        if (lojaIds.length > 0) {
+          query = query.in('id', lojaIds)
+        } else {
+          setLojas([])
+          return
+        }
+      }
       // Se for gerente (não admin), filtrar apenas a loja dele
-      if (isGerente && !isAdmin && userLojaId) {
+      else if (isGerente && !isAdmin && userLojaId) {
         query = query.eq('id', userLojaId)
       }
       
@@ -422,24 +436,31 @@ export default function Campanhas() {
     }
   }
 
-  // 🔥 Buscar campanhas do Supabase com filtro por permissão do gerente
+  // 🔥 Buscar campanhas com filtro por permissão (REGIONAL, GERENTE ou ADMIN)
   async function carregarCampanhas() {
     try {
       const startDate = `${ano}-${String(mes + 1).padStart(2, '0')}-01`
       const lastDay = new Date(ano, mes + 1, 0).getDate()
       const endDate = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
       
-      // Buscar IDs das lojas permitidas para o gerente
+      // 🔥 Buscar IDs das lojas permitidas
       let lojasPermitidasIds: string[] = []
       
-      if (isGerente && !isAdmin) {
+      // SE FOR REGIONAL: buscar lojas vinculadas
+      if (isRegional && userLojaId) {
+        const { data: lojasData } = await supabase
+          .from('gerentes_regionais_lojas')
+          .select('loja_id')
+          .eq('gerente_regional_id', userLojaId)
+        
+        lojasPermitidasIds = lojasData?.map(l => l.loja_id) || []
+      }
+      // SE FOR GERENTE: usar a loja dele
+      else if (isGerente && !isAdmin) {
         if (userLojaId) {
           lojasPermitidasIds = [userLojaId]
         } else {
-          // Gerente sem loja específica - buscar todas as lojas
-          const { data: lojasData } = await supabase
-            .from('lojas')
-            .select('id')
+          const { data: lojasData } = await supabase.from('lojas').select('id')
           lojasPermitidasIds = lojasData?.map(l => l.id) || []
         }
       }
@@ -472,8 +493,8 @@ export default function Campanhas() {
         .select('campanha_id, loja_id')
         .in('campanha_id', campanhaIds)
       
-      // Se for gerente, filtrar apenas as lojas permitidas
-      if (isGerente && !isAdmin && lojasPermitidasIds.length > 0) {
+      // Se for regional ou gerente, filtrar apenas as lojas permitidas
+      if ((isRegional || isGerente) && !isAdmin && lojasPermitidasIds.length > 0) {
         lojasRelQuery = lojasRelQuery.in('loja_id', lojasPermitidasIds)
       }
       
@@ -562,7 +583,7 @@ export default function Campanhas() {
     if (!authLoading) {
       carregarDados()
     }
-  }, [mesAtual, filtroStatus, authLoading, isGerente, isAdmin, userLojaId])
+  }, [mesAtual, filtroStatus, authLoading, isGerente, isAdmin, isRegional, userLojaId])
 
   const lojasFiltradas = lojas.filter(loja => {
     const matchNome = loja.nome_loja.toLowerCase().includes(lojaFiltroNome.toLowerCase()) ||
@@ -800,20 +821,18 @@ export default function Campanhas() {
   const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
   const filtrosAtivos = (filtroStatus !== 'todos' ? 1 : 0) + (lojasSelecionadas.length > 0 ? 1 : 0)
 
-  // 🔥 Verificar permissão de acesso
   if (authLoading || loading) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" style={{ color: PRIMARY_COLOR }} />
-          <p className="text-gray-500">Carregando...</p>
+          <p className="text-gray-500">Carregando calendário de campanhas...</p>
         </div>
       </div>
     )
   }
 
-  // 🔥 Se não for admin nem gerente, mostrar acesso negado
-  if (!isAdmin && !isGerente) {
+  if (!isAdmin && !isGerente && !isRegional) {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
@@ -838,12 +857,22 @@ export default function Campanhas() {
               </h1>
               <p className="text-pink-100 text-sm mt-1">
                 {lojas.length} lojas cadastradas • {campanhas.length} campanhas no período
+                {isRegional && userLojaId && (
+                  <span className="ml-2 text-white/70 text-xs">
+                    (Filtrado para sua região)
+                  </span>
+                )}
+                {isGerente && !isAdmin && userLojaId && (
+                  <span className="ml-2 text-white/70 text-xs">
+                    (Sua loja)
+                  </span>
+                )}
               </p>
             </div>
             
             <div className="flex gap-2">
-              {/* 🔥 Botão de filtro - admin vê tudo, gerente só vê se tiver mais de uma loja */}
-              {(isAdmin || lojas.length > 1) && (
+              {/* 🔥 Botão de filtro - admin vê tudo, gerente/regional vê se tiver mais de uma loja */}
+              {(isAdmin || (isGerente && lojas.length > 1) || (isRegional && lojas.length > 1)) && (
                 <Button 
                   variant="secondary" 
                   size="sm" 
@@ -931,6 +960,11 @@ export default function Campanhas() {
                 {lojasSelecionadas.length} loja(s) selecionada(s)
               </Badge>
             </div>
+          )}
+          {isRegional && userLojaId && (
+            <Badge variant="outline" className="text-xs text-pink-600 border-pink-200">
+              🌎 Filtrado por região
+            </Badge>
           )}
           <div className="flex items-center gap-2 ml-auto text-gray-500 text-xs">
             <span>Exibindo: {lojasFiltradas.length} de {lojas.length} lojas</span>
@@ -1028,7 +1062,9 @@ export default function Campanhas() {
                 <div className="text-center py-20 text-gray-500">
                   <Store className="h-12 w-12 mx-auto mb-3 text-gray-300" />
                   <p>Nenhuma loja encontrada</p>
-                  <p className="text-sm">Tente ajustar os filtros ou a busca</p>
+                  <p className="text-sm">
+                    {isRegional ? 'Você não tem lojas vinculadas à sua região.' : 'Tente ajustar os filtros ou a busca'}
+                  </p>
                 </div>
               )}
             </div>
@@ -1138,121 +1174,38 @@ export default function Campanhas() {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Nome da Campanha <span className="text-red-500">*</span></Label>
+                    <Label>Data Início <span className="text-red-500">*</span></Label>
                     <Input
-                      value={editandoCampanha.nome}
-                      onChange={(e) => setEditandoCampanha({ ...editandoCampanha, nome: e.target.value })}
-                      placeholder="Ex: Promoção de Verão"
+                      type="date"
+                      value={editandoCampanha.data_inicio}
+                      onChange={(e) => setEditandoCampanha({ ...editandoCampanha, data_inicio: e.target.value })}
                     />
                   </div>
-
                   <div className="space-y-2">
-                    <Label>Lojas <span className="text-red-500">*</span></Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-full justify-between">
-                          {selectedLojasEdit.length === 0 ? "Selecione as lojas..." : `${selectedLojasEdit.length} loja(s) selecionada(s)`}
-                          <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[400px] p-0" align="start">
-                        <div className="p-2 border-b">
-                          <Input placeholder="Buscar loja..." className="h-8" />
-                        </div>
-                        <div className="max-h-[300px] overflow-y-auto p-2">
-                          {lojas.map((loja) => (
-                            <div
-                              key={loja.id}
-                              className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
-                              onClick={() => {
-                                setSelectedLojasEdit(prev =>
-                                  prev.includes(loja.id)
-                                    ? prev.filter(id => id !== loja.id)
-                                    : [...prev, loja.id]
-                                )
-                              }}
-                            >
-                              <Checkbox checked={selectedLojasEdit.includes(loja.id)} />
-                              <Label className="cursor-pointer flex-1">
-                                {loja.codigo} - {loja.nome_loja}
-                              </Label>
-                            </div>
-                          ))}
-                        </div>
-                      </PopoverContent>
-                    </Popover>
+                    <Label>Data Fim <span className="text-red-500">*</span></Label>
+                    <Input
+                      type="date"
+                      value={editandoCampanha.data_fim}
+                      onChange={(e) => setEditandoCampanha({ ...editandoCampanha, data_fim: e.target.value })}
+                    />
                   </div>
+                </div>
 
-                  <div className="space-y-2">
-                    <Label>Promotores <span className="text-gray-400 text-xs">(opcional)</span></Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-full justify-between">
-                          {selectedPromotoresEdit.length === 0 ? "Nenhum promotor selecionado" : `${selectedPromotoresEdit.length} promotor(es) selecionado(s)`}
-                          <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-[400px] p-0" align="start">
-                        <div className="p-2 border-b">
-                          <Input placeholder="Buscar promotor..." className="h-8" />
-                        </div>
-                        <div className="max-h-[300px] overflow-y-auto p-2">
-                          {promotores.map((promotor) => (
-                            <div
-                              key={promotor.id}
-                              className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
-                              onClick={() => {
-                                setSelectedPromotoresEdit(prev =>
-                                  prev.includes(promotor.id)
-                                    ? prev.filter(id => id !== promotor.id)
-                                    : [...prev, promotor.id]
-                                )
-                              }}
-                            >
-                              <Checkbox checked={selectedPromotoresEdit.includes(promotor.id)} />
-                              <Label className="cursor-pointer flex-1">{promotor.promotor_nome}</Label>
-                            </div>
-                          ))}
-                        </div>
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Data Início <span className="text-red-500">*</span></Label>
-                      <Input
-                        type="date"
-                        value={editandoCampanha.data_inicio}
-                        onChange={(e) => setEditandoCampanha({ ...editandoCampanha, data_inicio: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Data Fim <span className="text-red-500">*</span></Label>
-                      <Input
-                        type="date"
-                        value={editandoCampanha.data_fim}
-                        onChange={(e) => setEditandoCampanha({ ...editandoCampanha, data_fim: e.target.value })}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Status</Label>
-                    <Select 
-                      value={editandoCampanha.status} 
-                      onValueChange={(value) => setEditandoCampanha({ ...editandoCampanha, status: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="pendente">⏳ Pendente</SelectItem>
-                        <SelectItem value="ativa">⚡ Ativa</SelectItem>
-                        <SelectItem value="concluida">✅ Concluída</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <Select 
+                    value={editandoCampanha.status} 
+                    onValueChange={(value) => setEditandoCampanha({ ...editandoCampanha, status: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pendente">⏳ Pendente</SelectItem>
+                      <SelectItem value="ativa">⚡ Ativa</SelectItem>
+                      <SelectItem value="concluida">✅ Concluída</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             )}
