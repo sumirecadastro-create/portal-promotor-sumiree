@@ -1,59 +1,38 @@
 import { useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { supabase } from '@/lib/supabase'
 
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const location = useLocation()
-  const from = location.state?.from?.pathname || '/'
+  const [error, setError] = useState('')
+  const navigate = useNavigate()
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
+    setError('')
 
     try {
-      // 🔥 Usando fetch direto em vez do supabase.auth
-      const supabaseUrl = 'https://yfyxpgksrpnzndjtlobe.supabase.co'
-      const supabaseKey = 'sb_publishable_zc64H0edWIVvHxmdZG8Myg_aw-3tP78'
-      
-      const response = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': supabaseKey
-        },
-        body: JSON.stringify({ email, password })
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
       })
+
+      if (error) throw error
+
+      console.log('✅ Login OK!', data.user)
       
-      const data = await response.json()
+      // O Supabase já salva a sessão automaticamente!
+      navigate('/')
       
-      if (data.error) {
-        throw new Error(data.error_description || 'Erro no login')
-      }
-      
-      if (data.access_token) {
-        // Salvar sessão manualmente no localStorage
-        const storageKey = `sb-${supabaseUrl.split('//')[1].split('.')[0]}-auth-token`
-        localStorage.setItem(storageKey, JSON.stringify({
-          access_token: data.access_token,
-          refresh_token: data.refresh_token,
-          user: data.user
-        }))
-        
-        console.log('✅ Login realizado com sucesso!')
-        
-        // Força recarregamento completo do navegador
-        window.location.href = from
-      } else {
-        throw new Error('Resposta inválida do servidor')
-      }
     } catch (error: any) {
-      console.error('Erro detalhado:', error)
-      alert(error.message || 'Erro ao fazer login. Verifique suas credenciais.')
+      console.error('❌ Erro:', error)
+      setError(error.message || 'Erro ao fazer login')
     } finally {
       setIsLoading(false)
     }
@@ -67,12 +46,17 @@ export default function Login() {
             <img src="/logo_sumire.png" alt="Sumirê" className="h-16 w-auto" />
           </div>
           <CardTitle className="text-2xl" style={{ color: '#FF1686' }}>
-            Portal Promotor Sumirê
+            Portal Sumirê
           </CardTitle>
           <CardDescription>Acesse sua conta para continuar</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
+            {error && (
+              <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm">
+                {error}
+              </div>
+            )}
             <Input
               type="email"
               placeholder="Email"
