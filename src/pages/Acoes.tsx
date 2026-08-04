@@ -479,6 +479,7 @@ export default function Acoes() {
     setLojasPopoverOpen(false)
   }
 
+  // 🔥 Buscar lojas com filtro por permissão (REGIONAL, GERENTE ou ADMIN)
   async function carregarLojas() {
     try {
       let query = supabase
@@ -486,7 +487,23 @@ export default function Acoes() {
         .select('*')
         .order('nome_loja', { ascending: true })
       
-      if (isGerente && !isAdmin && userLojaId) {
+      // 🔥 SE FOR REGIONAL: filtrar apenas as lojas que ele gerencia
+      if (isRegional && userLojaId) {
+        const { data: lojasData } = await supabase
+          .from('gerentes_regionais_lojas')
+          .select('loja_id')
+          .eq('gerente_regional_id', userLojaId)
+        
+        const lojaIds = lojasData?.map(l => l.loja_id) || []
+        if (lojaIds.length > 0) {
+          query = query.in('id', lojaIds)
+        } else {
+          setLojas([])
+          return
+        }
+      }
+      // Se for gerente (não admin), filtrar apenas a loja dele
+      else if (isGerente && !isAdmin && userLojaId) {
         query = query.eq('id', userLojaId)
       }
       
@@ -502,6 +519,7 @@ export default function Acoes() {
       
       setLojas(lojasFormatadas)
       
+      // Se for gerente e tem apenas uma loja, auto-selecionar
       if (isGerente && !isAdmin && userLojaId && lojasFormatadas.length === 1) {
         setLojasSelecionadas([userLojaId])
       }
@@ -511,14 +529,26 @@ export default function Acoes() {
     }
   }
 
+  // 🔥 Buscar ações com filtro por permissão (REGIONAL, GERENTE ou ADMIN)
   async function carregarAcoes() {
     try {
       const startDate = getFirstDayOfMonth(ano, mes)
       const endDate = getLastDayOfMonth(ano, mes)
       
+      // 🔥 Buscar IDs das lojas permitidas
       let lojasPermitidasIds: string[] = []
       
-      if (isGerente && !isAdmin) {
+      // SE FOR REGIONAL: buscar lojas vinculadas
+      if (isRegional && userLojaId) {
+        const { data: lojasData } = await supabase
+          .from('gerentes_regionais_lojas')
+          .select('loja_id')
+          .eq('gerente_regional_id', userLojaId)
+        
+        lojasPermitidasIds = lojasData?.map(l => l.loja_id) || []
+      }
+      // SE FOR GERENTE: usar a loja dele
+      else if (isGerente && !isAdmin) {
         if (userLojaId) {
           lojasPermitidasIds = [userLojaId]
         } else {
@@ -554,7 +584,8 @@ export default function Acoes() {
         if (relacoes && relacoes.length > 0) {
           let lojaIds = relacoes.map(r => r.loja_id)
           
-          if (isGerente && !isAdmin && lojasPermitidasIds.length > 0) {
+          // 🔥 Se for regional ou gerente, filtrar apenas lojas permitidas
+          if ((isRegional || isGerente) && !isAdmin && lojasPermitidasIds.length > 0) {
             lojaIds = lojaIds.filter(id => lojasPermitidasIds.includes(id))
           }
           
@@ -597,7 +628,7 @@ export default function Acoes() {
       }
     }
     init()
-  }, [mesAtual, filtroStatus, filtroTipo, authLoading, isGerente, isAdmin, userLojaId])
+  }, [mesAtual, filtroStatus, filtroTipo, authLoading, isGerente, isAdmin, isRegional, userLojaId])
 
   const lojasFiltradas = lojas.filter(loja => {
     const matchNome = loja.nome_loja.toLowerCase().includes(lojaFiltroNome.toLowerCase()) ||
@@ -843,6 +874,16 @@ export default function Acoes() {
               </h1>
               <p className="text-pink-100 text-sm mt-1">
                 {lojas.length} lojas cadastradas • {acoes.length} ações no período
+                {isRegional && userLojaId && (
+                  <span className="ml-2 text-white/70 text-xs">
+                    (Filtrado para sua região)
+                  </span>
+                )}
+                {isGerente && !isAdmin && userLojaId && (
+                  <span className="ml-2 text-white/70 text-xs">
+                    (Sua loja)
+                  </span>
+                )}
               </p>
             </div>
             <div className="flex gap-2">
@@ -929,6 +970,11 @@ export default function Acoes() {
           {lojasSelecionadas.length > 0 && (
             <Badge variant="outline" className="text-xs">
               {lojasSelecionadas.length} loja(s) selecionada(s)
+            </Badge>
+          )}
+          {isRegional && userLojaId && (
+            <Badge variant="outline" className="text-xs text-pink-600 border-pink-200">
+              🌎 Filtrado por região
             </Badge>
           )}
           <div className="flex items-center gap-2 ml-auto text-gray-500 text-xs">
@@ -1041,7 +1087,9 @@ export default function Acoes() {
                 <div className="text-center py-20 text-gray-500">
                   <Store className="h-12 w-12 mx-auto mb-3 text-gray-300" />
                   <p>Nenhuma loja encontrada</p>
-                  <p className="text-sm">Tente ajustar os filtros ou a busca</p>
+                  <p className="text-sm">
+                    {isRegional ? 'Você não tem lojas vinculadas à sua região.' : 'Tente ajustar os filtros ou a busca'}
+                  </p>
                 </div>
               )}
             </div>
