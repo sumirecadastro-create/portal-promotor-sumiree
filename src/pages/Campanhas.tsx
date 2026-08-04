@@ -276,7 +276,6 @@ function CampanhaTooltip({ campanha, children }: { campanha: Campanha; children:
 }
 
 export default function Campanhas() {
-  // 🔥 Autenticação - ADICIONADO isRegional
   const { isAdmin, isGerente, isRegional, userLojaId, loading: authLoading } = useAuth()
   
   // Estados principais
@@ -371,7 +370,7 @@ export default function Campanhas() {
     setPromotoresPopoverOpen(false)
   }
 
-  // 🔥 Buscar lojas do Supabase com filtro por permissão do gerente
+  // 🔥 Buscar lojas com filtro por permissão (REGIONAL, GERENTE ou ADMIN)
   async function carregarLojas() {
     try {
       let query = supabase
@@ -379,8 +378,23 @@ export default function Campanhas() {
         .select('*')
         .order('nome_loja', { ascending: true })
       
+      // 🔥 SE FOR REGIONAL: filtrar apenas as lojas que ele gerencia
+      if (isRegional && userLojaId) {
+        const { data: lojasData } = await supabase
+          .from('gerentes_regionais_lojas')
+          .select('loja_id')
+          .eq('gerente_regional_id', userLojaId)
+        
+        const lojaIds = lojasData?.map(l => l.loja_id) || []
+        if (lojaIds.length > 0) {
+          query = query.in('id', lojaIds)
+        } else {
+          setLojas([])
+          return
+        }
+      }
       // Se for gerente (não admin), filtrar apenas a loja dele
-      if (isGerente && !isAdmin && userLojaId) {
+      else if (isGerente && !isAdmin && userLojaId) {
         query = query.eq('id', userLojaId)
       }
       
@@ -422,24 +436,31 @@ export default function Campanhas() {
     }
   }
 
-  // 🔥 Buscar campanhas do Supabase com filtro por permissão do gerente
+  // 🔥 Buscar campanhas com filtro por permissão (REGIONAL, GERENTE ou ADMIN)
   async function carregarCampanhas() {
     try {
       const startDate = `${ano}-${String(mes + 1).padStart(2, '0')}-01`
       const lastDay = new Date(ano, mes + 1, 0).getDate()
       const endDate = `${ano}-${String(mes + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
       
-      // Buscar IDs das lojas permitidas para o gerente
+      // 🔥 Buscar IDs das lojas permitidas
       let lojasPermitidasIds: string[] = []
       
-      if (isGerente && !isAdmin) {
+      // SE FOR REGIONAL: buscar lojas vinculadas
+      if (isRegional && userLojaId) {
+        const { data: lojasData } = await supabase
+          .from('gerentes_regionais_lojas')
+          .select('loja_id')
+          .eq('gerente_regional_id', userLojaId)
+        
+        lojasPermitidasIds = lojasData?.map(l => l.loja_id) || []
+      }
+      // SE FOR GERENTE: usar a loja dele
+      else if (isGerente && !isAdmin) {
         if (userLojaId) {
           lojasPermitidasIds = [userLojaId]
         } else {
-          // Gerente sem loja específica - buscar todas as lojas
-          const { data: lojasData } = await supabase
-            .from('lojas')
-            .select('id')
+          const { data: lojasData } = await supabase.from('lojas').select('id')
           lojasPermitidasIds = lojasData?.map(l => l.id) || []
         }
       }
@@ -472,8 +493,8 @@ export default function Campanhas() {
         .select('campanha_id, loja_id')
         .in('campanha_id', campanhaIds)
       
-      // Se for gerente, filtrar apenas as lojas permitidas
-      if (isGerente && !isAdmin && lojasPermitidasIds.length > 0) {
+      // Se for regional ou gerente, filtrar apenas as lojas permitidas
+      if ((isRegional || isGerente) && !isAdmin && lojasPermitidasIds.length > 0) {
         lojasRelQuery = lojasRelQuery.in('loja_id', lojasPermitidasIds)
       }
       
@@ -562,7 +583,7 @@ export default function Campanhas() {
     if (!authLoading) {
       carregarDados()
     }
-  }, [mesAtual, filtroStatus, authLoading, isGerente, isAdmin, userLojaId])
+  }, [mesAtual, filtroStatus, authLoading, isGerente, isAdmin, isRegional, userLojaId])
 
   const lojasFiltradas = lojas.filter(loja => {
     const matchNome = loja.nome_loja.toLowerCase().includes(lojaFiltroNome.toLowerCase()) ||
@@ -800,7 +821,6 @@ export default function Campanhas() {
   const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
   const filtrosAtivos = (filtroStatus !== 'todos' ? 1 : 0) + (lojasSelecionadas.length > 0 ? 1 : 0)
 
-  // 🔥 VERIFICAÇÃO DE CARREGAMENTO
   if (authLoading || loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -812,7 +832,6 @@ export default function Campanhas() {
     )
   }
 
-  // ✅ CORRIGIDO: PERMISSÃO PARA ADMIN, GERENTE E REGIONAL
   if (!isAdmin && !isGerente && !isRegional) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -838,11 +857,21 @@ export default function Campanhas() {
               </h1>
               <p className="text-pink-100 text-sm mt-1">
                 {lojas.length} lojas cadastradas • {campanhas.length} campanhas no período
+                {isRegional && userLojaId && (
+                  <span className="ml-2 text-white/70 text-xs">
+                    (Filtrado para sua região)
+                  </span>
+                )}
+                {isGerente && !isAdmin && userLojaId && (
+                  <span className="ml-2 text-white/70 text-xs">
+                    (Sua loja)
+                  </span>
+                )}
               </p>
             </div>
             
             <div className="flex gap-2">
-              {/* 🔥 Botão de filtro */}
+              {/* 🔥 Botão de filtro - admin vê tudo, gerente/regional vê se tiver mais de uma loja */}
               {(isAdmin || (isGerente && lojas.length > 1) || (isRegional && lojas.length > 1)) && (
                 <Button 
                   variant="secondary" 
@@ -877,7 +906,555 @@ export default function Campanhas() {
           </div>
         </div>
 
-        {/* ... resto do código igual ... */}
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => mudarMes(-1)}>
+              <ChevronLeft className="h-4 w-4" />
+              Mês anterior
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => mudarMes(1)}>
+              Próximo mês
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+          <h2 className="text-xl font-bold text-gray-800">
+            {mesAtual.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })}
+          </h2>
+          <div className="w-64">
+            <Input
+              placeholder="🔍 Buscar loja por nome..."
+              value={lojaFiltroNome}
+              onChange={(e) => setLojaFiltroNome(e.target.value)}
+              className="border-gray-300 focus:border-pink-500 focus:ring-pink-500"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-4 text-sm bg-gray-50 p-3 rounded-lg">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full" style={{ background: PRIMARY_COLOR }}></div>
+            <span>Campanha Ativa</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-amber-500 rounded-full"></div>
+            <span>Pendente</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
+            <span>Concluída</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-3 bg-yellow-100 border border-yellow-300 rounded"></div>
+            <span>Hoje</span>
+          </div>
+          {filtroStatus !== 'todos' && (
+            <div className="flex items-center gap-2 ml-4">
+              <Badge variant="outline" className="text-xs">
+                Status: {filtroStatus === 'ativa' ? 'Ativa' : filtroStatus === 'pendente' ? 'Pendente' : 'Concluída'}
+              </Badge>
+            </div>
+          )}
+          {lojasSelecionadas.length > 0 && (
+            <div className="flex items-center gap-2 ml-4">
+              <Badge variant="outline" className="text-xs">
+                {lojasSelecionadas.length} loja(s) selecionada(s)
+              </Badge>
+            </div>
+          )}
+          {isRegional && userLojaId && (
+            <Badge variant="outline" className="text-xs text-pink-600 border-pink-200">
+              🌎 Filtrado por região
+            </Badge>
+          )}
+          <div className="flex items-center gap-2 ml-auto text-gray-500 text-xs">
+            <span>Exibindo: {lojasFiltradas.length} de {lojas.length} lojas</span>
+          </div>
+        </div>
+
+        <Card className="overflow-hidden shadow-lg border-0">
+          <CardContent className="p-0 overflow-x-auto">
+            <div className="min-w-[1200px]">
+              <div className="grid border-b sticky top-0 z-20" 
+                style={{ gridTemplateColumns: `250px repeat(${dias.length}, 70px)` }}>
+                <div className="p-3 font-bold text-gray-700 sticky left-0 z-10 border-r" style={{ background: '#f9fafb' }}>
+                  <div className="flex items-center gap-2">
+                    <Store className="h-4 w-4" style={{ color: PRIMARY_COLOR }} />
+                    Loja / Dia
+                  </div>
+                </div>
+                {dias.map((dia) => {
+                  const data = new Date(ano, mes, dia)
+                  const nomeDia = diasSemana[data.getDay()]
+                  const isDiaHoje = isHoje(dia)
+                  return (
+                    <div key={dia} className={cn(
+                      "p-2 text-center font-semibold border-r",
+                      isDiaHoje && "bg-yellow-50"
+                    )}>
+                      <div className="text-lg font-bold">{dia}</div>
+                      <div className="text-xs text-gray-500">{nomeDia}</div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {lojasFiltradas.map((loja) => (
+                <div key={loja.id} className="grid border-b hover:bg-gray-50 transition-colors"
+                  style={{ gridTemplateColumns: `250px repeat(${dias.length}, 70px)` }}>
+                  
+                  <div className="p-3 font-medium sticky left-0 bg-white z-10 border-r">
+                    <div className="font-bold text-gray-800">
+                      {loja.codigo || loja.id.substring(0, 6)}
+                    </div>
+                    <div className="text-xs text-gray-500 truncate" title={loja.nome_loja}>
+                      {loja.nome_loja}
+                    </div>
+                  </div>
+
+                  {dias.map((dia) => {
+                    const campanhasDoDia = getCampanhasDoDia(loja.id, dia)
+                    const isDiaHoje = isHoje(dia)
+                    
+                    return (
+                      <div key={dia} className={cn(
+                        "p-1 border-r min-h-[80px] align-top",
+                        isDiaHoje && "bg-yellow-50"
+                      )}>
+                        {campanhasDoDia.length > 0 ? (
+                          <div className="space-y-1">
+                            {campanhasDoDia.map((campanha) => (
+                              <CampanhaTooltip key={campanha.id} campanha={campanha}>
+                                <div 
+                                  className="p-1 rounded-md text-xs cursor-pointer transition-all hover:scale-105 relative group"
+                                  style={{ 
+                                    background: campanha.status === 'ativa' ? `${PRIMARY_COLOR}20` : 
+                                               campanha.status === 'pendente' ? '#fef3c7' : '#dbeafe',
+                                    borderLeft: `2px solid ${campanha.status === 'ativa' ? PRIMARY_COLOR : 
+                                                          campanha.status === 'pendente' ? '#f59e0b' : '#3b82f6'}`
+                                  }}
+                                  onClick={() => abrirDetalhes(campanha)}
+                                >
+                                  <div className="font-semibold truncate flex items-center justify-between pr-4">
+                                    <span>{campanha.nome}</span>
+                                    <Info className="h-2.5 w-2.5 opacity-50" />
+                                  </div>
+                                  {campanha.promotores && campanha.promotores.length > 0 && (
+                                    <div className="text-[10px] text-gray-500 truncate">
+                                      {campanha.promotores.map(p => p.promotor_nome.split(' ')[0]).join(', ')}
+                                    </div>
+                                  )}
+                                </div>
+                              </CampanhaTooltip>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="text-center text-gray-300 text-xs h-full flex items-center justify-center">
+                            —
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              ))}
+
+              {lojasFiltradas.length === 0 && (
+                <div className="text-center py-20 text-gray-500">
+                  <Store className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                  <p>Nenhuma loja encontrada</p>
+                  <p className="text-sm">
+                    {isRegional ? 'Você não tem lojas vinculadas à sua região.' : 'Tente ajustar os filtros ou a busca'}
+                  </p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <DetalhesCampanha 
+          campanha={campanhaSelecionada}
+          open={showDetalhesModal}
+          onOpenChange={setShowDetalhesModal}
+          onEditar={abrirEdicao}
+          isAdmin={isAdmin}
+        />
+
+        {/* Modal de Edição de Campanha - apenas admin */}
+        <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+          <DialogContent className="sm:max-w-[550px]">
+            <DialogHeader>
+              <DialogTitle>Editar Campanha</DialogTitle>
+              <DialogDescription>
+                Altere os dados da campanha. <span className="text-red-500">*</span> Campos obrigatórios.
+              </DialogDescription>
+            </DialogHeader>
+            
+            {editandoCampanha && isAdmin && (
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Nome da Campanha <span className="text-red-500">*</span></Label>
+                  <Input
+                    value={editandoCampanha.nome}
+                    onChange={(e) => setEditandoCampanha({ ...editandoCampanha, nome: e.target.value })}
+                    placeholder="Ex: Promoção de Verão"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Lojas <span className="text-red-500">*</span></Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-between">
+                        {selectedLojasEdit.length === 0 ? "Selecione as lojas..." : `${selectedLojasEdit.length} loja(s) selecionada(s)`}
+                        <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[400px] p-0" align="start">
+                      <div className="p-2 border-b">
+                        <Input placeholder="Buscar loja..." className="h-8" />
+                      </div>
+                      <div className="max-h-[300px] overflow-y-auto p-2">
+                        {lojas.map((loja) => (
+                          <div
+                            key={loja.id}
+                            className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
+                            onClick={() => {
+                              setSelectedLojasEdit(prev =>
+                                prev.includes(loja.id)
+                                  ? prev.filter(id => id !== loja.id)
+                                  : [...prev, loja.id]
+                              )
+                            }}
+                          >
+                            <Checkbox checked={selectedLojasEdit.includes(loja.id)} />
+                            <Label className="cursor-pointer flex-1">
+                              {loja.codigo} - {loja.nome_loja}
+                            </Label>
+                          </div>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Promotores <span className="text-gray-400 text-xs">(opcional)</span></Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-between">
+                        {selectedPromotoresEdit.length === 0 ? "Nenhum promotor selecionado" : `${selectedPromotoresEdit.length} promotor(es) selecionado(s)`}
+                        <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[400px] p-0" align="start">
+                      <div className="p-2 border-b">
+                        <Input placeholder="Buscar promotor..." className="h-8" />
+                      </div>
+                      <div className="max-h-[300px] overflow-y-auto p-2">
+                        {promotores.map((promotor) => (
+                          <div
+                            key={promotor.id}
+                            className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
+                            onClick={() => {
+                              setSelectedPromotoresEdit(prev =>
+                                prev.includes(promotor.id)
+                                  ? prev.filter(id => id !== promotor.id)
+                                  : [...prev, promotor.id]
+                              )
+                            }}
+                          >
+                            <Checkbox checked={selectedPromotoresEdit.includes(promotor.id)} />
+                            <Label className="cursor-pointer flex-1">{promotor.promotor_nome}</Label>
+                          </div>
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Data Início <span className="text-red-500">*</span></Label>
+                    <Input
+                      type="date"
+                      value={editandoCampanha.data_inicio}
+                      onChange={(e) => setEditandoCampanha({ ...editandoCampanha, data_inicio: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Data Fim <span className="text-red-500">*</span></Label>
+                    <Input
+                      type="date"
+                      value={editandoCampanha.data_fim}
+                      onChange={(e) => setEditandoCampanha({ ...editandoCampanha, data_fim: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <Select 
+                    value={editandoCampanha.status} 
+                    onValueChange={(value) => setEditandoCampanha({ ...editandoCampanha, status: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pendente">⏳ Pendente</SelectItem>
+                      <SelectItem value="ativa">⚡ Ativa</SelectItem>
+                      <SelectItem value="concluida">✅ Concluída</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+            
+            <DialogFooter>
+              {editandoCampanha && isAdmin && (
+                <Button 
+                  variant="destructive" 
+                  onClick={() => excluirCampanha(editandoCampanha.id, editandoCampanha.nome)}
+                  className="mr-auto"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Excluir
+                </Button>
+              )}
+              <Button variant="outline" onClick={() => setShowEditModal(false)}>
+                Cancelar
+              </Button>
+              {isAdmin && (
+                <Button onClick={atualizarCampanha} disabled={salvando} style={{ background: PRIMARY_COLOR }}>
+                  {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                  Salvar alterações
+                </Button>
+              )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de Filtro */}
+        <Dialog open={showFilterModal} onOpenChange={setShowFilterModal}>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader>
+              <DialogTitle>Filtrar Campanhas</DialogTitle>
+              <DialogDescription>
+                Selecione as lojas e status que deseja visualizar.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-6 py-4">
+              <div className="space-y-2">
+                <Label>Status da Campanha</Label>
+                <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Todos os status</SelectItem>
+                    <SelectItem value="ativa">Ativa</SelectItem>
+                    <SelectItem value="pendente">Pendente</SelectItem>
+                    <SelectItem value="concluida">Concluída</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label>Lojas para exibir</Label>
+                  {isAdmin && (
+                    <Button variant="ghost" size="sm" onClick={selecionarTodasLojas} className="text-xs">
+                      {lojasSelecionadas.length === lojas.length ? 'Desmarcar todas' : 'Selecionar todas'}
+                    </Button>
+                  )}
+                </div>
+                
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" role="combobox" className="w-full justify-between">
+                      {lojasSelecionadas.length === 0 ? "Todas as lojas" : `${lojasSelecionadas.length} loja(s) selecionada(s)`}
+                      <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[400px] p-0">
+                    <Command>
+                      <CommandInput placeholder="Buscar loja..." />
+                      <CommandList>
+                        <CommandEmpty>Nenhuma loja encontrada.</CommandEmpty>
+                        <CommandGroup>
+                          {lojas.map((loja) => (
+                            <CommandItem key={loja.id} value={loja.id} onSelect={() => toggleLojaSelecionada(loja.id)}>
+                              <Check className={cn("mr-2 h-4 w-4", lojasSelecionadas.includes(loja.id) ? "opacity-100" : "opacity-0")} />
+                              {loja.codigo} - {loja.nome_loja}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => { setFiltroStatus('todos'); setLojasSelecionadas([]); }}>
+                Limpar todos os filtros
+              </Button>
+              <Button onClick={() => setShowFilterModal(false)} style={{ background: PRIMARY_COLOR }}>
+                Aplicar filtros
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de Nova Campanha - apenas admin */}
+        {isAdmin && (
+          <Dialog open={showNovaCampanhaModal} onOpenChange={setShowNovaCampanhaModal}>
+            <DialogContent className="sm:max-w-[550px]">
+              <DialogHeader>
+                <DialogTitle>Criar Nova Campanha</DialogTitle>
+                <DialogDescription>
+                  Preencha os dados da campanha. <span className="text-red-500">*</span> Campos obrigatórios.
+                  Promotores são opcionais.
+                </DialogDescription>
+              </DialogHeader>
+              
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label>Nome da Campanha <span className="text-red-500">*</span></Label>
+                  <Input
+                    value={novaCampanha.nome}
+                    onChange={(e) => setNovaCampanha({ ...novaCampanha, nome: e.target.value })}
+                    placeholder="Ex: Promoção de Verão"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Lojas <span className="text-red-500">*</span></Label>
+                  <Popover open={lojasPopoverOpen} onOpenChange={setLojasPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-between h-auto min-h-[40px]" onClick={abrirSelecionarLojas}>
+                        <div className="flex flex-wrap gap-1">
+                          {novaCampanha.loja_ids.length === 0 ? (
+                            <span className="text-muted-foreground">Selecione as lojas...</span>
+                          ) : (
+                            <>
+                              <Badge variant="secondary" className="text-xs">📦 {novaCampanha.loja_ids.length} loja(s)</Badge>
+                              {novaCampanha.loja_ids.slice(0, 3).map(lojaId => {
+                                const loja = lojas.find(l => l.id === lojaId)
+                                return loja ? <Badge key={lojaId} variant="outline" className="text-xs">{loja.codigo}</Badge> : null
+                              })}
+                              {novaCampanha.loja_ids.length > 3 && <Badge variant="outline" className="text-xs">+{novaCampanha.loja_ids.length - 3}</Badge>}
+                            </>
+                          )}
+                        </div>
+                        <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[400px] p-0" align="start">
+                      <div className="p-2 border-b">
+                        <Input placeholder="🔍 Buscar loja..." value={buscaLojasTemp} onChange={(e) => setBuscaLojasTemp(e.target.value)} className="h-8" />
+                      </div>
+                      <div className="max-h-[300px] overflow-y-auto p-2">
+                        <div className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer border-b pb-2 mb-1">
+                          <Checkbox checked={lojasSelecionadasTemp.length === lojas.length} onCheckedChange={() => {
+                            if (lojasSelecionadasTemp.length === lojas.length) setLojasSelecionadasTemp([])
+                            else setLojasSelecionadasTemp(lojas.map(l => l.id))
+                          }} />
+                          <Label className="cursor-pointer font-semibold flex-1">Selecionar todas ({lojas.length})</Label>
+                        </div>
+                        {lojas.filter(loja => loja.nome_loja.toLowerCase().includes(buscaLojasTemp.toLowerCase()) || (loja.codigo && loja.codigo.toLowerCase().includes(buscaLojasTemp.toLowerCase()))).map((loja) => (
+                          <div key={loja.id} className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer" onClick={() => setLojasSelecionadasTemp(prev => prev.includes(loja.id) ? prev.filter(id => id !== loja.id) : [...prev, loja.id])}>
+                            <Checkbox checked={lojasSelecionadasTemp.includes(loja.id)} />
+                            <Label className="cursor-pointer flex-1">{loja.codigo} - {loja.nome_loja}</Label>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="p-2 border-t flex justify-between">
+                        <Button variant="ghost" size="sm" onClick={() => setLojasSelecionadasTemp([])}>Limpar tudo</Button>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" onClick={cancelarSelecaoLojas}>Cancelar</Button>
+                          <Button size="sm" onClick={aplicarSelecaoLojas} style={{ background: PRIMARY_COLOR }}>Aplicar ({lojasSelecionadasTemp.length})</Button>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Promotores <span className="text-gray-400 text-xs">(opcional)</span></Label>
+                  <Popover open={promotoresPopoverOpen} onOpenChange={setPromotoresPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" className="w-full justify-between h-auto min-h-[40px]" onClick={abrirSelecionarPromotores}>
+                        <div className="flex flex-wrap gap-1">
+                          {novaCampanha.promotor_ids.length === 0 ? <span className="text-muted-foreground">Nenhum promotor selecionado</span> : <Badge variant="secondary" className="text-xs">👤 {novaCampanha.promotor_ids.length} promotor(es)</Badge>}
+                        </div>
+                        <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-[400px] p-0" align="start">
+                      <div className="p-2 border-b">
+                        <Input placeholder="🔍 Buscar promotor..." value={buscaPromotoresTemp} onChange={(e) => setBuscaPromotoresTemp(e.target.value)} className="h-8" />
+                      </div>
+                      <div className="max-h-[300px] overflow-y-auto p-2">
+                        <div className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer border-b pb-2 mb-1">
+                          <Checkbox checked={promotoresSelecionadosTemp.length === promotores.length} onCheckedChange={() => {
+                            if (promotoresSelecionadosTemp.length === promotores.length) setPromotoresSelecionadosTemp([])
+                            else setPromotoresSelecionadosTemp(promotores.map(p => p.id))
+                          }} />
+                          <Label className="cursor-pointer font-semibold flex-1">Selecionar todos ({promotores.length})</Label>
+                        </div>
+                        {promotores.filter(p => p.promotor_nome.toLowerCase().includes(buscaPromotoresTemp.toLowerCase())).map((promotor) => (
+                          <div key={promotor.id} className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer" onClick={() => setPromotoresSelecionadosTemp(prev => prev.includes(promotor.id) ? prev.filter(id => id !== promotor.id) : [...prev, promotor.id])}>
+                            <Checkbox checked={promotoresSelecionadosTemp.includes(promotor.id)} />
+                            <Label className="cursor-pointer flex-1">{promotor.promotor_nome}</Label>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="p-2 border-t flex justify-between">
+                        <Button variant="ghost" size="sm" onClick={() => setPromotoresSelecionadosTemp([])}>Limpar tudo</Button>
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" onClick={cancelarSelecaoPromotores}>Cancelar</Button>
+                          <Button size="sm" onClick={aplicarSelecaoPromotores} style={{ background: PRIMARY_COLOR }}>Aplicar ({promotoresSelecionadosTemp.length})</Button>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Data Início <span className="text-red-500">*</span></Label>
+                    <Input type="date" value={novaCampanha.data_inicio} onChange={(e) => setNovaCampanha({ ...novaCampanha, data_inicio: e.target.value })} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Data Fim <span className="text-red-500">*</span></Label>
+                    <Input type="date" value={novaCampanha.data_fim} onChange={(e) => setNovaCampanha({ ...novaCampanha, data_fim: e.target.value })} />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <Select value={novaCampanha.status} onValueChange={(value: any) => setNovaCampanha({ ...novaCampanha, status: value })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pendente">⏳ Pendente</SelectItem>
+                      <SelectItem value="ativa">⚡ Ativa</SelectItem>
+                      <SelectItem value="concluida">✅ Concluída</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowNovaCampanhaModal(false)}>Cancelar</Button>
+                <Button onClick={criarNovaCampanha} disabled={salvando} style={{ background: PRIMARY_COLOR }}>
+                  {salvando ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+                  Salvar campanha
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        )}
       </div>
     </TooltipProvider>
   )
