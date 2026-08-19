@@ -245,101 +245,7 @@ export default function CadastroUsuarios() {
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">
       {/* ==========================================
-      TABELA DE USUÁRIOS
-      ========================================== */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Usuários do Sistema</CardTitle>
-              <CardDescription>
-                Total de {usuarios.length} usuários cadastrados
-              </CardDescription>
-            </div>
-            <div className="relative w-64">
-              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar usuário..."
-                className="pl-8"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {loadingUsers ? (
-            <div className="flex justify-center py-8">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </div>
-          ) : (
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Perfil</TableHead>
-                    <TableHead>Loja</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredUsers.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                        {search ? 'Nenhum usuário encontrado para esta busca.' : 'Nenhum usuário cadastrado.'}
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    filteredUsers.map((usuario) => (
-                      <TableRow key={usuario.id}>
-                        <TableCell className="font-medium">{usuario.nome}</TableCell>
-                        <TableCell>{usuario.email}</TableCell>
-                        <TableCell>
-                          <Badge className={getRoleColor(usuario.role)}>
-                            {getRoleLabel(usuario.role)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {usuario.role === 'admin' || usuario.role === 'gestor'
-                            ? 'Todas'
-                            : usuario.cod_loja || usuario.nome_loja || '—'}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={deleting}
-                            onClick={() => {
-                              // TODO: Implementar edição
-                              setMessage({ type: 'success', text: '📝 Edição em desenvolvimento' })
-                            }}
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                            disabled={deleting}
-                            onClick={() => handleDelete(usuario)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* ==========================================
-      FORMULÁRIO DE CRIAÇÃO
+      FORMULÁRIO DE CRIAÇÃO (PRIMEIRO)
       ========================================== */}
       <Card>
         <CardHeader>
@@ -459,6 +365,99 @@ export default function CadastroUsuarios() {
               </Alert>
             )}
           </form>
+        </CardContent>
+      </Card>
+
+      {/* ==========================================
+      TABELA DE USUÁRIOS (ABAIXO DO FORMULÁRIO)
+      ========================================== */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Usuários do Sistema</CardTitle>
+              <CardDescription>
+                Total de {usuarios.length} usuários cadastrados
+              </CardDescription>
+            </div>
+            <div className="relative w-64">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar usuário..."
+                className="pl-8"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {loadingUsers ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Nome</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Perfil</TableHead>
+                    <TableHead>Loja</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredUsers.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                        {search ? 'Nenhum usuário encontrado para esta busca.' : 'Nenhum usuário cadastrado.'}
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredUsers.map((usuario) => (
+                      <TableRow key={usuario.id}>
+                        <TableCell className="font-medium">{usuario.nome}</TableCell>
+                        <TableCell>{usuario.email}</TableCell>
+                        <TableCell>
+                          <Badge className={getRoleColor(usuario.role)}>
+                            {getRoleLabel(usuario.role)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {usuario.role === 'admin' || usuario.role === 'gestor'
+                            ? 'Todas'
+                            : usuario.cod_loja || usuario.nome_loja || '—'}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={deleting}
+                            onClick={() => {
+                              setMessage({ type: 'success', text: '📝 Edição em desenvolvimento' })
+                            }}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                            disabled={deleting}
+                            onClick={() => handleDelete(usuario)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
