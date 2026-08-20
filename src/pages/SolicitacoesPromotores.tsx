@@ -1,3 +1,4 @@
+// src/pages/SolicitacoesPromotores.tsx
 import { useEffect, useState } from 'react'
 import { 
   Plus, 
@@ -14,7 +15,15 @@ import {
 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { supabase } from '@/lib/supabase'
-import { getSolicitacoes, createSolicitacao, updateSolicitacaoStatus, SolicitacaoPromotor } from '@/services/solicitacoes'
+import { 
+  getSolicitacoes, 
+  createSolicitacao, 
+  updateSolicitacaoStatus,
+  deleteSolicitacao,
+  SolicitacaoPromotor,
+  STATUS_LABELS,
+  TIPO_LABELS
+} from '@/services/solicitacoes'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -56,8 +65,8 @@ const STATUS_MAP = {
   cancelado: { label: 'Cancelado', color: 'bg-gray-100 text-gray-700', icon: XCircle },
 }
 
-export function SolicitacoesPromotores() {
-  const { isAdmin } = useAuth()
+export default function SolicitacoesPromotores() {
+  const { user, isAdmin } = useAuth()
   const { toast } = useToast()
   const [solicitacoes, setSolicitacoes] = useState<SolicitacaoPromotor[]>([])
   const [loading, setLoading] = useState(true)
@@ -65,6 +74,7 @@ export function SolicitacoesPromotores() {
   const [filterStatus, setFilterStatus] = useState<string>('todos')
   const [openModal, setOpenModal] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
   // Dados para nova solicitação
   const [novaSolicitacao, setNovaSolicitacao] = useState({
@@ -74,6 +84,8 @@ export function SolicitacoesPromotores() {
     dias_semana_sugerido: '',
     contato_responsavel: '',
     data_necessidade: '',
+    tipo_solicitacao: 'novo' as 'novo' | 'reposicao' | 'transferencia' | 'temporario',
+    prioridade: 'media' as 'baixa' | 'media' | 'alta' | 'urgente',
   })
 
   // Dados para lojas
@@ -109,63 +121,158 @@ export function SolicitacoesPromotores() {
     loadData()
   }, [])
 
+  // 🔥 FUNÇÃO CORRIGIDA - Create Solicitacao
   const handleCreateSolicitacao = async () => {
-    if (!novaSolicitacao.loja_id || !novaSolicitacao.motivo || !novaSolicitacao.data_necessidade) {
+    // Validações
+    if (!novaSolicitacao.loja_id) {
       toast({
         variant: 'destructive',
         title: 'Erro',
-        description: 'Preencha todos os campos obrigatórios',
+        description: 'Selecione uma loja',
+      })
+      return
+    }
+
+    if (!novaSolicitacao.motivo || novaSolicitacao.motivo.trim().length < 3) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Descreva o motivo da solicitação (mínimo 3 caracteres)',
+      })
+      return
+    }
+
+    if (!novaSolicitacao.data_necessidade) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Selecione a data de necessidade',
       })
       return
     }
 
     setSaving(true)
     try {
-      const result = await createSolicitacao({
-        loja_id: novaSolicitacao.loja_id,
-        tipo_solicitacao: 'novo',
-        motivo: novaSolicitacao.motivo,
-        prioridade: 'media',
-        observacoes: novaSolicitacao.observacoes,
-        dias_semana_sugerido: novaSolicitacao.dias_semana_sugerido,
-        contato_responsavel: novaSolicitacao.contato_responsavel,
-        data_necessidade: novaSolicitacao.data_necessidade,
-      })
-      if (result) {
+      // 🔥 Verificar se usuário está autenticado
+      const { data: userData } = await supabase.auth.getUser()
+      if (!userData?.user) {
         toast({
-          title: 'Sucesso',
-          description: 'Solicitação criada com sucesso!',
+          variant: 'destructive',
+          title: 'Erro',
+          description: 'Usuário não autenticado. Faça login novamente.',
         })
-        setOpenModal(false)
-        resetForm()
-        await loadData()
+        return
       }
-    } catch (error) {
-      console.error('Erro ao criar solicitação:', error)
+
+      console.log('📝 Criando solicitação:', {
+        loja_id: novaSolicitacao.loja_id,
+        tipo_solicitacao: novaSolicitacao.tipo_solicitacao,
+        motivo: novaSolicitacao.motivo,
+        prioridade: novaSolicitacao.prioridade,
+        data_necessidade: novaSolicitacao.data_necessidade,
+        solicitante_id: userData.user.id
+      })
+
+      // 🔥 Inserir diretamente no Supabase (mais confiável)
+      const { data: solicitacao, error } = await supabase
+        .from('solicitacoes_promotores')
+        .insert({
+          loja_id: novaSolicitacao.loja_id,
+          solicitante_id: userData.user.id,
+          tipo_solicitacao: novaSolicitacao.tipo_solicitacao || 'novo',
+          motivo: novaSolicitacao.motivo.trim(),
+          prioridade: novaSolicitacao.prioridade || 'media',
+          observacoes: novaSolicitacao.observacoes || null,
+          dias_semana_sugerido: novaSolicitacao.dias_semana_sugerido || null,
+          contato_responsavel: novaSolicitacao.contato_responsavel || null,
+          data_necessidade: novaSolicitacao.data_necessidade,
+          status: 'pendente'
+        })
+        .select()
+        .single()
+
+      if (error) {
+        console.error('❌ Erro Supabase:', error)
+        throw new Error(error.message)
+      }
+
+      console.log('✅ Solicitação criada:', solicitacao)
+
+      toast({
+        title: 'Sucesso!',
+        description: 'Solicitação criada com sucesso!',
+      })
+
+      setOpenModal(false)
+      resetForm()
+      await loadData()
+
+    } catch (error: any) {
+      console.error('❌ Erro ao criar solicitação:', error)
       toast({
         variant: 'destructive',
         title: 'Erro',
-        description: 'Não foi possível criar a solicitação',
+        description: error.message || 'Não foi possível criar a solicitação',
       })
     } finally {
       setSaving(false)
     }
   }
 
-  const handleStatusUpdate = async (id: string, status: 'aprovado' | 'reprovado', motivo?: string) => {
-    const confirmMessage = status === 'aprovado' 
-      ? 'Deseja realmente aprovar esta solicitação?' 
-      : 'Deseja realmente reprovar esta solicitação?'
+  // 🔥 FUNÇÃO CORRIGIDA - Update Status
+  const handleStatusUpdate = async (id: string, status: 'aprovado' | 'reprovado' | 'cancelado' | 'analise', motivo?: string) => {
+    const confirmMessage = 
+      status === 'aprovado' ? 'Deseja realmente aprovar esta solicitação?' :
+      status === 'reprovado' ? 'Deseja realmente reprovar esta solicitação?' :
+      status === 'cancelado' ? 'Deseja realmente cancelar esta solicitação?' :
+      'Deseja realmente colocar esta solicitação em análise?'
     
     if (!confirm(confirmMessage)) return
 
-    const success = await updateSolicitacaoStatus(id, status, motivo)
-    if (success) {
+    setSubmitting(true)
+    try {
+      const success = await updateSolicitacaoStatus(id, status, motivo)
+      if (success) {
+        toast({
+          title: 'Sucesso',
+          description: `Solicitação ${status === 'aprovado' ? 'aprovada' : status === 'reprovado' ? 'reprovada' : status === 'cancelado' ? 'cancelada' : 'em análise'} com sucesso!`,
+        })
+        await loadData()
+      } else {
+        throw new Error('Falha ao atualizar status')
+      }
+    } catch (error: any) {
       toast({
-        title: 'Sucesso',
-        description: `Solicitação ${status === 'aprovado' ? 'aprovada' : 'reprovada'} com sucesso!`,
+        variant: 'destructive',
+        title: 'Erro',
+        description: error.message || 'Não foi possível atualizar o status',
       })
-      await loadData()
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // 🔥 FUNÇÃO CORRIGIDA - Delete
+  const handleDeleteSolicitacao = async (id: string, motivo: string) => {
+    if (!confirm(`Deseja realmente excluir a solicitação "${motivo}"?`)) return
+
+    try {
+      const success = await deleteSolicitacao(id)
+      if (success) {
+        toast({
+          title: 'Sucesso',
+          description: 'Solicitação excluída com sucesso!',
+        })
+        await loadData()
+      } else {
+        throw new Error('Falha ao excluir solicitação')
+      }
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: error.message || 'Não foi possível excluir a solicitação',
+      })
     }
   }
 
@@ -177,13 +284,18 @@ export function SolicitacoesPromotores() {
       dias_semana_sugerido: '',
       contato_responsavel: '',
       data_necessidade: '',
+      tipo_solicitacao: 'novo',
+      prioridade: 'media',
     })
   }
 
   const filteredSolicitacoes = solicitacoes.filter(s => {
-    const matchesSearch = s.motivo.toLowerCase().includes(search.toLowerCase()) ||
-                          s.loja?.cod_loja?.toLowerCase().includes(search.toLowerCase()) ||
-                          s.loja?.nome_loja?.toLowerCase().includes(search.toLowerCase())
+    const searchLower = search.toLowerCase()
+    const matchesSearch = 
+      s.motivo?.toLowerCase().includes(searchLower) ||
+      s.loja?.cod_loja?.toLowerCase().includes(searchLower) ||
+      s.loja?.nome_loja?.toLowerCase().includes(searchLower) ||
+      false
     const matchesStatus = filterStatus === 'todos' || s.status === filterStatus
     return matchesSearch && matchesStatus
   })
@@ -276,6 +388,42 @@ export function SolicitacoesPromotores() {
                   </div>
 
                   <div className="space-y-2">
+                    <Label htmlFor="tipo_solicitacao">Tipo de Solicitação</Label>
+                    <Select 
+                      value={novaSolicitacao.tipo_solicitacao} 
+                      onValueChange={(value: any) => setNovaSolicitacao({ ...novaSolicitacao, tipo_solicitacao: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="novo">🆕 Novo Promotor</SelectItem>
+                        <SelectItem value="reposicao">🔄 Reposição</SelectItem>
+                        <SelectItem value="transferencia">📦 Transferência</SelectItem>
+                        <SelectItem value="temporario">⏳ Temporário</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="prioridade">Prioridade</Label>
+                    <Select 
+                      value={novaSolicitacao.prioridade} 
+                      onValueChange={(value: any) => setNovaSolicitacao({ ...novaSolicitacao, prioridade: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="baixa">🟢 Baixa</SelectItem>
+                        <SelectItem value="media">🟡 Média</SelectItem>
+                        <SelectItem value="alta">🟠 Alta</SelectItem>
+                        <SelectItem value="urgente">🔴 Urgente</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
                     <Label htmlFor="motivo">Motivo da Solicitação *</Label>
                     <Textarea
                       id="motivo"
@@ -321,7 +469,11 @@ export function SolicitacoesPromotores() {
                   <Button variant="outline" onClick={() => setOpenModal(false)}>
                     Cancelar
                   </Button>
-                  <Button onClick={handleCreateSolicitacao} disabled={saving} style={{ background: PRIMARY_COLOR }}>
+                  <Button 
+                    onClick={handleCreateSolicitacao} 
+                    disabled={saving} 
+                    style={{ background: PRIMARY_COLOR }}
+                  >
                     {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
                     {saving ? 'Enviando...' : 'Enviar Solicitação'}
                   </Button>
@@ -376,6 +528,15 @@ export function SolicitacoesPromotores() {
                         {solicitacao.loja?.cod_loja} - {solicitacao.loja?.nome_loja}
                       </Badge>
                       {getStatusBadge(solicitacao.status)}
+                      {solicitacao.prioridade && (
+                        <Badge variant="outline" className="text-xs">
+                          {solicitacao.prioridade === 'urgente' && '🔴 '}
+                          {solicitacao.prioridade === 'alta' && '🟠 '}
+                          {solicitacao.prioridade === 'media' && '🟡 '}
+                          {solicitacao.prioridade === 'baixa' && '🟢 '}
+                          {solicitacao.prioridade}
+                        </Badge>
+                      )}
                     </div>
 
                     <p className="text-sm text-muted-foreground">
@@ -399,6 +560,11 @@ export function SolicitacoesPromotores() {
                           📆 {solicitacao.dias_semana_sugerido}
                         </span>
                       )}
+                      {solicitacao.tipo_solicitacao && (
+                        <span>
+                          📋 {TIPO_LABELS[solicitacao.tipo_solicitacao]?.label || solicitacao.tipo_solicitacao}
+                        </span>
+                      )}
                     </div>
 
                     {solicitacao.observacoes && (
@@ -418,12 +584,14 @@ export function SolicitacoesPromotores() {
 
                   {/* Ações */}
                   <div className="flex flex-wrap gap-2 md:flex-col">
+                    {/* Admin: Aprovar/Reprovar */}
                     {isAdmin && solicitacao.status === 'pendente' && (
                       <>
                         <Button
                           size="sm"
                           className="bg-green-500 hover:bg-green-600 text-white"
                           onClick={() => handleStatusUpdate(solicitacao.id, 'aprovado')}
+                          disabled={submitting}
                         >
                           <CheckCircle2 className="h-4 w-4 mr-1" />
                           Aprovar
@@ -437,17 +605,44 @@ export function SolicitacoesPromotores() {
                               handleStatusUpdate(solicitacao.id, 'reprovado', motivo || 'Sem motivo informado')
                             }
                           }}
+                          disabled={submitting}
                         >
                           <XCircle className="h-4 w-4 mr-1" />
                           Reprovar
                         </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                          onClick={() => handleStatusUpdate(solicitacao.id, 'analise')}
+                          disabled={submitting}
+                        >
+                          <AlertCircle className="h-4 w-4 mr-1" />
+                          Análise
+                        </Button>
                       </>
                     )}
-                    {solicitacao.status === 'pendente' && !isAdmin && (
+
+                    {/* Admin: Excluir qualquer uma */}
+                    {isAdmin && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-red-600 border-red-200 hover:bg-red-50"
+                        onClick={() => handleDeleteSolicitacao(solicitacao.id, solicitacao.motivo)}
+                      >
+                        <XCircle className="h-4 w-4 mr-1" />
+                        Excluir
+                      </Button>
+                    )}
+
+                    {/* Usuário comum: Cancelar se pendente */}
+                    {!isAdmin && solicitacao.status === 'pendente' && (
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => handleStatusUpdate(solicitacao.id, 'cancelado')}
+                        disabled={submitting}
                       >
                         Cancelar
                       </Button>
@@ -472,5 +667,3 @@ export function SolicitacoesPromotores() {
     </TooltipProvider>
   )
 }
-
-export default SolicitacoesPromotores
