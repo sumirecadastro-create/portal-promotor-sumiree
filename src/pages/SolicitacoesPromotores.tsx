@@ -11,7 +11,9 @@ import {
   Filter,
   UserPlus,
   Calendar,
-  MessageSquare
+  MessageSquare,
+  Trash2,
+  Edit
 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { supabase } from '@/lib/supabase'
@@ -22,7 +24,8 @@ import {
   deleteSolicitacao,
   SolicitacaoPromotor,
   STATUS_LABELS,
-  TIPO_LABELS
+  TIPO_LABELS,
+  PRIORIDADE_LABELS
 } from '@/services/solicitacoes'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -65,7 +68,7 @@ const STATUS_MAP = {
   cancelado: { label: 'Cancelado', color: 'bg-gray-100 text-gray-700', icon: XCircle },
 }
 
-export default function SolicitacoesPromotores() {
+function SolicitacoesPromotores() {
   const { user, isAdmin } = useAuth()
   const { toast } = useToast()
   const [solicitacoes, setSolicitacoes] = useState<SolicitacaoPromotor[]>([])
@@ -110,11 +113,15 @@ export default function SolicitacoesPromotores() {
   }
 
   const loadLojas = async () => {
-    const { data } = await supabase
-      .from('lojas')
-      .select('id, cod_loja, nome_loja, numero_loja')
-      .order('cod_loja')
-    setLojas(data || [])
+    try {
+      const { data } = await supabase
+        .from('lojas')
+        .select('id, cod_loja, nome_loja, numero_loja')
+        .order('cod_loja')
+      setLojas(data || [])
+    } catch (error) {
+      console.error('Erro ao carregar lojas:', error)
+    }
   }
 
   useEffect(() => {
@@ -173,7 +180,7 @@ export default function SolicitacoesPromotores() {
         solicitante_id: userData.user.id
       })
 
-      // 🔥 Inserir diretamente no Supabase (mais confiável)
+      // 🔥 Inserir diretamente no Supabase
       const { data: solicitacao, error } = await supabase
         .from('solicitacoes_promotores')
         .insert({
@@ -312,6 +319,20 @@ export default function SolicitacoesPromotores() {
       <Badge className={statusInfo?.color || 'bg-gray-100'}>
         {getStatusIcon(status)}
         <span className="ml-1">{statusInfo?.label || status}</span>
+      </Badge>
+    )
+  }
+
+  const getPrioridadeBadge = (prioridade: string) => {
+    const config = PRIORIDADE_LABELS[prioridade as keyof typeof PRIORIDADE_LABELS]
+    if (!config) return null
+    return (
+      <Badge variant="outline" className="text-xs">
+        {prioridade === 'urgente' && '🔴 '}
+        {prioridade === 'alta' && '🟠 '}
+        {prioridade === 'media' && '🟡 '}
+        {prioridade === 'baixa' && '🟢 '}
+        {config.label}
       </Badge>
     )
   }
@@ -528,13 +549,10 @@ export default function SolicitacoesPromotores() {
                         {solicitacao.loja?.cod_loja} - {solicitacao.loja?.nome_loja}
                       </Badge>
                       {getStatusBadge(solicitacao.status)}
-                      {solicitacao.prioridade && (
+                      {solicitacao.prioridade && getPrioridadeBadge(solicitacao.prioridade)}
+                      {solicitacao.tipo_solicitacao && (
                         <Badge variant="outline" className="text-xs">
-                          {solicitacao.prioridade === 'urgente' && '🔴 '}
-                          {solicitacao.prioridade === 'alta' && '🟠 '}
-                          {solicitacao.prioridade === 'media' && '🟡 '}
-                          {solicitacao.prioridade === 'baixa' && '🟢 '}
-                          {solicitacao.prioridade}
+                          {TIPO_LABELS[solicitacao.tipo_solicitacao]?.label || solicitacao.tipo_solicitacao}
                         </Badge>
                       )}
                     </div>
@@ -558,11 +576,6 @@ export default function SolicitacoesPromotores() {
                       {solicitacao.dias_semana_sugerido && (
                         <span>
                           📆 {solicitacao.dias_semana_sugerido}
-                        </span>
-                      )}
-                      {solicitacao.tipo_solicitacao && (
-                        <span>
-                          📋 {TIPO_LABELS[solicitacao.tipo_solicitacao]?.label || solicitacao.tipo_solicitacao}
                         </span>
                       )}
                     </div>
@@ -631,7 +644,7 @@ export default function SolicitacoesPromotores() {
                         className="text-red-600 border-red-200 hover:bg-red-50"
                         onClick={() => handleDeleteSolicitacao(solicitacao.id, solicitacao.motivo)}
                       >
-                        <XCircle className="h-4 w-4 mr-1" />
+                        <Trash2 className="h-4 w-4 mr-1" />
                         Excluir
                       </Button>
                     )}
@@ -667,3 +680,7 @@ export default function SolicitacoesPromotores() {
     </TooltipProvider>
   )
 }
+
+// 🔥 EXPORTAÇÃO CORRETA - TANTO NAMED QUANTO DEFAULT
+export { SolicitacoesPromotores }
+export default SolicitacoesPromotores
