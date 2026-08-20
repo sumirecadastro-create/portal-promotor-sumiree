@@ -667,7 +667,7 @@ function Promotores() {
   }
 
   // ==========================================
-  // COMPONENTE - LOJAS MULTI SELECT (CORRIGIDO)
+  // COMPONENTE - LOJAS MULTI SELECT
   // ==========================================
   const LojasMultiSelect = ({ 
     selectedIds, 
@@ -960,7 +960,7 @@ function Promotores() {
   }
 
   // ==========================================
-  // RENDER
+  // RENDER PRINCIPAL
   // ==========================================
   if (error) {
     return <ErrorFallback error={error} resetError={loadData} />
@@ -968,12 +968,355 @@ function Promotores() {
 
   return (
     <div className="space-y-6">
-      {/* ========================================
-          HEADER
-          ======================================== */}
+      {/* HEADER */}
       <div className="flex flex-col sm:flex-row justify-between gap-4">
         <div className="relative w-full sm:w-96">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Buscar promotor..."
-            className="pl
+            className="pl-8"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+        
+        <div className="flex gap-2">
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button className="gap-2">
+                <Plus className="h-4 w-4" />
+                Novo Promotor
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Novo Promotor</DialogTitle>
+                <DialogDescription>
+                  Preencha os dados para cadastrar um novo promotor.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="promotor_nome">Nome do Promotor *</Label>
+                  <Input
+                    id="promotor_nome"
+                    placeholder="Nome completo"
+                    value={newPromotor.promotor_nome}
+                    onChange={(e) => setNewPromotor({ ...newPromotor, promotor_nome: e.target.value })}
+                  />
+                </div>
+
+                <LojasMultiSelect
+                  selectedIds={newPromotor.loja_ids}
+                  onChange={(ids) => setNewPromotor({ ...newPromotor, loja_ids: ids })}
+                  label="Lojas Vinculadas"
+                  open={lojasPopoverOpenNew}
+                  onOpenChange={setLojasPopoverOpenNew}
+                  buscaTemp={buscaLojasNew}
+                  setBuscaTemp={setBuscaLojasNew}
+                  tempIds={lojasSelecionadasTempNew}
+                  setTempIds={setLojasSelecionadasTempNew}
+                  onAplicar={aplicarSelecaoLojasNew}
+                  onCancelar={cancelarSelecaoLojasNew}
+                />
+
+                <MarcasMultiSelect
+                  selectedIds={newPromotor.marca_ids}
+                  onChange={(ids) => setNewPromotor({ ...newPromotor, marca_ids: ids })}
+                />
+
+                <div className="space-y-2">
+                  <Label htmlFor="dias_semana">Dias de Atuação</Label>
+                  <Input
+                    id="dias_semana"
+                    placeholder="Ex: Segunda, Terça, Quarta"
+                    value={newPromotor.dias_semana}
+                    onChange={(e) => setNewPromotor({ ...newPromotor, dias_semana: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="contato_responsavel">Contato / Telefone</Label>
+                  <Input
+                    id="contato_responsavel"
+                    placeholder="(11) 99999-9999"
+                    value={newPromotor.contato_responsavel}
+                    onChange={(e) => setNewPromotor({ ...newPromotor, contato_responsavel: e.target.value })}
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleCreatePromotor} disabled={saving}>
+                  {saving ? 'Salvando...' : 'Salvar'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* DIALOG DE EDIÇÃO */}
+          <Dialog open={editOpen} onOpenChange={setEditOpen}>
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Editar Promotor</DialogTitle>
+                <DialogDescription>
+                  Altere os dados do promotor e gerencie a carta de apresentação.
+                </DialogDescription>
+              </DialogHeader>
+              {editingPromotor && (
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit_promotor_nome">Nome do Promotor *</Label>
+                    <Input
+                      id="edit_promotor_nome"
+                      placeholder="Nome completo"
+                      value={editingPromotor.promotor_nome || ''}
+                      onChange={(e) => setEditingPromotor({ ...editingPromotor, promotor_nome: e.target.value })}
+                    />
+                  </div>
+
+                  <LojasMultiSelect
+                    selectedIds={editingPromotor.loja_ids || []}
+                    onChange={(ids) => setEditingPromotor({ ...editingPromotor, loja_ids: ids })}
+                    label="Lojas Vinculadas"
+                    open={lojasPopoverOpenEdit}
+                    onOpenChange={setLojasPopoverOpenEdit}
+                    buscaTemp={buscaLojasEdit}
+                    setBuscaTemp={setBuscaLojasEdit}
+                    tempIds={lojasSelecionadasTempEdit}
+                    setTempIds={setLojasSelecionadasTempEdit}
+                    onAplicar={aplicarSelecaoLojasEdit}
+                    onCancelar={cancelarSelecaoLojasEdit}
+                  />
+
+                  <MarcasMultiSelect
+                    selectedIds={editingPromotor.marcas?.map(m => m?.id).filter(Boolean) || []}
+                    onChange={(ids) => {
+                      const selectedMarcas = marcasDisponiveis.filter(m => ids.includes(m.id))
+                      setEditingPromotor({ 
+                        ...editingPromotor, 
+                        marcas: selectedMarcas
+                      })
+                    }}
+                  />
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit_dias_semana">Dias de Atuação</Label>
+                    <Input
+                      id="edit_dias_semana"
+                      placeholder="Ex: Segunda, Terça, Quarta"
+                      value={editingPromotor.dias_semana || ''}
+                      onChange={(e) => setEditingPromotor({ ...editingPromotor, dias_semana: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit_contato_responsavel">Contato / Telefone</Label>
+                    <Input
+                      id="edit_contato_responsavel"
+                      placeholder="(11) 99999-9999"
+                      value={editingPromotor.contato_responsavel || ''}
+                      onChange={(e) => setEditingPromotor({ ...editingPromotor, contato_responsavel: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="edit_status">Status</Label>
+                    <Select
+                      value={editingPromotor.status || 'ativo'}
+                      onValueChange={(value) => setEditingPromotor({ ...editingPromotor, status: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ativo">Ativo</SelectItem>
+                        <SelectItem value="inativo">Inativo</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2 pt-4 border-t">
+                    <Label className="text-base font-semibold">Carta de Apresentação</Label>
+                    
+                    {editingPromotor.carta ? (
+                      <div className="flex items-center gap-2 p-3 border rounded-md bg-muted/50">
+                        <FileText className="h-5 w-5 text-blue-500 flex-shrink-0" />
+                        <a 
+                          href={editingPromotor.carta.arquivo} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="text-sm text-blue-600 hover:underline flex-1 truncate"
+                        >
+                          {editingPromotor.carta.nome_original}
+                        </a>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleRemoverCarta}
+                          className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                          disabled={uploadingCarta}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Input
+                            type="file"
+                            accept=".pdf"
+                            onChange={handleUploadCarta}
+                            disabled={uploadingCarta}
+                            className="flex-1"
+                          />
+                          {uploadingCarta && (
+                            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-primary"></div>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          <Upload className="h-3 w-3 inline mr-1" />
+                          Envie a carta de apresentação em formato PDF (máx. 5MB)
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setEditOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleUpdatePromotor} disabled={saving}>
+                  {saving ? 'Salvando...' : 'Salvar'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </div>
+
+      {/* LISTA DE PROMOTORES */}
+      {loading ? (
+        <div className="flex justify-center p-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {filteredPromotores.length > 0 ? (
+            filteredPromotores.map((promoter) => (
+              <Card key={promoter.id} className="hover:shadow-md transition-shadow group relative">
+                <CardContent className="p-6">
+                  <div className="flex flex-col items-center text-center space-y-4">
+                    <Avatar className="h-20 w-20 border-2 border-background shadow-sm">
+                      <AvatarFallback className="text-2xl font-medium bg-primary/10 text-primary">
+                        {getInitials(promoter.promotor_nome)}
+                      </AvatarFallback>
+                    </Avatar>
+
+                    <div className="space-y-2 w-full">
+                      <div className="flex items-center justify-center gap-2">
+                        <h3 className="font-semibold text-lg">{promoter.promotor_nome}</h3>
+                        {promoter.carta && (
+                          <a 
+                            href={promoter.carta.arquivo} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-blue-500 hover:text-blue-700 transition-colors"
+                            title="Ver carta de apresentação"
+                          >
+                            <FileText className="h-4 w-4" />
+                          </a>
+                        )}
+                      </div>
+                      {getMarcasBadges(promoter)}
+                    </div>
+
+                    <div className="flex flex-col gap-2 w-full text-sm text-muted-foreground mt-4 text-left border-t pt-4">
+                      <div className="flex items-start gap-2">
+                        <Store className="h-4 w-4 shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          {promoter.lojas && promoter.lojas.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {promoter.lojas.map(loja => (
+                                <Badge key={loja.id} variant="outline" className="text-xs">
+                                  {loja.cod_loja}
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : (
+                            <span>Nenhuma loja vinculada</span>
+                          )}
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-start gap-2">
+                        <User className="h-4 w-4 shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          {promoter.gerentes && promoter.gerentes.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {promoter.gerentes.map(gerente => (
+                                <Badge key={gerente.id} variant="outline" className="text-xs">
+                                  {gerente.nome_gerente}
+                                  {gerente.telefone && ` (${gerente.telefone})`}
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">Sem gerente</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {promoter.contato_responsavel && (
+                        <div className="flex items-center gap-2">
+                          <Phone className="h-4 w-4 shrink-0" />
+                          <span className="truncate">{promoter.contato_responsavel}</span>
+                        </div>
+                      )}
+                      {promoter.dias_semana && (
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-4 w-4 shrink-0" />
+                          <span className="truncate">{promoter.dias_semana}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="w-full pt-4 border-t mt-4 flex justify-end gap-2">
+                      <Button 
+                        variant="secondary" 
+                        size="sm" 
+                        className="flex-1"
+                        onClick={() => openEditDialog(promoter)}
+                      >
+                        <Edit className="h-4 w-4 mr-1" />
+                        Editar
+                      </Button>
+                      <Button 
+                        variant="destructive" 
+                        size="sm" 
+                        className="flex-1"
+                        onClick={() => handleDeletePromotor(promoter)}
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Excluir
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          ) : (
+            <div className="col-span-full text-center py-12 text-muted-foreground">
+              {search ? 'Nenhum promotor encontrado para esta busca.' : 'Nenhum promotor cadastrado.'}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default Promotores
