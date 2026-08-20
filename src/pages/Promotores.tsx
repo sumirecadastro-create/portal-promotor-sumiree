@@ -667,7 +667,7 @@ function Promotores() {
   }
 
   // ==========================================
-  // COMPONENTE - LOJAS MULTI SELECT (CORRIGIDO - VERSÃO FINAL)
+  // COMPONENTE - LOJAS MULTI SELECT (COMPLETO)
   // ==========================================
   const LojasMultiSelect = ({ 
     selectedIds, 
@@ -707,10 +707,9 @@ function Promotores() {
 
     const allSelected = safeLojas.length > 0 && tempIds.length === safeLojas.length
 
-    // 🔥 REFERÊNCIA PARA FORÇAR O SCROLL
     const listRef = useRef<HTMLDivElement>(null)
+    const inputRef = useRef<HTMLInputElement>(null)
 
-    // 🔥 FORÇA O SCROLL QUANDO O POPOVER ABRE
     useEffect(() => {
       if (open && listRef.current) {
         setTimeout(() => {
@@ -718,9 +717,24 @@ function Promotores() {
             listRef.current.style.overflowY = 'auto'
             listRef.current.style.maxHeight = '260px'
           }
+          if (inputRef.current) {
+            inputRef.current.focus()
+          }
         }, 100)
       }
     }, [open])
+
+    // 🔥 CORRIGIDO - NÃO SUBSTITUI CARACTERES
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      setBuscaTemp(e.target.value)
+    }
+
+    // 🔥 CORRIGIDO - MANTÉM O CURSOR NO FINAL
+    const handleInputFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+      setTimeout(() => {
+        e.target.setSelectionRange(e.target.value.length, e.target.value.length)
+      }, 0)
+    }
 
     return (
       <div className="space-y-2">
@@ -773,17 +787,24 @@ function Promotores() {
               overflow: 'hidden'
             }}
           >
-            {/* INPUT DE BUSCA - FIXO */}
+            {/* INPUT DE BUSCA - CORRIGIDO */}
             <div className="p-2 border-b flex-shrink-0 bg-white z-10">
-              <Input
+              <input
+                ref={inputRef}
                 placeholder="🔍 Buscar loja por nome ou código..."
                 value={buscaTemp}
-                onChange={(e) => setBuscaTemp(e.target.value)}
-                className="h-8"
+                onChange={handleInputChange}
+                onFocus={handleInputFocus}
+                className="w-full h-8 px-3 py-1 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                type="text"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
               />
             </div>
 
-            {/* LISTA COM SCROLL - FORÇADO COM REF */}
+            {/* LISTA COM SCROLL */}
             <div 
               ref={listRef}
               className="flex-1"
@@ -795,7 +816,6 @@ function Promotores() {
               }}
             >
               <div className="p-2">
-                {/* SELECT ALL */}
                 <div 
                   className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer border-b pb-2 mb-1"
                   onClick={() => {
@@ -821,7 +841,6 @@ function Promotores() {
                   </Label>
                 </div>
 
-                {/* LISTA DE LOJAS */}
                 {filteredLojas.length > 0 ? (
                   filteredLojas.map((loja) => (
                     <div
@@ -858,7 +877,6 @@ function Promotores() {
               </div>
             </div>
 
-            {/* RODAPÉ COM BOTÕES - FIXO */}
             <div className="p-2 border-t flex-shrink-0 flex justify-between bg-white">
               <Button 
                 variant="ghost" 
