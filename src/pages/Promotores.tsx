@@ -666,195 +666,226 @@ function Promotores() {
     )
   }
 
-// ==========================================
-// COMPONENTE - LOJAS MULTI SELECT (FIX DEFINITIVO)
-// ==========================================
-const LojasMultiSelect = ({ 
-  selectedIds, 
-  onChange, 
-  label,
-  open,
-  onOpenChange,
-  buscaTemp,
-  setBuscaTemp,
-  tempIds,
-  setTempIds,
-  onAplicar,
-  onCancelar
-}: { 
-  selectedIds: string[], 
-  onChange: (ids: string[]) => void,
-  label: string,
-  open: boolean,
-  onOpenChange: (open: boolean) => void,
-  buscaTemp: string,
-  setBuscaTemp: (busca: string) => void,
-  tempIds: string[],
-  setTempIds: (ids: string[]) => void,
-  onAplicar: () => void,
-  onCancelar: () => void
-}) => {
-  const safeLojas = Array.isArray(lojas) ? lojas : []
+  // ==========================================
+  // COMPONENTE - LOJAS MULTI SELECT (CORRIGIDO - VERSÃO FINAL)
+  // ==========================================
+  const LojasMultiSelect = ({ 
+    selectedIds, 
+    onChange, 
+    label,
+    open,
+    onOpenChange,
+    buscaTemp,
+    setBuscaTemp,
+    tempIds,
+    setTempIds,
+    onAplicar,
+    onCancelar
+  }: { 
+    selectedIds: string[], 
+    onChange: (ids: string[]) => void,
+    label: string,
+    open: boolean,
+    onOpenChange: (open: boolean) => void,
+    buscaTemp: string,
+    setBuscaTemp: (busca: string) => void,
+    tempIds: string[],
+    setTempIds: (ids: string[]) => void,
+    onAplicar: () => void,
+    onCancelar: () => void
+  }) => {
+    const safeLojas = Array.isArray(lojas) ? lojas : []
 
-  const filteredLojas = safeLojas.filter(loja => {
-    if (!loja) return false
-    const searchLower = (buscaTemp || '').toLowerCase()
+    const filteredLojas = safeLojas.filter(loja => {
+      if (!loja) return false
+      const searchLower = (buscaTemp || '').toLowerCase()
+      return (
+        loja.nome_loja?.toLowerCase().includes(searchLower) ||
+        loja.cod_loja?.toLowerCase().includes(searchLower)
+      )
+    })
+
+    const allSelected = safeLojas.length > 0 && tempIds.length === safeLojas.length
+
+    // 🔥 REFERÊNCIA PARA FORÇAR O SCROLL
+    const listRef = useRef<HTMLDivElement>(null)
+
+    // 🔥 FORÇA O SCROLL QUANDO O POPOVER ABRE
+    useEffect(() => {
+      if (open && listRef.current) {
+        setTimeout(() => {
+          if (listRef.current) {
+            listRef.current.style.overflowY = 'auto'
+            listRef.current.style.maxHeight = '260px'
+          }
+        }, 100)
+      }
+    }, [open])
+
     return (
-      loja.nome_loja?.toLowerCase().includes(searchLower) ||
-      loja.cod_loja?.toLowerCase().includes(searchLower)
-    )
-  })
-
-  const allSelected = safeLojas.length > 0 && tempIds.length === safeLojas.length
-
-  return (
-    <div className="space-y-2">
-      <Label>{label}</Label>
-      <Popover open={open} onOpenChange={onOpenChange}>
-        <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            role="combobox"
-            className="w-full justify-between min-h-[40px] h-auto"
-            onClick={() => {
-              setTempIds([...selectedIds])
-              onOpenChange(true)
+      <div className="space-y-2">
+        <Label>{label}</Label>
+        <Popover open={open} onOpenChange={onOpenChange}>
+          <PopoverTrigger asChild>
+            <Button
+              variant="outline"
+              role="combobox"
+              className="w-full justify-between min-h-[40px] h-auto"
+              onClick={() => {
+                setTempIds([...selectedIds])
+                onOpenChange(true)
+              }}
+            >
+              <div className="flex flex-wrap gap-1">
+                {selectedIds.length === 0 ? (
+                  <span className="text-muted-foreground">Selecione as lojas...</span>
+                ) : (
+                  <>
+                    <Badge variant="secondary" className="text-xs">
+                      📦 {selectedIds.length} loja(s) selecionada(s)
+                    </Badge>
+                    {selectedIds.slice(0, 3).map(lojaId => {
+                      const loja = safeLojas.find(l => l?.id === lojaId)
+                      return loja ? (
+                        <Badge key={lojaId} variant="outline" className="text-xs">
+                          {loja.cod_loja}
+                        </Badge>
+                      ) : null
+                    })}
+                    {selectedIds.length > 3 && (
+                      <Badge variant="outline" className="text-xs">
+                        +{selectedIds.length - 3}
+                      </Badge>
+                    )}
+                  </>
+                )}
+              </div>
+              <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent 
+            className="w-[400px] p-0" 
+            align="start"
+            style={{ 
+              maxHeight: '420px', 
+              display: 'flex', 
+              flexDirection: 'column',
+              overflow: 'hidden'
             }}
           >
-            <div className="flex flex-wrap gap-1">
-              {selectedIds.length === 0 ? (
-                <span className="text-muted-foreground">Selecione as lojas...</span>
-              ) : (
-                <>
-                  <Badge variant="secondary" className="text-xs">
-                    📦 {selectedIds.length} loja(s) selecionada(s)
-                  </Badge>
-                  {selectedIds.slice(0, 3).map(lojaId => {
-                    const loja = safeLojas.find(l => l?.id === lojaId)
-                    return loja ? (
-                      <Badge key={lojaId} variant="outline" className="text-xs">
-                        {loja.cod_loja}
-                      </Badge>
-                    ) : null
-                  })}
-                  {selectedIds.length > 3 && (
-                    <Badge variant="outline" className="text-xs">
-                      +{selectedIds.length - 3}
-                    </Badge>
-                  )}
-                </>
-              )}
+            {/* INPUT DE BUSCA - FIXO */}
+            <div className="p-2 border-b flex-shrink-0 bg-white z-10">
+              <Input
+                placeholder="🔍 Buscar loja por nome ou código..."
+                value={buscaTemp}
+                onChange={(e) => setBuscaTemp(e.target.value)}
+                className="h-8"
+              />
             </div>
-            <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
-          </Button>
-        </PopoverTrigger>
-        <PopoverContent 
-          className="w-[400px] p-0 popover-content-wrapper" 
-          align="start"
-        >
-          {/* INPUT DE BUSCA - FIXO */}
-          <div className="p-2 border-b flex-shrink-0 bg-popover z-10">
-            <Input
-              placeholder="🔍 Buscar loja por nome ou código..."
-              value={buscaTemp}
-              onChange={(e) => setBuscaTemp(e.target.value)}
-              className="h-8"
-            />
-          </div>
 
-          {/* LISTA COM SCROLL - USANDO A CLASSE DO CSS */}
-          <div className="popover-content-scroll">
-            <div className="p-2">
-              {/* SELECT ALL */}
-              <div 
-                className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer border-b pb-2 mb-1"
-                onClick={() => {
-                  if (allSelected) {
-                    setTempIds([])
-                  } else {
-                    setTempIds(safeLojas.map(l => l.id))
-                  }
-                }}
-              >
-                <Checkbox
-                  checked={allSelected}
-                  onCheckedChange={() => {
+            {/* LISTA COM SCROLL - FORÇADO COM REF */}
+            <div 
+              ref={listRef}
+              className="flex-1"
+              style={{ 
+                overflowY: 'auto',
+                maxHeight: '260px',
+                minHeight: '100px',
+                overscrollBehavior: 'contain'
+              }}
+            >
+              <div className="p-2">
+                {/* SELECT ALL */}
+                <div 
+                  className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer border-b pb-2 mb-1"
+                  onClick={() => {
                     if (allSelected) {
                       setTempIds([])
                     } else {
                       setTempIds(safeLojas.map(l => l.id))
                     }
                   }}
-                />
-                <Label className="cursor-pointer font-semibold flex-1">
-                  Selecionar todas as lojas ({safeLojas.length})
-                </Label>
-              </div>
-
-              {/* LISTA DE LOJAS */}
-              {filteredLojas.length > 0 ? (
-                filteredLojas.map((loja) => (
-                  <div
-                    key={loja.id}
-                    className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
-                    onClick={() => {
-                      setTempIds(prev =>
-                        prev.includes(loja.id)
-                          ? prev.filter(id => id !== loja.id)
-                          : [...prev, loja.id]
-                      )
+                >
+                  <Checkbox
+                    checked={allSelected}
+                    onCheckedChange={() => {
+                      if (allSelected) {
+                        setTempIds([])
+                      } else {
+                        setTempIds(safeLojas.map(l => l.id))
+                      }
                     }}
-                  >
-                    <Checkbox 
-                      checked={tempIds.includes(loja.id)} 
-                      onCheckedChange={() => {
+                  />
+                  <Label className="cursor-pointer font-semibold flex-1">
+                    Selecionar todas as lojas ({safeLojas.length})
+                  </Label>
+                </div>
+
+                {/* LISTA DE LOJAS */}
+                {filteredLojas.length > 0 ? (
+                  filteredLojas.map((loja) => (
+                    <div
+                      key={loja.id}
+                      className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer"
+                      onClick={() => {
                         setTempIds(prev =>
                           prev.includes(loja.id)
                             ? prev.filter(id => id !== loja.id)
                             : [...prev, loja.id]
                         )
                       }}
-                    />
-                    <Label className="cursor-pointer flex-1 text-sm">
-                      <span className="font-mono text-xs">{loja.cod_loja}</span> - {loja.nome_loja}
-                    </Label>
+                    >
+                      <Checkbox 
+                        checked={tempIds.includes(loja.id)} 
+                        onCheckedChange={() => {
+                          setTempIds(prev =>
+                            prev.includes(loja.id)
+                              ? prev.filter(id => id !== loja.id)
+                              : [...prev, loja.id]
+                          )
+                        }}
+                      />
+                      <Label className="cursor-pointer flex-1 text-sm">
+                        <span className="font-mono text-xs">{loja.cod_loja}</span> - {loja.nome_loja}
+                      </Label>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-4 text-muted-foreground text-sm">
+                    {buscaTemp ? 'Nenhuma loja encontrada' : 'Nenhuma loja cadastrada'}
                   </div>
-                ))
-              ) : (
-                <div className="text-center py-4 text-muted-foreground text-sm">
-                  {buscaTemp ? 'Nenhuma loja encontrada' : 'Nenhuma loja cadastrada'}
-                </div>
-              )}
+                )}
+              </div>
             </div>
-          </div>
 
-          {/* RODAPÉ COM BOTÕES - FIXO */}
-          <div className="p-2 border-t flex-shrink-0 flex justify-between bg-popover">
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={() => setTempIds([])}
-            >
-              Limpar tudo
-            </Button>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={onCancelar}>
-                Cancelar
-              </Button>
+            {/* RODAPÉ COM BOTÕES - FIXO */}
+            <div className="p-2 border-t flex-shrink-0 flex justify-between bg-white">
               <Button 
+                variant="ghost" 
                 size="sm" 
-                onClick={onAplicar} 
-                style={{ background: '#FF1686' }}
+                onClick={() => setTempIds([])}
               >
-                Aplicar ({tempIds.length})
+                Limpar tudo
               </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={onCancelar}>
+                  Cancelar
+                </Button>
+                <Button 
+                  size="sm" 
+                  onClick={onAplicar} 
+                  style={{ background: '#FF1686' }}
+                >
+                  Aplicar ({tempIds.length})
+                </Button>
+              </div>
             </div>
-          </div>
-        </PopoverContent>
-      </Popover>
-    </div>
-  )
-}
+          </PopoverContent>
+        </Popover>
+      </div>
+    )
+  }
+
   // ==========================================
   // COMPONENTE - MARCAS MULTI SELECT
   // ==========================================
