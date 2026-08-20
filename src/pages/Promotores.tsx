@@ -89,7 +89,7 @@ function Promotores() {
   const [newPromotor, setNewPromotor] = useState({
     promotor_nome: '',
     loja_ids: [] as string[],
-    gerente_ids: [] as string[], // Mantido para compatibilidade, mas não será usado
+    gerente_ids: [] as string[],
     marca_ids: [] as string[],
     dias_semana: '',
     contato_responsavel: '',
@@ -349,7 +349,6 @@ function Promotores() {
   }
 
   // 🔥 REMOVIDO: seleção de gerentes (agora derivado das lojas)
-  // As funções de gerentes foram removidas
 
   const handleCreatePromotor = async () => {
     if (!newPromotor.promotor_nome?.trim()) {
@@ -363,11 +362,10 @@ function Promotores() {
 
     setSaving(true)
     try {
-      // 🔥 gerente_ids é enviado vazio - será derivado das lojas
       const result = await createPromotor({
         promotor_nome: newPromotor.promotor_nome.trim(),
         loja_ids: newPromotor.loja_ids,
-        gerente_ids: [], // 🔥 AGORA VAZIO
+        gerente_ids: [],
         marca_ids: newPromotor.marca_ids,
         dias_semana: newPromotor.dias_semana || undefined,
         contato_responsavel: newPromotor.contato_responsavel || undefined,
@@ -421,11 +419,10 @@ function Promotores() {
         ? editingPromotor.marcas.map(m => m?.id).filter(Boolean)
         : []
       
-      // 🔥 gerente_ids é enviado vazio - será derivado das lojas
       const result = await updatePromotor(editingPromotor.id, {
         promotor_nome: editingPromotor.promotor_nome.trim(),
         loja_ids: editingPromotor.loja_ids || [],
-        gerente_ids: [], // 🔥 AGORA VAZIO
+        gerente_ids: [],
         marca_ids: marcaIds,
         dias_semana: editingPromotor.dias_semana || undefined,
         contato_responsavel: editingPromotor.contato_responsavel || undefined,
@@ -593,8 +590,7 @@ function Promotores() {
     )
   }
 
-  // 🔥 COMPONENTE DE SELEÇÃO DE GERENTES REMOVIDO - não é mais necessário
-
+  // 🔥 COMPONENTE LOJAS MULTI SELECT CORRIGIDO
   const LojasMultiSelect = ({ 
     selectedIds, 
     onChange, 
@@ -621,8 +617,8 @@ function Promotores() {
     onCancelar: () => void
   }) => {
     const safeLojas = Array.isArray(lojas) ? lojas : []
-    
-    const filteredLojas = safeLojas.filter(loja => 
+
+    const filteredLojas = safeLojas.filter(loja =>
       loja?.nome_loja?.toLowerCase().includes(buscaTemp.toLowerCase()) ||
       loja?.cod_loja?.toLowerCase().includes(buscaTemp.toLowerCase())
     )
@@ -665,16 +661,21 @@ function Promotores() {
               <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-[400px] p-0" align="start">
+          <PopoverContent 
+            className="w-[400px] p-0" 
+            align="start"
+            onOpenAutoFocus={(e) => e.preventDefault()}
+          >
             <div className="p-2 border-b">
               <Input
                 placeholder="🔍 Buscar loja por nome ou código..."
                 value={buscaTemp}
                 onChange={(e) => setBuscaTemp(e.target.value)}
                 className="h-8"
+                autoFocus={false}
               />
             </div>
-            <div className="max-h-[300px] overflow-y-auto p-2">
+            <div className="max-h-[300px] overflow-y-auto p-2" style={{ overscrollBehavior: 'contain' }}>
               <div className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer border-b pb-2 mb-1">
                 <Checkbox
                   checked={tempIds.length === safeLojas.length && safeLojas.length > 0}
@@ -904,8 +905,6 @@ function Promotores() {
                   onCancelar={cancelarSelecaoLojasNew}
                 />
 
-                {/* 🔥 GERENTES REMOVIDO - será derivado das lojas */}
-
                 <MarcasMultiSelect
                   selectedIds={newPromotor.marca_ids}
                   onChange={(ids) => setNewPromotor({ ...newPromotor, marca_ids: ids })}
@@ -976,8 +975,6 @@ function Promotores() {
                   onAplicar={aplicarSelecaoLojasEdit}
                   onCancelar={cancelarSelecaoLojasEdit}
                 />
-
-                {/* 🔥 GERENTES REMOVIDO - será derivado das lojas */}
 
                 <MarcasMultiSelect
                   selectedIds={editingPromotor.marcas?.map(m => m?.id).filter(Boolean) || []}
