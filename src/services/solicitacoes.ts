@@ -1,562 +1,649 @@
-// services/solicitacoes.ts
+// src/pages/SolicitacoesPromotores.tsx
+import { useEffect, useState } from 'react'
+import { 
+  Plus, 
+  CheckCircle2, 
+  XCircle, 
+  Clock,
+  AlertCircle,
+  Loader2,
+  Search,
+  Filter,
+  UserPlus,
+  MessageSquare,
+  Trash2
+} from 'lucide-react'
+import { useAuth } from '@/hooks/use-auth'
 import { supabase } from '@/lib/supabase'
+import { 
+  getSolicitacoes, 
+  createSolicitacao, 
+  updateSolicitacaoStatus,
+  deleteSolicitacao,
+  SolicitacaoPromotor,
+  STATUS_LABELS,
+  TIPO_LABELS,
+  PRIORIDADE_LABELS
+} from '@/services/solicitacoes'
+import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Badge } from '@/components/ui/badge'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import { useToast } from '@/hooks/use-toast'
 
-// ============================================
-// TIPOS
-// ============================================
+const PRIMARY_COLOR = '#FF1686'
 
-export type TipoSolicitacao = 'novo' | 'reposicao' | 'transferencia' | 'temporario'
-export type StatusSolicitacao = 'pendente' | 'analise' | 'aprovado' | 'reprovado' | 'cancelado'
-export type PrioridadeSolicitacao = 'baixa' | 'media' | 'alta' | 'urgente'
-
-export interface SolicitacaoPromotor {
-    id: string
-    loja_id: string
-    loja?: {
-        cod_loja: string
-        nome_loja: string
-        numero_loja: string
-    }
-    solicitante_id: string
-    solicitante?: {
-        nome: string
-        email: string
-    }
-    tipo_solicitacao: TipoSolicitacao
-    motivo: string
-    status: StatusSolicitacao
-    prioridade: PrioridadeSolicitacao
-    promotor_atual_id?: string
-    promotor_atual?: {
-        promotor_nome: string
-    }
-    promotor_sugerido_id?: string
-    promotor_sugerido?: {
-        promotor_nome: string
-    }
-    observacoes?: string
-    dias_semana_sugerido?: string
-    contato_responsavel?: string
-    data_necessidade: string
-    created_at: string
-    updated_at: string
-    aprovado_por?: string
-    data_aprovacao?: string
-    reprovado_por?: string
-    data_reprovacao?: string
-    motivo_reprovacao?: string
+// Mapeamento de status
+const STATUS_MAP = {
+  pendente: { label: 'Pendente', color: 'bg-yellow-100 text-yellow-700', icon: Clock },
+  analise: { label: 'Em Análise', color: 'bg-blue-100 text-blue-700', icon: AlertCircle },
+  aprovado: { label: 'Aprovado', color: 'bg-green-100 text-green-700', icon: CheckCircle2 },
+  reprovado: { label: 'Reprovado', color: 'bg-red-100 text-red-700', icon: XCircle },
+  cancelado: { label: 'Cancelado', color: 'bg-gray-100 text-gray-700', icon: XCircle },
 }
 
-export interface CreateSolicitacaoData {
-    loja_id: string
-    tipo_solicitacao: TipoSolicitacao
-    motivo: string
-    prioridade: PrioridadeSolicitacao
-    promotor_atual_id?: string
-    promotor_sugerido_id?: string
-    observacoes?: string
-    dias_semana_sugerido?: string
-    contato_responsavel?: string
-    data_necessidade: string
-}
+function SolicitacoesPromotores() {
+  const { user, isAdmin } = useAuth()
+  const { toast } = useToast()
+  const [solicitacoes, setSolicitacoes] = useState<SolicitacaoPromotor[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [filterStatus, setFilterStatus] = useState<string>('todos')
+  const [openModal, setOpenModal] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
-export interface UpdateSolicitacaoData {
-    tipo_solicitacao?: TipoSolicitacao
-    motivo?: string
-    prioridade?: PrioridadeSolicitacao
-    promotor_atual_id?: string
-    promotor_sugerido_id?: string
-    observacoes?: string
-    dias_semana_sugerido?: string
-    contato_responsavel?: string
-    data_necessidade?: string
-}
+  // Dados para nova solicitação
+  const [novaSolicitacao, setNovaSolicitacao] = useState({
+    loja_id: '',
+    motivo: '',
+    observacoes: '',
+    dias_semana_sugerido: '',
+    contato_responsavel: '',
+    data_necessidade: '',
+    tipo_solicitacao: 'novo' as 'novo' | 'reposicao' | 'transferencia' | 'temporario',
+    prioridade: 'media' as 'baixa' | 'media' | 'alta' | 'urgente',
+  })
 
-// ============================================
-// CONSTANTES
-// ============================================
+  // Dados para lojas
+  const [lojas, setLojas] = useState<any[]>([])
 
-const SOLICITACAO_SELECT = `
-    *,
-    loja:loja_id (
-        cod_loja,
-        nome_loja,
-        numero_loja
-    ),
-    solicitante:solicitante_id (
-        nome,
-        email
-    ),
-    promotor_atual:promotor_atual_id (
-        promotor_nome
-    ),
-    promotor_sugerido:promotor_sugerido_id (
-        promotor_nome
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      const data = await getSolicitacoes()
+      setSolicitacoes(data)
+      await loadLojas()
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Não foi possível carregar as solicitações',
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadLojas = async () => {
+    try {
+      const { data } = await supabase
+        .from('lojas')
+        .select('id, cod_loja, nome_loja, numero_loja')
+        .order('cod_loja')
+      setLojas(data || [])
+    } catch (error) {
+      console.error('Erro ao carregar lojas:', error)
+    }
+  }
+
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  // 🔥 FUNÇÃO CORRIGIDA - Create Solicitacao
+  const handleCreateSolicitacao = async () => {
+    // Validações
+    if (!novaSolicitacao.loja_id) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Selecione uma loja',
+      })
+      return
+    }
+
+    if (!novaSolicitacao.motivo || novaSolicitacao.motivo.trim().length < 3) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Descreva o motivo da solicitação (mínimo 3 caracteres)',
+      })
+      return
+    }
+
+    if (!novaSolicitacao.data_necessidade) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Selecione a data de necessidade',
+      })
+      return
+    }
+
+    setSaving(true)
+    try {
+      // 🔥 Usar o service que já trata tudo
+      const result = await createSolicitacao({
+        loja_id: novaSolicitacao.loja_id,
+        tipo_solicitacao: novaSolicitacao.tipo_solicitacao,
+        motivo: novaSolicitacao.motivo.trim(),
+        prioridade: novaSolicitacao.prioridade,
+        observacoes: novaSolicitacao.observacoes || undefined,
+        dias_semana_sugerido: novaSolicitacao.dias_semana_sugerido || undefined,
+        contato_responsavel: novaSolicitacao.contato_responsavel || undefined,
+        data_necessidade: novaSolicitacao.data_necessidade,
+      })
+
+      if (result) {
+        toast({
+          title: 'Sucesso!',
+          description: 'Solicitação criada com sucesso!',
+        })
+        setOpenModal(false)
+        resetForm()
+        await loadData()
+      } else {
+        throw new Error('Erro ao criar solicitação')
+      }
+
+    } catch (error: any) {
+      console.error('❌ Erro ao criar solicitação:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: error.message || 'Não foi possível criar a solicitação',
+      })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleStatusUpdate = async (id: string, status: 'aprovado' | 'reprovado' | 'cancelado' | 'analise', motivo?: string) => {
+    const confirmMessage = 
+      status === 'aprovado' ? 'Deseja realmente aprovar esta solicitação?' :
+      status === 'reprovado' ? 'Deseja realmente reprovar esta solicitação?' :
+      status === 'cancelado' ? 'Deseja realmente cancelar esta solicitação?' :
+      'Deseja realmente colocar esta solicitação em análise?'
+    
+    if (!confirm(confirmMessage)) return
+
+    setSubmitting(true)
+    try {
+      const success = await updateSolicitacaoStatus(id, status, motivo)
+      if (success) {
+        toast({
+          title: 'Sucesso',
+          description: `Solicitação ${status === 'aprovado' ? 'aprovada' : status === 'reprovado' ? 'reprovada' : status === 'cancelado' ? 'cancelada' : 'em análise'} com sucesso!`,
+        })
+        await loadData()
+      } else {
+        throw new Error('Falha ao atualizar status')
+      }
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: error.message || 'Não foi possível atualizar o status',
+      })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleDeleteSolicitacao = async (id: string, motivo: string) => {
+    if (!confirm(`Deseja realmente excluir a solicitação "${motivo}"?`)) return
+
+    try {
+      const success = await deleteSolicitacao(id)
+      if (success) {
+        toast({
+          title: 'Sucesso',
+          description: 'Solicitação excluída com sucesso!',
+        })
+        await loadData()
+      } else {
+        throw new Error('Falha ao excluir solicitação')
+      }
+    } catch (error: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: error.message || 'Não foi possível excluir a solicitação',
+      })
+    }
+  }
+
+  const resetForm = () => {
+    setNovaSolicitacao({
+      loja_id: '',
+      motivo: '',
+      observacoes: '',
+      dias_semana_sugerido: '',
+      contato_responsavel: '',
+      data_necessidade: '',
+      tipo_solicitacao: 'novo',
+      prioridade: 'media',
+    })
+  }
+
+  const filteredSolicitacoes = solicitacoes.filter(s => {
+    const searchLower = search.toLowerCase()
+    const matchesSearch = 
+      s.motivo?.toLowerCase().includes(searchLower) ||
+      s.loja?.cod_loja?.toLowerCase().includes(searchLower) ||
+      s.loja?.nome_loja?.toLowerCase().includes(searchLower) ||
+      false
+    const matchesStatus = filterStatus === 'todos' || s.status === filterStatus
+    return matchesSearch && matchesStatus
+  })
+
+  const getStatusIcon = (status: string) => {
+    const statusInfo = STATUS_MAP[status as keyof typeof STATUS_MAP]
+    const Icon = statusInfo?.icon || AlertCircle
+    return <Icon className="h-4 w-4" />
+  }
+
+  const getStatusBadge = (status: string) => {
+    const statusInfo = STATUS_MAP[status as keyof typeof STATUS_MAP]
+    return (
+      <Badge className={statusInfo?.color || 'bg-gray-100'}>
+        {getStatusIcon(status)}
+        <span className="ml-1">{statusInfo?.label || status}</span>
+      </Badge>
     )
-`
+  }
 
-// ============================================
-// FUNÇÕES DE CONSULTA
-// ============================================
+  const getPrioridadeBadge = (prioridade: string) => {
+    const config = PRIORIDADE_LABELS[prioridade as keyof typeof PRIORIDADE_LABELS]
+    if (!config) return null
+    return (
+      <Badge variant="outline" className="text-xs">
+        {prioridade === 'urgente' && '🔴 '}
+        {prioridade === 'alta' && '🟠 '}
+        {prioridade === 'media' && '🟡 '}
+        {prioridade === 'baixa' && '🟢 '}
+        {config.label}
+      </Badge>
+    )
+  }
 
-/**
- * 🔥 Buscar todas as solicitações (filtradas por permissão)
- * - ADMIN: vê todas
- * - REGIONAL: vê solicitações das lojas da sua região
- * - GERENTE: vê solicitações da sua loja
- * - PROMOTOR: vê apenas suas próprias solicitações
- */
-export async function getSolicitacoes(): Promise<SolicitacaoPromotor[]> {
-    try {
-        const { data: userData } = await supabase.auth.getUser()
-        const user = userData?.user
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" style={{ color: PRIMARY_COLOR }} />
+          <p className="text-muted-foreground">Carregando solicitações...</p>
+        </div>
+      </div>
+    )
+  }
 
-        if (!user) {
-            console.warn('Usuário não autenticado')
-            return []
-        }
+  return (
+    <TooltipProvider>
+      <div className="space-y-6">
+        {/* Cabeçalho */}
+        <div className="rounded-lg p-6 text-white" style={{ background: `linear-gradient(135deg, ${PRIMARY_COLOR} 0%, #cc1168 100%)` }}>
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <h1 className="text-2xl font-bold flex items-center gap-2">
+                <UserPlus className="h-7 w-7" />
+                Solicitação de Promotores
+              </h1>
+              <p className="text-pink-100 text-sm mt-1">
+                Solicite um novo promotor para uma loja
+              </p>
+            </div>
+            
+            <Dialog open={openModal} onOpenChange={setOpenModal}>
+              <DialogTrigger asChild>
+                <Button className="bg-white text-primary hover:bg-gray-100">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Nova Solicitação
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>Nova Solicitação de Promotor</DialogTitle>
+                  <DialogDescription>
+                    Preencha os dados para solicitar um novo promotor para a loja.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="loja">Loja *</Label>
+                    <Select 
+                      value={novaSolicitacao.loja_id} 
+                      onValueChange={(value) => setNovaSolicitacao({ ...novaSolicitacao, loja_id: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione a loja" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {lojas.map(loja => (
+                          <SelectItem key={loja.id} value={loja.id}>
+                            {loja.cod_loja} - {loja.nome_loja}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-        const appRole = user.app_role || 'promotor'
+                  <div className="space-y-2">
+                    <Label htmlFor="data_necessidade">Data Necessidade *</Label>
+                    <Input
+                      id="data_necessidade"
+                      type="date"
+                      value={novaSolicitacao.data_necessidade}
+                      onChange={(e) => setNovaSolicitacao({ ...novaSolicitacao, data_necessidade: e.target.value })}
+                    />
+                  </div>
 
-        let query = supabase
-            .from('solicitacoes_promotores')
-            .select(SOLICITACAO_SELECT)
-            .order('created_at', { ascending: false })
+                  <div className="space-y-2">
+                    <Label htmlFor="tipo_solicitacao">Tipo de Solicitação</Label>
+                    <Select 
+                      value={novaSolicitacao.tipo_solicitacao} 
+                      onValueChange={(value: any) => setNovaSolicitacao({ ...novaSolicitacao, tipo_solicitacao: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="novo">🆕 Novo Promotor</SelectItem>
+                        <SelectItem value="reposicao">🔄 Reposição</SelectItem>
+                        <SelectItem value="transferencia">📦 Transferência</SelectItem>
+                        <SelectItem value="temporario">⏳ Temporário</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-        // 🔥 ADMIN: vê todas
-        if (appRole === 'admin') {
-            // sem filtro
-        }
-        // 🔥 REGIONAL: vê solicitações das lojas da região
-        else if (appRole === 'regional') {
-            // Buscar lojas da região
-            const { data: lojasRegional } = await supabase
-                .from('gerentes_regionais_lojas')
-                .select('loja_id')
-                .eq('gerente_regional_id', user.id)
+                  <div className="space-y-2">
+                    <Label htmlFor="prioridade">Prioridade</Label>
+                    <Select 
+                      value={novaSolicitacao.prioridade} 
+                      onValueChange={(value: any) => setNovaSolicitacao({ ...novaSolicitacao, prioridade: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="baixa">🟢 Baixa</SelectItem>
+                        <SelectItem value="media">🟡 Média</SelectItem>
+                        <SelectItem value="alta">🟠 Alta</SelectItem>
+                        <SelectItem value="urgente">🔴 Urgente</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-            const lojaIds = lojasRegional?.map(l => l.loja_id) || []
+                  <div className="space-y-2">
+                    <Label htmlFor="motivo">Motivo da Solicitação *</Label>
+                    <Textarea
+                      id="motivo"
+                      placeholder="Descreva o motivo da solicitação (ex: crescimento da loja, necessidade de suporte, etc.)"
+                      value={novaSolicitacao.motivo}
+                      onChange={(e) => setNovaSolicitacao({ ...novaSolicitacao, motivo: e.target.value })}
+                      className="min-h-[80px]"
+                    />
+                  </div>
 
-            if (lojaIds.length === 0) {
-                return []
-            }
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="dias_semana">Dias Sugeridos</Label>
+                      <Input
+                        id="dias_semana"
+                        placeholder="Ex: Segunda, Quarta, Sexta"
+                        value={novaSolicitacao.dias_semana_sugerido}
+                        onChange={(e) => setNovaSolicitacao({ ...novaSolicitacao, dias_semana_sugerido: e.target.value })}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="contato">Contato Responsável</Label>
+                      <Input
+                        id="contato"
+                        placeholder="(11) 99999-9999"
+                        value={novaSolicitacao.contato_responsavel}
+                        onChange={(e) => setNovaSolicitacao({ ...novaSolicitacao, contato_responsavel: e.target.value })}
+                      />
+                    </div>
+                  </div>
 
-            query = query.in('loja_id', lojaIds)
-        }
-        // 🔥 GERENTE: vê solicitações da sua loja
-        else if (appRole === 'gerente' && user.loja_id) {
-            query = query.eq('loja_id', user.loja_id)
-        }
-        // 🔥 PROMOTOR: vê apenas suas próprias solicitações
-        else {
-            query = query.eq('solicitante_id', user.id)
-        }
+                  <div className="space-y-2">
+                    <Label htmlFor="observacoes">Observações Adicionais</Label>
+                    <Textarea
+                      id="observacoes"
+                      placeholder="Informações adicionais sobre a solicitação..."
+                      value={novaSolicitacao.observacoes}
+                      onChange={(e) => setNovaSolicitacao({ ...novaSolicitacao, observacoes: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setOpenModal(false)}>
+                    Cancelar
+                  </Button>
+                  <Button 
+                    onClick={handleCreateSolicitacao} 
+                    disabled={saving} 
+                    style={{ background: PRIMARY_COLOR }}
+                  >
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                    {saving ? 'Enviando...' : 'Enviar Solicitação'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </div>
 
-        const { data, error } = await query
+        {/* Filtros */}
+        <div className="flex flex-wrap gap-4 items-center justify-between">
+          <div className="flex flex-wrap gap-2 items-center flex-1">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por loja ou motivo..."
+                className="pl-9"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <Select value={filterStatus} onValueChange={setFilterStatus}>
+              <SelectTrigger className="w-[180px]">
+                <Filter className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Filtrar por status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os status</SelectItem>
+                <SelectItem value="pendente">⏳ Pendente</SelectItem>
+                <SelectItem value="analise">🔍 Em Análise</SelectItem>
+                <SelectItem value="aprovado">✅ Aprovado</SelectItem>
+                <SelectItem value="reprovado">❌ Reprovado</SelectItem>
+                <SelectItem value="cancelado">🚫 Cancelado</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="text-sm text-muted-foreground">
+            {filteredSolicitacoes.length} solicitação(ões)
+          </div>
+        </div>
 
-        if (error) throw error
-        return data || []
-    } catch (error) {
-        console.error('❌ Erro ao buscar solicitações:', error)
-        return []
-    }
+        {/* Lista de Solicitações */}
+        <div className="space-y-4">
+          {filteredSolicitacoes.map((solicitacao) => (
+            <Card key={solicitacao.id} className="hover:shadow-md transition-shadow">
+              <CardContent className="p-4">
+                <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                  {/* Informações principais */}
+                  <div className="flex-1 space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline" className="font-medium">
+                        {solicitacao.loja?.cod_loja} - {solicitacao.loja?.nome_loja}
+                      </Badge>
+                      {getStatusBadge(solicitacao.status)}
+                      {solicitacao.prioridade && getPrioridadeBadge(solicitacao.prioridade)}
+                      {solicitacao.tipo_solicitacao && (
+                        <Badge variant="outline" className="text-xs">
+                          {TIPO_LABELS[solicitacao.tipo_solicitacao]?.label || solicitacao.tipo_solicitacao}
+                        </Badge>
+                      )}
+                    </div>
+
+                    <p className="text-sm text-muted-foreground">
+                      <strong>Motivo:</strong> {solicitacao.motivo}
+                    </p>
+
+                    <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                      <span>
+                        📅 Necessidade: {new Date(solicitacao.data_necessidade).toLocaleDateString('pt-BR')}
+                      </span>
+                      <span>
+                        📝 Criado: {new Date(solicitacao.created_at).toLocaleDateString('pt-BR')}
+                      </span>
+                      {solicitacao.solicitante?.nome && (
+                        <span>
+                          👤 {solicitacao.solicitante.nome}
+                        </span>
+                      )}
+                      {solicitacao.dias_semana_sugerido && (
+                        <span>
+                          📆 {solicitacao.dias_semana_sugerido}
+                        </span>
+                      )}
+                    </div>
+
+                    {solicitacao.observacoes && (
+                      <p className="text-sm text-muted-foreground bg-muted/50 p-2 rounded">
+                        <MessageSquare className="h-3 w-3 inline mr-1" />
+                        {solicitacao.observacoes}
+                      </p>
+                    )}
+
+                    {solicitacao.motivo_reprovacao && (
+                      <p className="text-sm text-red-600 bg-red-50 p-2 rounded">
+                        <XCircle className="h-3 w-3 inline mr-1" />
+                        Motivo da reprovação: {solicitacao.motivo_reprovacao}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Ações */}
+                  <div className="flex flex-wrap gap-2 md:flex-col">
+                    {isAdmin && solicitacao.status === 'pendente' && (
+                      <>
+                        <Button
+                          size="sm"
+                          className="bg-green-500 hover:bg-green-600 text-white"
+                          onClick={() => handleStatusUpdate(solicitacao.id, 'aprovado')}
+                          disabled={submitting}
+                        >
+                          <CheckCircle2 className="h-4 w-4 mr-1" />
+                          Aprovar
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => {
+                            const motivo = prompt('Informe o motivo da reprovação:')
+                            if (motivo !== null) {
+                              handleStatusUpdate(solicitacao.id, 'reprovado', motivo || 'Sem motivo informado')
+                            }
+                          }}
+                          disabled={submitting}
+                        >
+                          <XCircle className="h-4 w-4 mr-1" />
+                          Reprovar
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                          onClick={() => handleStatusUpdate(solicitacao.id, 'analise')}
+                          disabled={submitting}
+                        >
+                          <AlertCircle className="h-4 w-4 mr-1" />
+                          Análise
+                        </Button>
+                      </>
+                    )}
+
+                    {isAdmin && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-red-600 border-red-200 hover:bg-red-50"
+                        onClick={() => handleDeleteSolicitacao(solicitacao.id, solicitacao.motivo)}
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Excluir
+                      </Button>
+                    )}
+
+                    {!isAdmin && solicitacao.status === 'pendente' && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleStatusUpdate(solicitacao.id, 'cancelado')}
+                        disabled={submitting}
+                      >
+                        Cancelar
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+
+          {filteredSolicitacoes.length === 0 && (
+            <div className="text-center py-12">
+              <div className="text-muted-foreground">
+                <UserPlus className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                <h3 className="text-lg font-medium">Nenhuma solicitação encontrada</h3>
+                <p className="text-sm">Crie uma nova solicitação clicando no botão "Nova Solicitação"</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </TooltipProvider>
+  )
 }
 
-/**
- * 🔥 Buscar solicitações por loja
- */
-export async function getSolicitacoesByLoja(lojaId: string): Promise<SolicitacaoPromotor[]> {
-    try {
-        const { data, error } = await supabase
-            .from('solicitacoes_promotores')
-            .select(SOLICITACAO_SELECT)
-            .eq('loja_id', lojaId)
-            .order('created_at', { ascending: false })
-
-        if (error) throw error
-        return data || []
-    } catch (error) {
-        console.error('❌ Erro ao buscar solicitações por loja:', error)
-        return []
-    }
-}
-
-/**
- * 🔥 Buscar solicitações por status
- */
-export async function getSolicitacoesByStatus(status: StatusSolicitacao): Promise<SolicitacaoPromotor[]> {
-    try {
-        const { data, error } = await supabase
-            .from('solicitacoes_promotores')
-            .select(SOLICITACAO_SELECT)
-            .eq('status', status)
-            .order('created_at', { ascending: false })
-
-        if (error) throw error
-        return data || []
-    } catch (error) {
-        console.error('❌ Erro ao buscar solicitações por status:', error)
-        return []
-    }
-}
-
-/**
- * 🔥 Buscar uma solicitação por ID
- */
-export async function getSolicitacaoById(id: string): Promise<SolicitacaoPromotor | null> {
-    try {
-        const { data, error } = await supabase
-            .from('solicitacoes_promotores')
-            .select(SOLICITACAO_SELECT)
-            .eq('id', id)
-            .single()
-
-        if (error) throw error
-        return data
-    } catch (error) {
-        console.error('❌ Erro ao buscar solicitação por ID:', error)
-        return null
-    }
-}
-
-// ============================================
-// FUNÇÕES DE ESCRITA
-// ============================================
-
-/**
- * 🔥 Criar nova solicitação
- */
-export async function createSolicitacao(data: CreateSolicitacaoData): Promise<SolicitacaoPromotor | null> {
-    try {
-        const { data: userData } = await supabase.auth.getUser()
-        const user = userData?.user
-
-        if (!user) {
-            throw new Error('Usuário não autenticado')
-        }
-
-        // Validar campos obrigatórios
-        if (!data.loja_id) throw new Error('Loja é obrigatória')
-        if (!data.motivo) throw new Error('Motivo é obrigatório')
-        if (!data.data_necessidade) throw new Error('Data de necessidade é obrigatória')
-
-        const { data: solicitacao, error } = await supabase
-            .from('solicitacoes_promotores')
-            .insert({
-                loja_id: data.loja_id,
-                solicitante_id: user.id,
-                tipo_solicitacao: data.tipo_solicitacao || 'novo',
-                motivo: data.motivo,
-                prioridade: data.prioridade || 'media',
-                promotor_atual_id: data.promotor_atual_id || null,
-                promotor_sugerido_id: data.promotor_sugerido_id || null,
-                observacoes: data.observacoes || null,
-                dias_semana_sugerido: data.dias_semana_sugerido || null,
-                contato_responsavel: data.contato_responsavel || null,
-                data_necessidade: data.data_necessidade,
-                status: 'pendente'
-            })
-            .select(SOLICITACAO_SELECT)
-            .single()
-
-        if (error) throw error
-
-        // 🔥 Registrar no histórico (opcional - tabela precisa existir)
-        try {
-            await supabase
-                .from('historico_solicitacoes')
-                .insert({
-                    solicitacao_id: solicitacao.id,
-                    usuario_id: user.id,
-                    acao: 'criacao',
-                    descricao: `Solicitação de ${data.tipo_solicitacao} criada`
-                })
-        } catch (histError) {
-            console.warn('⚠️ Erro ao registrar histórico:', histError)
-            // Não falha a operação principal
-        }
-
-        return solicitacao
-    } catch (error) {
-        console.error('❌ Erro ao criar solicitação:', error)
-        return null
-    }
-}
-
-/**
- * 🔥 Atualizar dados da solicitação (apenas pendente)
- */
-export async function updateSolicitacao(
-    id: string,
-    data: UpdateSolicitacaoData
-): Promise<SolicitacaoPromotor | null> {
-    try {
-        const { data: solicitacaoAtual } = await supabase
-            .from('solicitacoes_promotores')
-            .select('status')
-            .eq('id', id)
-            .single()
-
-        if (!solicitacaoAtual || solicitacaoAtual.status !== 'pendente') {
-            throw new Error('Apenas solicitações pendentes podem ser editadas')
-        }
-
-        const updateData: any = {}
-        if (data.tipo_solicitacao !== undefined) updateData.tipo_solicitacao = data.tipo_solicitacao
-        if (data.motivo !== undefined) updateData.motivo = data.motivo
-        if (data.prioridade !== undefined) updateData.prioridade = data.prioridade
-        if (data.promotor_atual_id !== undefined) updateData.promotor_atual_id = data.promotor_atual_id
-        if (data.promotor_sugerido_id !== undefined) updateData.promotor_sugerido_id = data.promotor_sugerido_id
-        if (data.observacoes !== undefined) updateData.observacoes = data.observacoes
-        if (data.dias_semana_sugerido !== undefined) updateData.dias_semana_sugerido = data.dias_semana_sugerido
-        if (data.contato_responsavel !== undefined) updateData.contato_responsavel = data.contato_responsavel
-        if (data.data_necessidade !== undefined) updateData.data_necessidade = data.data_necessidade
-
-        const { data: solicitacao, error } = await supabase
-            .from('solicitacoes_promotores')
-            .update(updateData)
-            .eq('id', id)
-            .select(SOLICITACAO_SELECT)
-            .single()
-
-        if (error) throw error
-        return solicitacao
-    } catch (error) {
-        console.error('❌ Erro ao atualizar solicitação:', error)
-        return null
-    }
-}
-
-/**
- * 🔥 Atualizar status da solicitação
- */
-export async function updateSolicitacaoStatus(
-    id: string,
-    status: 'aprovado' | 'reprovado' | 'cancelado' | 'analise',
-    motivo?: string
-): Promise<boolean> {
-    try {
-        const { data: userData } = await supabase.auth.getUser()
-        const user = userData?.user
-
-        if (!user) {
-            throw new Error('Usuário não autenticado')
-        }
-
-        const updateData: any = { status }
-
-        if (status === 'aprovado') {
-            updateData.aprovado_por = user.id
-            updateData.data_aprovacao = new Date().toISOString()
-        } else if (status === 'reprovado') {
-            updateData.reprovado_por = user.id
-            updateData.data_reprovacao = new Date().toISOString()
-            if (motivo) {
-                updateData.motivo_reprovacao = motivo
-            }
-        } else if (status === 'cancelado') {
-            // Não precisa de campos extras
-        } else if (status === 'analise') {
-            // Não precisa de campos extras
-        }
-
-        const { error } = await supabase
-            .from('solicitacoes_promotores')
-            .update(updateData)
-            .eq('id', id)
-
-        if (error) throw error
-
-        // 🔥 Registrar no histórico
-        try {
-            await supabase
-                .from('historico_solicitacoes')
-                .insert({
-                    solicitacao_id: id,
-                    usuario_id: user.id,
-                    acao: status,
-                    descricao: `Status alterado para ${status}${motivo ? `: ${motivo}` : ''}`
-                })
-        } catch (histError) {
-            console.warn('⚠️ Erro ao registrar histórico:', histError)
-        }
-
-        return true
-    } catch (error) {
-        console.error('❌ Erro ao atualizar status da solicitação:', error)
-        return false
-    }
-}
-
-/**
- * 🔥 Deletar solicitação (apenas pendente e dono)
- */
-export async function deleteSolicitacao(id: string): Promise<boolean> {
-    try {
-        const { data: userData } = await supabase.auth.getUser()
-        const user = userData?.user
-
-        if (!user) {
-            throw new Error('Usuário não autenticado')
-        }
-
-        // Verificar se a solicitação existe e é do usuário
-        const { data: solicitacao } = await supabase
-            .from('solicitacoes_promotores')
-            .select('status, solicitante_id')
-            .eq('id', id)
-            .single()
-
-        if (!solicitacao) {
-            throw new Error('Solicitação não encontrada')
-        }
-
-        if (solicitacao.status !== 'pendente') {
-            throw new Error('Apenas solicitações pendentes podem ser excluídas')
-        }
-
-        if (solicitacao.solicitante_id !== user.id) {
-            const appRole = user.app_role || 'promotor'
-            if (appRole !== 'admin') {
-                throw new Error('Você não tem permissão para excluir esta solicitação')
-            }
-        }
-
-        const { error } = await supabase
-            .from('solicitacoes_promotores')
-            .delete()
-            .eq('id', id)
-
-        if (error) throw error
-        return true
-    } catch (error) {
-        console.error('❌ Erro ao deletar solicitação:', error)
-        return false
-    }
-}
-
-// ============================================
-// FUNÇÕES AGREGADORAS
-// ============================================
-
-/**
- * 🔥 Contar solicitações por status
- */
-export async function countSolicitacoes(): Promise<{ status: StatusSolicitacao; count: number }[]> {
-    try {
-        const { data, error } = await supabase
-            .from('solicitacoes_promotores')
-            .select('status')
-
-        if (error) throw error
-
-        const counts: Record<StatusSolicitacao, number> = {
-            pendente: 0,
-            analise: 0,
-            aprovado: 0,
-            reprovado: 0,
-            cancelado: 0
-        }
-
-        data?.forEach((item: { status: StatusSolicitacao }) => {
-            if (item.status in counts) {
-                counts[item.status]++
-            }
-        })
-
-        return Object.entries(counts).map(([status, count]) => ({
-            status: status as StatusSolicitacao,
-            count
-        }))
-    } catch (error) {
-        console.error('❌ Erro ao contar solicitações:', error)
-        return []
-    }
-}
-
-/**
- * 🔥 Contar solicitações pendentes
- */
-export async function countSolicitacoesPendentes(): Promise<number> {
-    try {
-        const { count, error } = await supabase
-            .from('solicitacoes_promotores')
-            .select('id', { count: 'exact', head: true })
-            .eq('status', 'pendente')
-
-        if (error) throw error
-        return count || 0
-    } catch (error) {
-        console.error('❌ Erro ao contar solicitações pendentes:', error)
-        return 0
-    }
-}
-
-/**
- * 🔥 Contar solicitações por prioridade
- */
-export async function countSolicitacoesByPrioridade(): Promise<{ prioridade: PrioridadeSolicitacao; count: number }[]> {
-    try {
-        const { data, error } = await supabase
-            .from('solicitacoes_promotores')
-            .select('prioridade')
-
-        if (error) throw error
-
-        const counts: Record<PrioridadeSolicitacao, number> = {
-            baixa: 0,
-            media: 0,
-            alta: 0,
-            urgente: 0
-        }
-
-        data?.forEach((item: { prioridade: PrioridadeSolicitacao }) => {
-            if (item.prioridade in counts) {
-                counts[item.prioridade]++
-            }
-        })
-
-        return Object.entries(counts).map(([prioridade, count]) => ({
-            prioridade: prioridade as PrioridadeSolicitacao,
-            count
-        }))
-    } catch (error) {
-        console.error('❌ Erro ao contar solicitações por prioridade:', error)
-        return []
-    }
-}
-
-// ============================================
-// UTILIDADES
-// ============================================
-
-/**
- * 🔥 Mapeamento de status para exibição
- */
-export const STATUS_LABELS: Record<StatusSolicitacao, { label: string; color: string; icon: string }> = {
-    pendente: { label: 'Pendente', color: 'bg-yellow-100 text-yellow-700', icon: '⏳' },
-    analise: { label: 'Em Análise', color: 'bg-blue-100 text-blue-700', icon: '🔍' },
-    aprovado: { label: 'Aprovado', color: 'bg-green-100 text-green-700', icon: '✅' },
-    reprovado: { label: 'Reprovado', color: 'bg-red-100 text-red-700', icon: '❌' },
-    cancelado: { label: 'Cancelado', color: 'bg-gray-100 text-gray-700', icon: '🚫' }
-}
-
-/**
- * 🔥 Mapeamento de prioridade para exibição
- */
-export const PRIORIDADE_LABELS: Record<PrioridadeSolicitacao, { label: string; color: string; order: number }> = {
-    baixa: { label: 'Baixa', color: 'bg-gray-100 text-gray-700', order: 1 },
-    media: { label: 'Média', color: 'bg-blue-100 text-blue-700', order: 2 },
-    alta: { label: 'Alta', color: 'bg-orange-100 text-orange-700', order: 3 },
-    urgente: { label: 'Urgente', color: 'bg-red-100 text-red-700', order: 4 }
-}
-
-/**
- * 🔥 Mapeamento de tipo para exibição
- */
-export const TIPO_LABELS: Record<TipoSolicitacao, { label: string; description: string }> = {
-    novo: { label: 'Novo Promotor', description: 'Solicitação de um novo promotor para a loja' },
-    reposicao: { label: 'Reposição', description: 'Substituição de um promotor atual' },
-    transferencia: { label: 'Transferência', description: 'Transferência de promotor entre lojas' },
-    temporario: { label: 'Temporário', description: 'Solicitação de promotor temporário' }
-}
+// 🔥 EXPORTAÇÃO CORRETA
+export { SolicitacoesPromotores }
+export default SolicitacoesPromotores
