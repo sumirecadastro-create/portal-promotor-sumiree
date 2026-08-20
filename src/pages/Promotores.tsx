@@ -667,7 +667,7 @@ function Promotores() {
   }
 
 // ==========================================
-// COMPONENTE - LOJAS MULTI SELECT (CORRIGIDO - VERSÃO FINAL)
+// COMPONENTE - LOJAS MULTI SELECT (FIX DEFINITIVO)
 // ==========================================
 const LojasMultiSelect = ({ 
   selectedIds, 
@@ -749,12 +749,11 @@ const LojasMultiSelect = ({
           </Button>
         </PopoverTrigger>
         <PopoverContent 
-          className="w-[400px] p-0 overflow-hidden" 
+          className="w-[400px] p-0 popover-content-wrapper" 
           align="start"
-          style={{ maxHeight: '420px' }}
         >
           {/* INPUT DE BUSCA - FIXO */}
-          <div className="p-2 border-b sticky top-0 bg-white z-10">
+          <div className="p-2 border-b flex-shrink-0 bg-popover z-10">
             <Input
               placeholder="🔍 Buscar loja por nome ou código..."
               value={buscaTemp}
@@ -763,15 +762,8 @@ const LojasMultiSelect = ({
             />
           </div>
 
-          {/* LISTA COM SCROLL - CORRIGIDO DEFINITIVAMENTE */}
-          <div 
-            className="overflow-y-auto"
-            style={{ 
-              maxHeight: '280px',
-              height: 'auto',
-              minHeight: '100px'
-            }}
-          >
+          {/* LISTA COM SCROLL - USANDO A CLASSE DO CSS */}
+          <div className="popover-content-scroll">
             <div className="p-2">
               {/* SELECT ALL */}
               <div 
@@ -837,7 +829,7 @@ const LojasMultiSelect = ({
           </div>
 
           {/* RODAPÉ COM BOTÕES - FIXO */}
-          <div className="p-2 border-t bg-white sticky bottom-0 flex justify-between">
+          <div className="p-2 border-t flex-shrink-0 flex justify-between bg-popover">
             <Button 
               variant="ghost" 
               size="sm" 
