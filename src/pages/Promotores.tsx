@@ -348,8 +348,6 @@ function Promotores() {
     setLojasPopoverOpenEdit(false)
   }
 
-  // 🔥 REMOVIDO: seleção de gerentes (agora derivado das lojas)
-
   const handleCreatePromotor = async () => {
     if (!newPromotor.promotor_nome?.trim()) {
       toast({
@@ -619,8 +617,8 @@ function Promotores() {
     const safeLojas = Array.isArray(lojas) ? lojas : []
 
     const filteredLojas = safeLojas.filter(loja =>
-      loja?.nome_loja?.toLowerCase().includes(buscaTemp.toLowerCase()) ||
-      loja?.cod_loja?.toLowerCase().includes(buscaTemp.toLowerCase())
+      loja?.nome_loja?.toLowerCase().includes((buscaTemp || '').toLowerCase()) ||
+      loja?.cod_loja?.toLowerCase().includes((buscaTemp || '').toLowerCase())
     )
 
     return (
@@ -661,21 +659,16 @@ function Promotores() {
               <ChevronRightIcon className="h-4 w-4 shrink-0 opacity-50" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent 
-            className="w-[400px] p-0" 
-            align="start"
-            onOpenAutoFocus={(e) => e.preventDefault()}
-          >
+          <PopoverContent className="w-[400px] p-0" align="start">
             <div className="p-2 border-b">
               <Input
                 placeholder="🔍 Buscar loja por nome ou código..."
                 value={buscaTemp}
                 onChange={(e) => setBuscaTemp(e.target.value)}
                 className="h-8"
-                autoFocus={false}
               />
             </div>
-            <div className="max-h-[300px] overflow-y-auto p-2" style={{ overscrollBehavior: 'contain' }}>
+            <div className="max-h-[300px] overflow-y-auto p-2">
               <div className="flex items-center space-x-2 p-2 hover:bg-accent rounded-md cursor-pointer border-b pb-2 mb-1">
                 <Checkbox
                   checked={tempIds.length === safeLojas.length && safeLojas.length > 0}
