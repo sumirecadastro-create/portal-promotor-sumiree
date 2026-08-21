@@ -1,7 +1,8 @@
-import { Bell, Search } from 'lucide-react'
+// src/components/ui/Header.tsx
+import { Search } from 'lucide-react'
 import { SidebarTrigger } from '@/components/ui/sidebar'
 import { Input } from '@/components/ui/input'
-import { Button } from '@/components/ui/button'
+import { NotificationBell } from '@/components/ui/NotificationBell'
 
 export function Header({ title }: { title: string }) {
   return (
@@ -21,10 +22,8 @@ export function Header({ title }: { title: string }) {
           />
         </div>
 
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="h-5 w-5" />
-          <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary animate-pulse" />
-        </Button>
+        {/* 🔥 SUBSTITUIR PELO NotificationBell */}
+        <NotificationBell />
       </div>
     </header>
   )
