@@ -2,17 +2,31 @@
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { 
   Download, 
   TrendingUp, 
   Clock, 
   Store, 
   Calendar,
-  Filter,
   Loader2,
-  Calendar as CalendarIcon,
-  Target,
-  Zap,
   Gift,
   ShoppingBag,
   Ticket,
@@ -24,36 +38,8 @@ import {
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/use-auth'
 import { useToast } from '@/hooks/use-toast'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 
 const PRIMARY_COLOR = '#FF1686'
-
-// ============================================
-// TIPOS
-// ============================================
-
-interface RelatorioState {
-  ranking: boolean
-  gaps: boolean
-  frequencia: boolean
-  acoes: boolean
-}
 
 // ============================================
 // CONFIGURAÇÕES
@@ -85,7 +71,7 @@ export default function Relatorios() {
   const { toast } = useToast()
   
   // Estados
-  const [exportando, setExportando] = useState<RelatorioState>({
+  const [exportando, setExportando] = useState({
     ranking: false,
     gaps: false,
     frequencia: false,
@@ -99,7 +85,6 @@ export default function Relatorios() {
   
   const [lojas, setLojas] = useState<any[]>([])
   const [lojaFiltro, setLojaFiltro] = useState<string>('todas')
-  const [loadingLojas, setLoadingLojas] = useState(false)
   const [dialogAberto, setDialogAberto] = useState(false)
   const [dialogData, setDialogData] = useState<{ title: string; data: any[]; headers: string[] }>({
     title: '',
@@ -108,14 +93,13 @@ export default function Relatorios() {
   })
 
   // ============================================
-  // CARREGAR LOJAS PARA FILTRO
+  // CARREGAR LOJAS
   // ============================================
 
   useEffect(() => {
     const loadLojas = async () => {
       if (!isAdmin && !isRegional) return
       
-      setLoadingLojas(true)
       try {
         let query = supabase.from('lojas').select('id, cod_loja, nome_loja').order('cod_loja')
         
@@ -138,8 +122,6 @@ export default function Relatorios() {
         setLojas(data || [])
       } catch (error) {
         console.error('Erro ao carregar lojas:', error)
-      } finally {
-        setLoadingLojas(false)
       }
     }
     
@@ -150,18 +132,13 @@ export default function Relatorios() {
   // FUNÇÕES AUXILIARES
   // ============================================
 
-  const getMesAno = (mesAno: string) => {
-    const [ano, mes] = mesAno.split('-').map(Number)
-    return { ano, mes }
-  }
-
   const getFirstDay = (mesAno: string) => {
-    const { ano, mes } = getMesAno(mesAno)
+    const [ano, mes] = mesAno.split('-').map(Number)
     return `${ano}-${String(mes).padStart(2, '0')}-01`
   }
 
   const getLastDay = (mesAno: string) => {
-    const { ano, mes } = getMesAno(mesAno)
+    const [ano, mes] = mesAno.split('-').map(Number)
     const lastDay = new Date(ano, mes, 0).getDate()
     return `${ano}-${String(mes).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
   }
@@ -192,7 +169,7 @@ export default function Relatorios() {
   }
 
   // ============================================
-  // RELATÓRIO 1: RANKING DE ATUAÇÃO
+  // RELATÓRIOS
   // ============================================
 
   const exportRanking = async () => {
@@ -236,10 +213,6 @@ export default function Relatorios() {
       setExportando(prev => ({ ...prev, ranking: false }))
     }
   }
-
-  // ============================================
-  // RELATÓRIO 2: GAPS DE COBERTURA
-  // ============================================
 
   const exportGaps = async () => {
     setExportando(prev => ({ ...prev, gaps: true }))
@@ -286,10 +259,6 @@ export default function Relatorios() {
     }
   }
 
-  // ============================================
-  // RELATÓRIO 3: FREQUÊNCIA DE VISITAS
-  // ============================================
-
   const exportFrequencia = async () => {
     setExportando(prev => ({ ...prev, frequencia: true }))
     try {
@@ -329,10 +298,6 @@ export default function Relatorios() {
     }
   }
 
-  // ============================================
-  // RELATÓRIO 4: AÇÕES MENSAIS (NOVO)
-  // ============================================
-
   const exportAcoesMensais = async () => {
     setExportando(prev => ({ ...prev, acoes: true }))
     try {
@@ -361,6 +326,7 @@ export default function Relatorios() {
         const acaoIds = acoesLojas?.map(a => a.acao_id) || []
         if (acaoIds.length === 0) {
           toast({ title: 'Atenção', description: 'Nenhuma ação encontrada para esta loja neste mês' })
+          setExportando(prev => ({ ...prev, acoes: false }))
           return
         }
         query = query.in('id', acaoIds)
@@ -371,6 +337,7 @@ export default function Relatorios() {
       if (error) throw error
       if (!acoes || acoes.length === 0) {
         toast({ title: 'Atenção', description: 'Nenhuma ação encontrada para o período selecionado' })
+        setExportando(prev => ({ ...prev, acoes: false }))
         return
       }
 
@@ -391,7 +358,6 @@ export default function Relatorios() {
         }
       })
 
-      // Mostrar preview em dialog
       setDialogData({
         title: `Ações Mensais - ${new Date(startDate).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`,
         data: dados,
@@ -577,15 +543,23 @@ export default function Relatorios() {
                 </tr>
               </thead>
               <tbody>
-                {dialogData.data.map((row, idx) => (
-                  <tr key={idx} className="hover:bg-muted/50">
-                    {dialogData.headers.map((header, hIdx) => (
-                      <td key={hIdx} className="p-2 border-b text-sm">
-                        {row[header] || '-'}
-                      </td>
-                    ))}
+                {dialogData.data.length > 0 ? (
+                  dialogData.data.map((row, idx) => (
+                    <tr key={idx} className="hover:bg-muted/50">
+                      {dialogData.headers.map((header, hIdx) => (
+                        <td key={hIdx} className="p-2 border-b text-sm">
+                          {row[header] || '-'}
+                        </td>
+                      ))}
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={dialogData.headers.length} className="text-center p-4 text-muted-foreground">
+                      Nenhum dado encontrado
+                    </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
@@ -607,9 +581,7 @@ export default function Relatorios() {
         </DialogContent>
       </Dialog>
 
-      {/* ============================================
-          FOOTER
-          ============================================ */}
+      {/* Footer */}
       <div className="text-center text-xs text-muted-foreground border-t pt-4 mt-4">
         Todos os relatórios são exportados em formato CSV (.csv)
       </div>
