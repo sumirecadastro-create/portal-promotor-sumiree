@@ -1,18 +1,10 @@
 // src/pages/Relatorios.tsx
 import { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import {
   Select,
   SelectContent,
@@ -20,6 +12,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import { 
   Download, 
   TrendingUp, 
@@ -33,13 +33,24 @@ import {
   Balloon,
   Sparkles,
   Microscope,
-  Megaphone
+  Megaphone,
+  RefreshCw,
+  FileText,
+  Users,
+  MapPin
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/use-auth'
 import { useToast } from '@/hooks/use-toast'
+import { cn } from '@/lib/utils'
 
 const PRIMARY_COLOR = '#FF1686'
+
+// ============================================
+// TIPOS
+// ============================================
+
+type TabRelatorio = 'acoes' | 'frequencia' | 'campanhas'
 
 // ============================================
 // CONFIGURAÇÕES
@@ -55,11 +66,11 @@ const TIPO_ACOES_CONFIG: Record<string, { icon: any; label: string; color: strin
   abordagem: { icon: Megaphone, label: 'Abordagem', color: '#FF1686' },
 }
 
-const STATUS_ACOES_CONFIG: Record<string, { label: string; color: string }> = {
-  pendente: { label: 'Pendente', color: 'bg-yellow-100 text-yellow-700' },
-  em_andamento: { label: 'Em Andamento', color: 'bg-green-100 text-green-700' },
-  agendada: { label: 'Agendada', color: 'bg-blue-100 text-blue-700' },
-  concluida: { label: 'Concluída', color: 'bg-gray-100 text-gray-700' },
+const STATUS_CONFIG: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
+  pendente: { label: 'Pendente', variant: 'outline' },
+  em_andamento: { label: 'Em Andamento', variant: 'default' },
+  agendada: { label: 'Agendada', variant: 'secondary' },
+  concluida: { label: 'Concluída', variant: 'outline' },
 }
 
 // ============================================
@@ -71,26 +82,21 @@ export default function Relatorios() {
   const { toast } = useToast()
   
   // Estados
-  const [exportando, setExportando] = useState({
-    ranking: false,
-    gaps: false,
-    frequencia: false,
-    acoes: false
-  })
+  const [tabAtiva, setTabAtiva] = useState<TabRelatorio>('acoes')
+  const [loading, setLoading] = useState(false)
+  const [exportando, setExportando] = useState(false)
   
+  // Filtros
   const [mesSelecionado, setMesSelecionado] = useState(() => {
     const now = new Date()
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   })
-  
-  const [lojas, setLojas] = useState<any[]>([])
   const [lojaFiltro, setLojaFiltro] = useState<string>('todas')
-  const [dialogAberto, setDialogAberto] = useState(false)
-  const [dialogData, setDialogData] = useState<{ title: string; data: any[]; headers: string[] }>({
-    title: '',
-    data: [],
-    headers: []
-  })
+  
+  // Dados
+  const [dados, setDados] = useState<any[]>([])
+  const [lojas, setLojas] = useState<any[]>([])
+  const [totalRegistros, setTotalRegistros] = useState(0)
 
   // ============================================
   // CARREGAR LOJAS
@@ -129,461 +135,444 @@ export default function Relatorios() {
   }, [isAdmin, isRegional, userLojaId])
 
   // ============================================
-  // FUNÇÕES AUXILIARES
+  // CARREGAR DADOS POR ABA
   // ============================================
 
-  const getFirstDay = (mesAno: string) => {
-    const [ano, mes] = mesAno.split('-').map(Number)
-    return `${ano}-${String(mes).padStart(2, '0')}-01`
+  const loadData = async () => {
+    setLoading(true)
+    try {
+      if (tabAtiva === 'acoes') {
+        await loadAcoes()
+      } else if (tabAtiva === 'frequencia') {
+        await loadFrequencia()
+      } else if (tabAtiva === 'campanhas') {
+        await loadCampanhas()
+      }
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error)
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Não foi possível carregar os dados',
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const getLastDay = (mesAno: string) => {
-    const [ano, mes] = mesAno.split('-').map(Number)
+  // ============================================
+  // CARREGAR AÇÕES
+  // ============================================
+
+  const loadAcoes = async () => {
+    const [ano, mes] = mesSelecionado.split('-').map(Number)
+    const startDate = `${ano}-${String(mes).padStart(2, '0')}-01`
     const lastDay = new Date(ano, mes, 0).getDate()
-    return `${ano}-${String(mes).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+    const endDate = `${ano}-${String(mes).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+
+    let query = supabase
+      .from('acoes')
+      .select(`
+        *,
+        acoes_lojas (
+          lojas (id, cod_loja, nome_loja)
+        )
+      `)
+      .gte('data_inicio', startDate)
+      .lte('data_fim', endDate)
+      .order('data_inicio')
+
+    if (lojaFiltro !== 'todas' && lojaFiltro !== '') {
+      const { data: acoesLojas } = await supabase
+        .from('acoes_lojas')
+        .select('acao_id')
+        .eq('loja_id', lojaFiltro)
+      
+      const acaoIds = acoesLojas?.map(a => a.acao_id) || []
+      if (acaoIds.length > 0) {
+        query = query.in('id', acaoIds)
+      } else {
+        setDados([])
+        setTotalRegistros(0)
+        return
+      }
+    }
+
+    const { data: acoes, error } = await query
+
+    if (error) throw error
+
+    const dadosFormatados = (acoes || []).map((acao: any) => {
+      const lojasNomes = acao.acoes_lojas?.map((al: any) => al.lojas?.nome_loja).filter(Boolean).join(', ') || 'Nenhuma'
+      const tipoConfig = TIPO_ACOES_CONFIG[acao.tipo] || { label: acao.tipo || 'Outra', icon: FileText }
+      const statusConfig = STATUS_CONFIG[acao.status] || { label: acao.status || 'Desconhecido', variant: 'outline' }
+      const Icon = tipoConfig.icon
+      
+      return {
+        id: acao.id,
+        nome: acao.nome || 'Sem nome',
+        tipo: tipoConfig.label,
+        tipoIcon: Icon,
+        status: statusConfig.label,
+        statusVariant: statusConfig.variant,
+        data_inicio: new Date(acao.data_inicio).toLocaleDateString('pt-BR'),
+        data_fim: new Date(acao.data_fim).toLocaleDateString('pt-BR'),
+        lojas: lojasNomes,
+        descricao: acao.descricao || '-'
+      }
+    })
+
+    setDados(dadosFormatados)
+    setTotalRegistros(dadosFormatados.length)
   }
 
-  const downloadCSV = (data: any[], headers: string[], filename: string) => {
-    if (data.length === 0) {
+  // ============================================
+  // CARREGAR FREQUÊNCIA DE VISITAS
+  // ============================================
+
+  const loadFrequencia = async () => {
+    let query = supabase
+      .from('visitas')
+      .select('loja_id, check_in, check_out, lojas(nome_loja, cod_loja)')
+      .not('check_out', 'is', null)
+
+    if (lojaFiltro !== 'todas' && lojaFiltro !== '') {
+      query = query.eq('loja_id', lojaFiltro)
+    }
+
+    if (!isAdmin && userLojaId) {
+      query = query.eq('loja_id', userLojaId)
+    }
+
+    const { data: visitas, error } = await query
+
+    if (error) throw error
+
+    const lojaMap = new Map()
+    visitas?.forEach((v: any) => {
+      const lojaNome = v.lojas?.nome_loja
+      const lojaCod = v.lojas?.cod_loja
+      if (!lojaNome) return
+      if (!lojaMap.has(v.loja_id)) {
+        lojaMap.set(v.loja_id, { 
+          loja: lojaNome, 
+          codigo: lojaCod,
+          total: 0, 
+          tempoTotal: 0, 
+          contagem: 0 
+        })
+      }
+      const item = lojaMap.get(v.loja_id)
+      item.total += 1
+      if (v.check_out) {
+        const minutos = (new Date(v.check_out).getTime() - new Date(v.check_in).getTime()) / (1000 * 60)
+        if (minutos > 0) {
+          item.tempoTotal += minutos
+          item.contagem += 1
+        }
+      }
+    })
+
+    const dadosFormatados = Array.from(lojaMap.values()).map(item => ({
+      codigo: item.codigo || '-',
+      loja: item.loja,
+      total_visitas: item.total,
+      tempo_medio: item.contagem > 0 ? Math.round(item.tempoTotal / item.contagem) : 0,
+      tempo_formatado: item.contagem > 0 
+        ? `${Math.floor(item.tempoTotal / item.contagem / 60)}h ${Math.round(item.tempoTotal / item.contagem % 60)}min`
+        : '-'
+    }))
+
+    setDados(dadosFormatados)
+    setTotalRegistros(dadosFormatados.length)
+  }
+
+  // ============================================
+  // CARREGAR CAMPANHAS
+  // ============================================
+
+  const loadCampanhas = async () => {
+    const [ano, mes] = mesSelecionado.split('-').map(Number)
+    const startDate = `${ano}-${String(mes).padStart(2, '0')}-01`
+    const lastDay = new Date(ano, mes, 0).getDate()
+    const endDate = `${ano}-${String(mes).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+
+    let query = supabase
+      .from('campanhas')
+      .select(`
+        *,
+        lojas_campanhas (
+          lojas (id, cod_loja, nome_loja)
+        )
+      `)
+      .gte('data_inicio', startDate)
+      .lte('data_fim', endDate)
+      .order('data_inicio')
+
+    if (lojaFiltro !== 'todas' && lojaFiltro !== '') {
+      const { data: campanhasLojas } = await supabase
+        .from('lojas_campanhas')
+        .select('campanha_id')
+        .eq('loja_id', lojaFiltro)
+      
+      const campanhaIds = campanhasLojas?.map(c => c.campanha_id) || []
+      if (campanhaIds.length > 0) {
+        query = query.in('id', campanhaIds)
+      } else {
+        setDados([])
+        setTotalRegistros(0)
+        return
+      }
+    }
+
+    const { data: campanhas, error } = await query
+
+    if (error) throw error
+
+    const dadosFormatados = (campanhas || []).map((campanha: any) => {
+      const lojasNomes = campanha.lojas_campanhas?.map((lc: any) => lc.lojas?.nome_loja).filter(Boolean).join(', ') || 'Nenhuma'
+      const status = new Date(campanha.data_fim) < new Date() ? 'Concluída' : 'Ativa'
+      
+      return {
+        id: campanha.id,
+        nome: campanha.nome || 'Sem nome',
+        descricao: campanha.descricao || '-',
+        data_inicio: new Date(campanha.data_inicio).toLocaleDateString('pt-BR'),
+        data_fim: new Date(campanha.data_fim).toLocaleDateString('pt-BR'),
+        status: status,
+        lojas: lojasNomes
+      }
+    })
+
+    setDados(dadosFormatados)
+    setTotalRegistros(dadosFormatados.length)
+  }
+
+  // ============================================
+  // EXPORTAR CSV
+  // ============================================
+
+  const exportCSV = async () => {
+    if (dados.length === 0) {
       toast({ title: 'Atenção', description: 'Não há dados para exportar' })
       return
     }
 
-    const csvRows = [headers]
-    data.forEach(item => {
-      csvRows.push(headers.map(h => {
-        const value = item[h] !== undefined && item[h] !== null ? item[h] : ''
-        return typeof value === 'string' && value.includes(',') ? `"${value}"` : String(value)
-      }))
-    })
+    setExportando(true)
+    try {
+      const headers = Object.keys(dados[0]).filter(h => h !== 'id' && h !== 'tipoIcon' && h !== 'statusVariant')
+      const csvRows = [headers]
+      
+      dados.forEach(item => {
+        csvRows.push(headers.map(h => {
+          const value = item[h] !== undefined && item[h] !== null ? item[h] : ''
+          return typeof value === 'string' && value.includes(',') ? `"${value}"` : String(value)
+        }))
+      })
 
-    const csvContent = csvRows.map(row => row.join(',')).join('\n')
-    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    link.href = URL.createObjectURL(blob)
-    link.download = `${filename}_${new Date().toISOString().split('T')[0]}.csv`
-    link.click()
-    URL.revokeObjectURL(link.href)
+      const csvContent = csvRows.map(row => row.join(',')).join('\n')
+      const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' })
+      const link = document.createElement('a')
+      link.href = URL.createObjectURL(blob)
+      link.download = `${tabAtiva}_${new Date().toISOString().split('T')[0]}.csv`
+      link.click()
+      URL.revokeObjectURL(link.href)
 
-    toast({ title: 'Sucesso', description: 'Relatório exportado com sucesso!' })
+      toast({ title: 'Sucesso', description: 'Relatório exportado com sucesso!' })
+    } catch (error) {
+      toast({ variant: 'destructive', title: 'Erro', description: 'Erro ao exportar' })
+    } finally {
+      setExportando(false)
+    }
   }
 
   // ============================================
-  // RELATÓRIOS
+  // EFFECT - CARREGAR DADOS AO MUDAR TAB/FILTROS
   // ============================================
 
-  const exportRanking = async () => {
-    setExportando(prev => ({ ...prev, ranking: true }))
-    try {
-      let query = supabase
-        .from('visitas')
-        .select(`
-          promotores (id, promotor_nome),
-          lojas (id, nome_loja)
-        `)
-
-      if (!isAdmin && userLojaId) {
-        query = query.eq('loja_id', userLojaId)
-      }
-
-      const { data: visitas } = await query
-
-      const promotorMap = new Map()
-      visitas?.forEach((visita: any) => {
-        const promotor = visita.promotores
-        if (!promotor) return
-        const id = promotor.id
-        if (!promotorMap.has(id)) {
-          promotorMap.set(id, {
-            promotor: promotor.promotor_nome,
-            total_visitas: 0
-          })
-        }
-        promotorMap.get(id).total_visitas += 1
-      })
-
-      const dados = Array.from(promotorMap.values())
-        .sort((a, b) => b.total_visitas - a.total_visitas)
-        .map((item, idx) => ({ posicao: idx + 1, ...item }))
-
-      downloadCSV(dados, ['posicao', 'promotor', 'total_visitas'], 'ranking_promotores')
-    } catch (error) {
-      toast({ variant: 'destructive', title: 'Erro', description: 'Erro ao exportar ranking' })
-    } finally {
-      setExportando(prev => ({ ...prev, ranking: false }))
-    }
-  }
-
-  const exportGaps = async () => {
-    setExportando(prev => ({ ...prev, gaps: true }))
-    try {
-      let lojasQuery = supabase.from('lojas').select('id, cod_loja, nome_loja')
-      if (!isAdmin && userLojaId) {
-        lojasQuery = lojasQuery.eq('id', userLojaId)
-      }
-      const { data: lojas } = await lojasQuery
-
-      const { data: visitas } = await supabase
-        .from('visitas')
-        .select('loja_id, check_in')
-        .order('check_in', { ascending: false })
-
-      const ultimaVisita = new Map()
-      visitas?.forEach((v: any) => {
-        if (!ultimaVisita.has(v.loja_id)) {
-          ultimaVisita.set(v.loja_id, v.check_in)
-        }
-      })
-
-      const hoje = new Date()
-      const dados = lojas?.map(loja => {
-        const ultima = ultimaVisita.get(loja.id)
-        let dias = 0
-        if (ultima) {
-          const diff = hoje.getTime() - new Date(ultima).getTime()
-          dias = Math.floor(diff / (1000 * 60 * 60 * 24))
-        }
-        return {
-          codigo: loja.cod_loja,
-          loja: loja.nome_loja,
-          ultima_visita: ultima ? new Date(ultima).toLocaleDateString() : 'Nunca',
-          dias_sem_visita: dias
-        }
-      }).filter(l => l.dias_sem_visita >= 15 || l.ultima_visita === 'Nunca')
-
-      downloadCSV(dados, ['codigo', 'loja', 'ultima_visita', 'dias_sem_visita'], 'gaps_cobertura')
-    } catch (error) {
-      toast({ variant: 'destructive', title: 'Erro', description: 'Erro ao exportar gaps' })
-    } finally {
-      setExportando(prev => ({ ...prev, gaps: false }))
-    }
-  }
-
-  const exportFrequencia = async () => {
-    setExportando(prev => ({ ...prev, frequencia: true }))
-    try {
-      let query = supabase.from('visitas').select('loja_id, check_in, check_out, lojas(nome_loja)')
-      if (!isAdmin && userLojaId) {
-        query = query.eq('loja_id', userLojaId)
-      }
-      const { data: visitas } = await query
-
-      const lojaMap = new Map()
-      visitas?.forEach((v: any) => {
-        const lojaNome = v.lojas?.nome_loja
-        if (!lojaNome) return
-        if (!lojaMap.has(v.loja_id)) {
-          lojaMap.set(v.loja_id, { loja: lojaNome, total: 0, tempoTotal: 0, contagem: 0 })
-        }
-        const item = lojaMap.get(v.loja_id)
-        item.total += 1
-        if (v.check_out) {
-          const minutos = (new Date(v.check_out).getTime() - new Date(v.check_in).getTime()) / (1000 * 60)
-          item.tempoTotal += minutos
-          item.contagem += 1
-        }
-      })
-
-      const dados = Array.from(lojaMap.values()).map(item => ({
-        loja: item.loja,
-        total_visitas: item.total,
-        tempo_medio: item.contagem > 0 ? Math.round(item.tempoTotal / item.contagem) : 0
-      }))
-
-      downloadCSV(dados, ['loja', 'total_visitas', 'tempo_medio'], 'frequencia_visitas')
-    } catch (error) {
-      toast({ variant: 'destructive', title: 'Erro', description: 'Erro ao exportar frequência' })
-    } finally {
-      setExportando(prev => ({ ...prev, frequencia: false }))
-    }
-  }
-
-  const exportAcoesMensais = async () => {
-    setExportando(prev => ({ ...prev, acoes: true }))
-    try {
-      const startDate = getFirstDay(mesSelecionado)
-      const endDate = getLastDay(mesSelecionado)
-
-      let query = supabase
-        .from('acoes')
-        .select(`
-          *,
-          acoes_lojas (
-            lojas (id, cod_loja, nome_loja)
-          )
-        `)
-        .gte('data_inicio', startDate)
-        .lte('data_fim', endDate)
-        .order('data_inicio')
-
-      // Filtrar por loja se selecionada
-      if (lojaFiltro !== 'todas' && lojaFiltro !== '') {
-        const { data: acoesLojas } = await supabase
-          .from('acoes_lojas')
-          .select('acao_id')
-          .eq('loja_id', lojaFiltro)
-        
-        const acaoIds = acoesLojas?.map(a => a.acao_id) || []
-        if (acaoIds.length === 0) {
-          toast({ title: 'Atenção', description: 'Nenhuma ação encontrada para esta loja neste mês' })
-          setExportando(prev => ({ ...prev, acoes: false }))
-          return
-        }
-        query = query.in('id', acaoIds)
-      }
-
-      const { data: acoes, error } = await query
-
-      if (error) throw error
-      if (!acoes || acoes.length === 0) {
-        toast({ title: 'Atenção', description: 'Nenhuma ação encontrada para o período selecionado' })
-        setExportando(prev => ({ ...prev, acoes: false }))
-        return
-      }
-
-      // Processar dados para CSV
-      const dados = acoes.map((acao: any) => {
-        const lojasNomes = acao.acoes_lojas?.map((al: any) => al.lojas?.nome_loja).filter(Boolean).join('; ') || 'Nenhuma'
-        const tipoConfig = TIPO_ACOES_CONFIG[acao.tipo] || { label: acao.tipo || 'Outra' }
-        const statusConfig = STATUS_ACOES_CONFIG[acao.status] || { label: acao.status || 'Desconhecido' }
-        
-        return {
-          nome: acao.nome || 'Sem nome',
-          tipo: tipoConfig.label,
-          status: statusConfig.label,
-          data_inicio: new Date(acao.data_inicio).toLocaleDateString('pt-BR'),
-          data_fim: new Date(acao.data_fim).toLocaleDateString('pt-BR'),
-          lojas: lojasNomes,
-          descricao: acao.descricao || ''
-        }
-      })
-
-      setDialogData({
-        title: `Ações Mensais - ${new Date(startDate).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}`,
-        data: dados,
-        headers: ['nome', 'tipo', 'status', 'data_inicio', 'data_fim', 'lojas', 'descricao']
-      })
-      setDialogAberto(true)
-
-    } catch (error) {
-      console.error('Erro ao exportar ações:', error)
-      toast({ variant: 'destructive', title: 'Erro', description: 'Erro ao exportar ações mensais' })
-    } finally {
-      setExportando(prev => ({ ...prev, acoes: false }))
-    }
-  }
-
-  const downloadAcoesCSV = () => {
-    downloadCSV(dialogData.data, dialogData.headers, 'acoes_mensais')
-    setDialogAberto(false)
-  }
+  useEffect(() => {
+    loadData()
+  }, [tabAtiva, mesSelecionado, lojaFiltro])
 
   // ============================================
   // RENDER
   // ============================================
 
+  const tabs: { id: TabRelatorio; label: string; icon: any }[] = [
+    { id: 'acoes', label: 'Ações', icon: Gift },
+    { id: 'frequencia', label: 'Frequência de Visitas', icon: Clock },
+    { id: 'campanhas', label: 'Campanhas', icon: TrendingUp },
+  ]
+
   return (
     <div className="space-y-6">
       {/* Cabeçalho */}
       <div>
-        <h2 className="text-2xl font-bold tracking-tight">Relatórios Analíticos</h2>
+        <h2 className="text-2xl font-bold tracking-tight">📊 Relatórios e Análises</h2>
         <p className="text-muted-foreground">Exporte dados para análise profunda da operação.</p>
       </div>
 
-      {/* Cards de Relatórios */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {/* Ranking */}
-        <Card className="hover:border-primary transition-colors">
-          <CardHeader>
-            <div className="h-10 w-10 bg-primary/10 text-primary rounded-lg flex items-center justify-center mb-4">
-              <TrendingUp className="h-5 w-5" />
-            </div>
-            <CardTitle>Ranking de Atuação</CardTitle>
-            <CardDescription>Melhores promotores por volume de visitas</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button 
-              variant="outline" 
-              className="w-full"
-              onClick={exportRanking}
-              disabled={exportando.ranking}
-            >
-              <Download className="mr-2 h-4 w-4" /> 
-              {exportando.ranking ? 'Exportando...' : 'Exportar CSV'}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Gaps */}
-        <Card className="hover:border-primary transition-colors">
-          <CardHeader>
-            <div className="h-10 w-10 bg-primary/10 text-primary rounded-lg flex items-center justify-center mb-4">
-              <Store className="h-5 w-5" />
-            </div>
-            <CardTitle>Gaps de Cobertura</CardTitle>
-            <CardDescription>Lojas sem visitas nos últimos 15 dias</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button 
-              variant="outline" 
-              className="w-full"
-              onClick={exportGaps}
-              disabled={exportando.gaps}
-            >
-              <Download className="mr-2 h-4 w-4" /> 
-              {exportando.gaps ? 'Exportando...' : 'Exportar CSV'}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Frequência */}
-        <Card className="hover:border-primary transition-colors">
-          <CardHeader>
-            <div className="h-10 w-10 bg-primary/10 text-primary rounded-lg flex items-center justify-center mb-4">
-              <Clock className="h-5 w-5" />
-            </div>
-            <CardTitle>Frequência de Visitas</CardTitle>
-            <CardDescription>Tempo médio de permanência por loja</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Button 
-              variant="outline" 
-              className="w-full"
-              onClick={exportFrequencia}
-              disabled={exportando.frequencia}
-            >
-              <Download className="mr-2 h-4 w-4" /> 
-              {exportando.frequencia ? 'Exportando...' : 'Exportar CSV'}
-            </Button>
-          </CardContent>
-        </Card>
-
-        {/* Ações Mensais - NOVO */}
-        <Card className="hover:border-primary transition-colors" style={{ borderColor: PRIMARY_COLOR }}>
-          <CardHeader>
-            <div className="h-10 w-10 rounded-lg flex items-center justify-center mb-4" style={{ background: `${PRIMARY_COLOR}20`, color: PRIMARY_COLOR }}>
-              <Calendar className="h-5 w-5" />
-            </div>
-            <CardTitle>Ações Mensais</CardTitle>
-            <CardDescription>Exportar todas as ações do mês selecionado</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {/* Seletor de Mês */}
-            <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Mês/Ano</Label>
-              <Input
-                type="month"
-                value={mesSelecionado}
-                onChange={(e) => setMesSelecionado(e.target.value)}
-                className="h-8 text-sm"
-              />
-            </div>
-
-            {/* Seletor de Loja (apenas Admin/Regional) */}
-            {(isAdmin || isRegional) && (
-              <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Loja</Label>
-                <Select value={lojaFiltro} onValueChange={setLojaFiltro}>
-                  <SelectTrigger className="h-8 text-sm">
-                    <SelectValue placeholder="Todas as lojas" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="todas">Todas as lojas</SelectItem>
-                    {lojas.map(loja => (
-                      <SelectItem key={loja.id} value={loja.id}>
-                        {loja.cod_loja} - {loja.nome_loja}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            <Button 
-              className="w-full"
-              style={{ background: PRIMARY_COLOR }}
-              onClick={exportAcoesMensais}
-              disabled={exportando.acoes}
-            >
-              {exportando.acoes ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Download className="mr-2 h-4 w-4" />
-              )}
-              {exportando.acoes ? 'Exportando...' : 'Exportar CSV'}
-            </Button>
-          </CardContent>
-        </Card>
+      {/* TABS */}
+      <div className="border-b">
+        <div className="flex gap-1">
+          {tabs.map((tab) => {
+            const Icon = tab.icon
+            const isActive = tabAtiva === tab.id
+            return (
+              <button
+                key={tab.id}
+                className={cn(
+                  "px-4 py-2 text-sm font-medium transition-all border-b-2 -mb-[1px]",
+                  isActive 
+                    ? "border-primary text-primary" 
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                )}
+                onClick={() => setTabAtiva(tab.id)}
+              >
+                <Icon className="h-4 w-4 inline mr-2" />
+                {tab.label}
+              </button>
+            )
+          })}
+        </div>
       </div>
 
-      {/* ============================================
-          DIALOG DE PREVIEW DO RELATÓRIO DE AÇÕES
-          ============================================ */}
-      <Dialog open={dialogAberto} onOpenChange={setDialogAberto}>
-        <DialogContent className="max-w-4xl max-h-[90vh]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Calendar className="h-5 w-5" style={{ color: PRIMARY_COLOR }} />
-              {dialogData.title}
-            </DialogTitle>
-            <DialogDescription>
-              Visualize os dados antes de exportar. {dialogData.data.length} registro(s) encontrado(s).
-            </DialogDescription>
-          </DialogHeader>
+      {/* FILTROS */}
+      <div className="flex flex-wrap items-end gap-4 bg-muted/30 p-4 rounded-lg">
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">Filtro de Período</Label>
+          <Input
+            type="month"
+            value={mesSelecionado}
+            onChange={(e) => setMesSelecionado(e.target.value)}
+            className="h-9 w-[180px]"
+          />
+        </div>
 
-          <div className="max-h-[50vh] overflow-y-auto border rounded-md">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-muted">
-                <tr>
-                  {dialogData.headers.map((header, idx) => (
-                    <th key={idx} className="text-left p-2 font-medium border-b">
-                      {header.replace('_', ' ').toUpperCase()}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {dialogData.data.length > 0 ? (
-                  dialogData.data.map((row, idx) => (
-                    <tr key={idx} className="hover:bg-muted/50">
-                      {dialogData.headers.map((header, hIdx) => (
-                        <td key={hIdx} className="p-2 border-b text-sm">
-                          {row[header] || '-'}
-                        </td>
+        {(isAdmin || isRegional) && (
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Loja</Label>
+            <Select value={lojaFiltro} onValueChange={setLojaFiltro}>
+              <SelectTrigger className="h-9 w-[200px]">
+                <SelectValue placeholder="Todas as lojas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas">🌎 Todas as lojas</SelectItem>
+                {lojas.map(loja => (
+                  <SelectItem key={loja.id} value={loja.id}>
+                    {loja.cod_loja} - {loja.nome_loja}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        <Button 
+          variant="outline" 
+          size="sm" 
+          className="h-9"
+          onClick={loadData}
+          disabled={loading}
+        >
+          <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />
+          Atualizar
+        </Button>
+
+        <div className="ml-auto flex items-center gap-2">
+          <Badge variant="outline" className="text-xs">
+            {totalRegistros} registro(s)
+          </Badge>
+          <Button 
+            size="sm"
+            className="h-9"
+            style={{ background: PRIMARY_COLOR }}
+            onClick={exportCSV}
+            disabled={exportando || dados.length === 0}
+          >
+            {exportando ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <Download className="h-4 w-4 mr-2" />
+            )}
+            Exportar CSV
+          </Button>
+        </div>
+      </div>
+
+      {/* TABELA DE DADOS */}
+      <Card>
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin" style={{ color: PRIMARY_COLOR }} />
+            </div>
+          ) : dados.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <FileText className="h-12 w-12 mx-auto mb-3 opacity-50" />
+              <p>Nenhum dado encontrado para o período selecionado</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    {Object.keys(dados[0])
+                      .filter(h => h !== 'id' && h !== 'tipoIcon' && h !== 'statusVariant')
+                      .map((header) => (
+                        <TableHead key={header} className="whitespace-nowrap">
+                          {header.replace(/_/g, ' ').toUpperCase()}
+                        </TableHead>
                       ))}
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={dialogData.headers.length} className="text-center p-4 text-muted-foreground">
-                      Nenhum dado encontrado
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <Badge variant="outline" className="text-xs">
-              Total: {dialogData.data.length} registros
-            </Badge>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setDialogAberto(false)}>
-                Fechar
-              </Button>
-              <Button onClick={downloadAcoesCSV} style={{ background: PRIMARY_COLOR }}>
-                <Download className="mr-2 h-4 w-4" />
-                Exportar CSV
-              </Button>
-            </DialogFooter>
-          </div>
-        </DialogContent>
-      </Dialog>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {dados.map((row, idx) => (
+                    <TableRow key={idx}>
+                      {Object.entries(row)
+                        .filter(([key]) => key !== 'id' && key !== 'tipoIcon' && key !== 'statusVariant')
+                        .map(([key, value]) => {
+                          // Renderizar badge para status
+                          if (key === 'status' && row.statusVariant) {
+                            const variant = row.statusVariant
+                            return (
+                              <TableCell key={key}>
+                                <Badge variant={variant as any} className="text-xs">
+                                  {value as string}
+                                </Badge>
+                              </TableCell>
+                            )
+                          }
+                          // Renderizar ícone para tipo
+                          if (key === 'tipo' && row.tipoIcon) {
+                            const Icon = row.tipoIcon
+                            return (
+                              <TableCell key={key} className="whitespace-nowrap">
+                                <div className="flex items-center gap-2">
+                                  <Icon className="h-4 w-4" style={{ color: PRIMARY_COLOR }} />
+                                  <span>{value as string}</span>
+                                </div>
+                              </TableCell>
+                            )
+                          }
+                          return (
+                            <TableCell key={key} className="whitespace-nowrap">
+                              {value as string}
+                            </TableCell>
+                          )
+                        })}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Footer */}
       <div className="text-center text-xs text-muted-foreground border-t pt-4 mt-4">
-        Todos os relatórios são exportados em formato CSV (.csv)
+        Dados exportados em formato CSV (.csv) • {new Date().toLocaleDateString('pt-BR')}
       </div>
     </div>
   )
