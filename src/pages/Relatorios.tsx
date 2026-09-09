@@ -161,7 +161,7 @@ export default function Relatorios() {
   }
 
   // ============================================
-  // CARREGAR AÇÕES
+  // CARREGAR AÇÕES (CORRIGIDO)
   // ============================================
 
   const loadAcoes = async () => {
@@ -170,6 +170,7 @@ export default function Relatorios() {
     const lastDay = new Date(ano, mes, 0).getDate()
     const endDate = `${ano}-${String(mes).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 
+    // 🔥 CORRIGIDO: Ações que TOCAM o mês (mesma lógica do calendário)
     let query = supabase
       .from('acoes')
       .select(`
@@ -178,10 +179,11 @@ export default function Relatorios() {
           lojas (id, cod_loja, nome_loja)
         )
       `)
-      .gte('data_inicio', startDate)
-      .lte('data_fim', endDate)
+      .lte('data_inicio', endDate)    // Começou antes ou no fim do mês
+      .gte('data_fim', startDate)     // Termina depois ou no início do mês
       .order('data_inicio')
 
+    // Filtro por loja
     if (lojaFiltro !== 'todas' && lojaFiltro !== '') {
       const { data: acoesLojas } = await supabase
         .from('acoes_lojas')
@@ -189,20 +191,28 @@ export default function Relatorios() {
         .eq('loja_id', lojaFiltro)
       
       const acaoIds = acoesLojas?.map(a => a.acao_id) || []
-      if (acaoIds.length > 0) {
-        query = query.in('id', acaoIds)
-      } else {
+      if (acaoIds.length === 0) {
         setDados([])
         setTotalRegistros(0)
         return
       }
+      query = query.in('id', acaoIds)
     }
 
     const { data: acoes, error } = await query
 
-    if (error) throw error
+    if (error) {
+      console.error('❌ Erro ao carregar ações:', error)
+      throw error
+    }
 
-    const dadosFormatados = (acoes || []).map((acao: any) => {
+    if (!acoes || acoes.length === 0) {
+      setDados([])
+      setTotalRegistros(0)
+      return
+    }
+
+    const dadosFormatados = acoes.map((acao: any) => {
       const lojasNomes = acao.acoes_lojas?.map((al: any) => al.lojas?.nome_loja).filter(Boolean).join(', ') || 'Nenhuma'
       const tipoConfig = TIPO_ACOES_CONFIG[acao.tipo] || { label: acao.tipo || 'Outra', icon: FileText }
       const statusConfig = STATUS_CONFIG[acao.status] || { label: acao.status || 'Desconhecido', variant: 'outline' }
@@ -305,8 +315,8 @@ export default function Relatorios() {
           lojas (id, cod_loja, nome_loja)
         )
       `)
-      .gte('data_inicio', startDate)
-      .lte('data_fim', endDate)
+      .lte('data_inicio', endDate)
+      .gte('data_fim', startDate)
       .order('data_inicio')
 
     if (lojaFiltro !== 'todas' && lojaFiltro !== '') {
