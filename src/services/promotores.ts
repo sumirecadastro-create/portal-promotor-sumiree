@@ -1,4 +1,9 @@
+// services/promotores.ts
 import { supabase } from '@/lib/supabase'
+
+// ============================================
+// TIPOS
+// ============================================
 
 export interface PromotorCarta {
   id: string
@@ -70,7 +75,10 @@ export interface UpdatePromotorData {
   status?: string
 }
 
-// Buscar todos os promotores com suas lojas, marcas, gerentes e cartas
+// ============================================
+// BUSCAR TODOS OS PROMOTORES
+// ============================================
+
 export async function getPromotores(): Promise<Promotor[]> {
   try {
     console.log('🚀 Buscando promotores...')
@@ -259,7 +267,10 @@ export async function getPromotores(): Promise<Promotor[]> {
   }
 }
 
-// Buscar um promotor específico por ID
+// ============================================
+// BUSCAR PROMOTOR POR ID
+// ============================================
+
 export async function getPromotorById(id: string): Promise<Promotor | null> {
   try {
     const { data: promotor, error } = await supabase
@@ -366,7 +377,10 @@ export async function getPromotorById(id: string): Promise<Promotor | null> {
   }
 }
 
-// Buscar todas as marcas disponíveis para cadastro
+// ============================================
+// BUSCAR MARCAS DISPONÍVEIS
+// ============================================
+
 export async function getMarcasDisponiveis(): Promise<Marca[]> {
   try {
     const { data, error } = await supabase
@@ -387,7 +401,10 @@ export async function getMarcasDisponiveis(): Promise<Marca[]> {
   }
 }
 
-// Buscar todas as lojas disponíveis para vinculação
+// ============================================
+// BUSCAR LOJAS DISPONÍVEIS
+// ============================================
+
 export async function getLojasDisponiveis(): Promise<{ id: string; cod_loja: string; nome_loja: string; numero_loja: string }[]> {
   try {
     const { data, error } = await supabase
@@ -414,7 +431,10 @@ export async function getLojasDisponiveis(): Promise<{ id: string; cod_loja: str
   }
 }
 
-// Buscar gerentes disponíveis
+// ============================================
+// BUSCAR GERENTES DISPONÍVEIS
+// ============================================
+
 export async function getGerentesDisponiveis(): Promise<{ id: string; nome_gerente: string; telefone: string | null; cod_loja: string | null }[]> {
   try {
     const { data, error } = await supabase
@@ -434,7 +454,10 @@ export async function getGerentesDisponiveis(): Promise<{ id: string; nome_geren
   }
 }
 
-// Criar um novo promotor
+// ============================================
+// CRIAR PROMOTOR
+// ============================================
+
 export async function createPromotor(data: CreatePromotorData): Promise<Promotor | null> {
   try {
     console.log('📝 Criando promotor:', data.promotor_nome)
@@ -506,13 +529,16 @@ export async function createPromotor(data: CreatePromotorData): Promise<Promotor
   }
 }
 
-// Atualizar um promotor existente
+// ============================================
+// ATUALIZAR PROMOTOR - CORRIGIDO
+// ============================================
+
 export async function updatePromotor(id: string, data: UpdatePromotorData): Promise<Promotor | null> {
   try {
     console.log('✏️ Atualizando promotor:', id)
-    console.log('   Lojas:', data.loja_ids?.length || 0)
-    console.log('   Gerentes:', data.gerente_ids?.length || 0)
-    console.log('   Marcas:', data.marca_ids?.length || 0)
+    console.log('   Nome:', data.promotor_nome)
+    console.log('   Lojas:', data.loja_ids?.length)
+    console.log('   Marcas:', data.marca_ids?.length)
     
     const updateData: any = {}
     if (data.promotor_nome !== undefined) updateData.promotor_nome = data.promotor_nome
@@ -524,6 +550,7 @@ export async function updatePromotor(id: string, data: UpdatePromotorData): Prom
     if (data.status !== undefined) updateData.status = data.status
     updateData.updated_at = new Date().toISOString()
 
+    // Atualizar dados básicos do promotor
     const { error: promotorError } = await supabase
       .from('promotores')
       .update(updateData)
@@ -534,42 +561,88 @@ export async function updatePromotor(id: string, data: UpdatePromotorData): Prom
       throw promotorError
     }
 
-    // Atualizar lojas
-    if (data.loja_ids !== undefined) {
-      await supabase
+    // ============================================
+    // 🔥 CORREÇÃO CRÍTICA: ATUALIZAR LOJAS
+    // SÓ DELETA SE loja_ids FOR FORNECIDO E NÃO VAZIO
+    // ============================================
+    if (data.loja_ids !== undefined && data.loja_ids.length > 0) {
+      console.log(`🔄 Atualizando ${data.loja_ids.length} lojas...`)
+      
+      // Deletar vínculos antigos
+      const { error: deleteError } = await supabase
         .from('promotores_lojas')
         .delete()
         .eq('promotor_id', id)
 
-      if (data.loja_ids.length > 0) {
-        const relacoesLojas = data.loja_ids.map(loja_id => ({
-          promotor_id: id,
-          loja_id: loja_id
-        }))
-
-        await supabase
-          .from('promotores_lojas')
-          .insert(relacoesLojas)
+      if (deleteError) {
+        console.error('Erro ao deletar vínculos antigos:', deleteError)
+        throw deleteError
       }
+
+      // Inserir novos vínculos
+      const relacoesLojas = data.loja_ids.map(loja_id => ({
+        promotor_id: id,
+        loja_id: loja_id
+      }))
+
+      const { error: insertError } = await supabase
+        .from('promotores_lojas')
+        .insert(relacoesLojas)
+
+      if (insertError) {
+        console.error('Erro ao inserir novos vínculos:', insertError)
+        throw insertError
+      }
+
+      console.log(`✅ ${relacoesLojas.length} lojas atualizadas`)
+    } else if (data.loja_ids !== undefined && data.loja_ids.length === 0) {
+      console.warn('⚠️ loja_ids foi enviado VAZIO - vínculos NÃO foram alterados')
+      // 🔥 NÃO DELETA NADA - MANTÉM OS VÍNCULOS EXISTENTES
+    } else {
+      console.log('ℹ️ loja_ids não foi fornecido - vínculos NÃO foram alterados')
+      // 🔥 NÃO DELETA NADA - MANTÉM OS VÍNCULOS EXISTENTES
     }
 
-    // Atualizar marcas
-    if (data.marca_ids !== undefined) {
-      await supabase
+    // ============================================
+    // 🔥 CORREÇÃO CRÍTICA: ATUALIZAR MARCAS
+    // SÓ DELETA SE marca_ids FOR FORNECIDO E NÃO VAZIO
+    // ============================================
+    if (data.marca_ids !== undefined && data.marca_ids.length > 0) {
+      console.log(`🔄 Atualizando ${data.marca_ids.length} marcas...`)
+      
+      // Deletar vínculos antigos
+      const { error: deleteError } = await supabase
         .from('promotores_marcas')
         .delete()
         .eq('promotor_id', id)
 
-      if (data.marca_ids.length > 0) {
-        const relacoesMarcas = data.marca_ids.map(marca_id => ({
-          promotor_id: id,
-          marca_id: marca_id
-        }))
-
-        await supabase
-          .from('promotores_marcas')
-          .insert(relacoesMarcas)
+      if (deleteError) {
+        console.error('Erro ao deletar vínculos de marcas:', deleteError)
+        throw deleteError
       }
+
+      // Inserir novos vínculos
+      const relacoesMarcas = data.marca_ids.map(marca_id => ({
+        promotor_id: id,
+        marca_id: marca_id
+      }))
+
+      const { error: insertError } = await supabase
+        .from('promotores_marcas')
+        .insert(relacoesMarcas)
+
+      if (insertError) {
+        console.error('Erro ao inserir novas marcas:', insertError)
+        throw insertError
+      }
+
+      console.log(`✅ ${relacoesMarcas.length} marcas atualizadas`)
+    } else if (data.marca_ids !== undefined && data.marca_ids.length === 0) {
+      console.warn('⚠️ marca_ids foi enviado VAZIO - vínculos NÃO foram alterados')
+      // 🔥 NÃO DELETA NADA - MANTÉM OS VÍNCULOS EXISTENTES
+    } else {
+      console.log('ℹ️ marca_ids não foi fornecido - vínculos NÃO foram alterados')
+      // 🔥 NÃO DELETA NADA - MANTÉM OS VÍNCULOS EXISTENTES
     }
 
     return await getPromotorById(id)
@@ -579,16 +652,21 @@ export async function updatePromotor(id: string, data: UpdatePromotorData): Prom
   }
 }
 
-// Deletar um promotor
+// ============================================
+// DELETAR PROMOTOR
+// ============================================
+
 export async function deletePromotor(id: string): Promise<boolean> {
   try {
     console.log('🗑️ Deletando promotor:', id)
     
+    // Buscar cartas do promotor
     const { data: cartas } = await supabase
       .from('promotores_cartas')
       .select('id, arquivo')
       .eq('promotor_id', id)
 
+    // Deletar arquivos do storage
     if (cartas && cartas.length > 0) {
       for (const carta of cartas) {
         try {
@@ -603,6 +681,7 @@ export async function deletePromotor(id: string): Promise<boolean> {
       }
     }
 
+    // Deletar registros relacionados
     await supabase
       .from('promotores_cartas')
       .delete()
@@ -618,6 +697,7 @@ export async function deletePromotor(id: string): Promise<boolean> {
       .delete()
       .eq('promotor_id', id)
 
+    // Deletar o promotor
     const { error: promotorError } = await supabase
       .from('promotores')
       .delete()
