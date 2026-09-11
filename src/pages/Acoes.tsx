@@ -1,3 +1,4 @@
+// src/pages/Acoes.tsx
 import { useState, useEffect } from 'react'
 import { 
   Calendar, 
@@ -36,7 +37,8 @@ import {
   Balloon,
   Sparkles,
   Microscope,
-  Megaphone
+  Megaphone,
+  Dices
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -113,7 +115,9 @@ function getLastDayOfMonth(year: number, month: number): string {
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 }
 
-// Configuração de status
+// ============================================
+// CONFIGURAÇÃO DE STATUS
+// ============================================
 const getStatusConfig = (status: string) => {
   switch (status) {
     case 'concluida':
@@ -129,7 +133,9 @@ const getStatusConfig = (status: string) => {
   }
 }
 
-// Configuração de tipo
+// ============================================
+// CONFIGURAÇÃO DE TIPO (COM RASPADINHA)
+// ============================================
 const getTipoConfig = (tipo: string) => {
   switch (tipo) {
     case 'compre_ganhe':
@@ -138,7 +144,7 @@ const getTipoConfig = (tipo: string) => {
       return { icon: ShoppingBag, label: 'Compre e Aplique', description: 'Promoção onde o cliente compra e aplica o produto', color: '#FF1686' }
     case 'compre_concorra':
       return { icon: Ticket, label: 'Compre e Concorra', description: 'Promoção onde o cliente compra e concorre a prêmios', color: '#FF1686' }
-    case 'estouro_balão':
+    case 'estouro_balao':
       return { icon: Balloon, label: 'Estouro de Balão', description: 'Dinâmica de estouro de balões com prêmios', color: '#FF1686' }
     case 'roleta_premiada':
       return { icon: Sparkles, label: 'Roleta Premiada', description: 'Dinâmica de roleta para clientes', color: '#FF1686' }
@@ -146,12 +152,17 @@ const getTipoConfig = (tipo: string) => {
       return { icon: Microscope, label: 'Análise Capilar', description: 'Análise e diagnóstico capilar personalizado', color: '#FF1686' }
     case 'abordagem':
       return { icon: Megaphone, label: 'Abordagem', description: 'Abordagem ativa de clientes', color: '#FF1686' }
+    // 🔥 NOVA CATEGORIA
+    case 'raspadinha':
+      return { icon: Dices, label: 'Raspadinha', description: 'Dinâmica de raspadinha com prêmios', color: '#FF1686' }
     default:
       return { icon: Target, label: 'Outra', description: 'Outros tipos de ação', color: '#6b7280' }
   }
 }
 
-// Componente Checkbox
+// ============================================
+// COMPONENTE CHECKBOX
+// ============================================
 function Checkbox({ checked, onCheckedChange }: { checked: boolean; onCheckedChange: (checked: boolean) => void }) {
   return (
     <div
@@ -166,7 +177,9 @@ function Checkbox({ checked, onCheckedChange }: { checked: boolean; onCheckedCha
   )
 }
 
-// Função para atualizar automaticamente os status das ações baseado nas datas
+// ============================================
+// ATUALIZAR STATUS AUTOMATICAMENTE
+// ============================================
 async function atualizarStatusAcoes() {
   try {
     const hoje = new Date().toISOString().split('T')[0]
@@ -211,7 +224,9 @@ async function atualizarStatusAcoes() {
   }
 }
 
-// Componente de Detalhes da Ação
+// ============================================
+// COMPONENTE DE DETALHES DA AÇÃO
+// ============================================
 function DetalhesAcao({ 
   acao, 
   open, 
@@ -373,7 +388,9 @@ function DetalhesAcao({
   )
 }
 
-// Componente de Tooltip da Ação
+// ============================================
+// COMPONENTE DE TOOLTIP DA AÇÃO
+// ============================================
 function AcaoTooltip({ acao, children }: { acao: Acao; children: React.ReactNode }) {
   const statusConfig = getStatusConfig(acao.status)
   const tipoConfig = getTipoConfig(acao.tipo)
@@ -405,6 +422,9 @@ function AcaoTooltip({ acao, children }: { acao: Acao; children: React.ReactNode
   )
 }
 
+// ============================================
+// COMPONENTE PRINCIPAL
+// ============================================
 export default function Acoes() {
   const { isAdmin, isGerente, isRegional, userLojaId, loading: authLoading } = useAuth()
   
@@ -479,7 +499,7 @@ export default function Acoes() {
     setLojasPopoverOpen(false)
   }
 
-  // 🔥 Buscar lojas com filtro por permissão (REGIONAL, GERENTE ou ADMIN)
+  // 🔥 Buscar lojas com filtro por permissão
   async function carregarLojas() {
     try {
       let query = supabase
@@ -487,7 +507,6 @@ export default function Acoes() {
         .select('*')
         .order('nome_loja', { ascending: true })
       
-      // 🔥 SE FOR REGIONAL: filtrar apenas as lojas que ele gerencia
       if (isRegional && userLojaId) {
         const { data: lojasData } = await supabase
           .from('gerentes_regionais_lojas')
@@ -502,7 +521,6 @@ export default function Acoes() {
           return
         }
       }
-      // Se for gerente (não admin), filtrar apenas a loja dele
       else if (isGerente && !isAdmin && userLojaId) {
         query = query.eq('id', userLojaId)
       }
@@ -519,7 +537,6 @@ export default function Acoes() {
       
       setLojas(lojasFormatadas)
       
-      // Se for gerente e tem apenas uma loja, auto-selecionar
       if (isGerente && !isAdmin && userLojaId && lojasFormatadas.length === 1) {
         setLojasSelecionadas([userLojaId])
       }
@@ -529,16 +546,14 @@ export default function Acoes() {
     }
   }
 
-  // 🔥 Buscar ações com filtro por permissão (REGIONAL, GERENTE ou ADMIN)
+  // 🔥 Buscar ações com filtro por permissão
   async function carregarAcoes() {
     try {
       const startDate = getFirstDayOfMonth(ano, mes)
       const endDate = getLastDayOfMonth(ano, mes)
       
-      // 🔥 Buscar IDs das lojas permitidas
       let lojasPermitidasIds: string[] = []
       
-      // SE FOR REGIONAL: buscar lojas vinculadas
       if (isRegional && userLojaId) {
         const { data: lojasData } = await supabase
           .from('gerentes_regionais_lojas')
@@ -547,7 +562,6 @@ export default function Acoes() {
         
         lojasPermitidasIds = lojasData?.map(l => l.loja_id) || []
       }
-      // SE FOR GERENTE: usar a loja dele
       else if (isGerente && !isAdmin) {
         if (userLojaId) {
           lojasPermitidasIds = [userLojaId]
@@ -584,7 +598,6 @@ export default function Acoes() {
         if (relacoes && relacoes.length > 0) {
           let lojaIds = relacoes.map(r => r.loja_id)
           
-          // 🔥 Se for regional ou gerente, filtrar apenas lojas permitidas
           if ((isRegional || isGerente) && !isAdmin && lojasPermitidasIds.length > 0) {
             lojaIds = lojaIds.filter(id => lojasPermitidasIds.includes(id))
           }
@@ -826,14 +839,17 @@ export default function Acoes() {
                         (filtroTipo !== 'todos' ? 1 : 0) + 
                         (lojasSelecionadas.length > 0 ? 1 : 0)
 
+  // 🔥 TIPOS DE AÇÃO (COM RASPADINHA)
   const tiposAcao = [
     { value: 'compre_ganhe', label: '🎁 Compre e Ganhe', description: 'Promoção onde o cliente compra e ganha brindes' },
     { value: 'compre_aplique', label: '🛍️ Compre e Aplique', description: 'Promoção onde o cliente compra e aplica o produto' },
     { value: 'compre_concorra', label: '🎫 Compre e Concorra', description: 'Promoção onde o cliente compra e concorre a prêmios' },
-    { value: 'estouro_balão', label: '🎈 Estouro de Balão', description: 'Dinâmica de estouro de balões com prêmios' },
+    { value: 'estouro_balao', label: '🎈 Estouro de Balão', description: 'Dinâmica de estouro de balões com prêmios' },
     { value: 'roleta_premiada', label: '✨ Roleta Premiada', description: 'Dinâmica de roleta para clientes' },
     { value: 'analise_capilar', label: '🔬 Análise Capilar', description: 'Análise e diagnóstico capilar personalizado' },
-    { value: 'abordagem', label: '📢 Abordagem', description: 'Abordagem ativa de clientes' }
+    { value: 'abordagem', label: '📢 Abordagem', description: 'Abordagem ativa de clientes' },
+    // 🔥 NOVA CATEGORIA
+    { value: 'raspadinha', label: '🎲 Raspadinha', description: 'Dinâmica de raspadinha com prêmios' }
   ]
 
   if (authLoading || loading) {
