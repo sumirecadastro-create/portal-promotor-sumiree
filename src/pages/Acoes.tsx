@@ -152,7 +152,6 @@ const getTipoConfig = (tipo: string) => {
       return { icon: Microscope, label: 'Análise Capilar', description: 'Análise e diagnóstico capilar personalizado', color: '#FF1686' }
     case 'abordagem':
       return { icon: Megaphone, label: 'Abordagem', description: 'Abordagem ativa de clientes', color: '#FF1686' }
-    // 🔥 NOVA CATEGORIA
     case 'raspadinha':
       return { icon: Dices, label: 'Raspadinha', description: 'Dinâmica de raspadinha com prêmios', color: '#FF1686' }
     default:
@@ -724,6 +723,38 @@ export default function Acoes() {
         .insert(relacoes)
 
       if (relacoesError) throw relacoesError
+
+      // 🔥 ============================================
+      // 🔥 DISPARAR NOTIFICAÇÃO POR E-MAIL PELO FRONTEND
+      // 🔥 ============================================
+      try {
+        const payload = {
+          type: 'INSERT',
+          table: 'acoes',
+          schema: 'public',
+          record: {
+            ...acao,
+            id: acao.id 
+          }
+        };
+
+        console.log('📧 Disparando notificação para nova ação...');
+
+        await fetch('https://yfyxpgksrpnzdjtlobe.supabase.co/functions/v1/notificar-nova-acao', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+        
+        console.log('✅ Notificação disparada com sucesso!');
+      } catch (err) {
+        console.error('⚠️ Erro ao disparar e-mail, mas a ação foi salva:', err);
+      }
+      // 🔥 ============================================
+      // 🔥 FIM DO BLOCO DE NOTIFICAÇÃO
+      // 🔥 ============================================
 
       setShowNovaAcaoModal(false)
       setNovaAcao({
