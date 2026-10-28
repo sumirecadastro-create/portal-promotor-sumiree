@@ -43,74 +43,56 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const loadUser = async () => {
-      setLoading(true)
-      
-      const supabaseUrl = 'https://yfyxpgksrpnzndjtlobe.supabase.co'
-      const storageKey = `sb-${supabaseUrl.split('//')[1].split('.')[0]}-auth-token`
-      const storedSession = localStorage.getItem(storageKey)
-      
-      if (storedSession) {
-        try {
-          const session = JSON.parse(storedSession)
-          console.log('📦 Sessão encontrada no localStorage:', session?.user?.email)
+      try {
+        setLoading(true)
+        
+        // 🔥 CORRIGIDO: Busca a sessão diretamente do SDK do Supabase
+        const { data: { session }, error } = await supabase.auth.getSession()
+        
+        if (error) throw error
+
+        if (session?.user) {
+          console.log('📦 Sessão encontrada:', session.user.email)
           
-          if (session?.user) {
-            const { data: userData } = await supabase
-              .from('usuarios_internos')
-              .select('id, role, nome, loja_id')
-              .eq('email', session.user.email)
-              .maybeSingle()
-            
-            const customUser = session.user as CustomUser
-            const role = userData?.role || 'promotor'
-            const internalUserId = userData?.id
-            
-            customUser.id = internalUserId
-            customUser.app_role = role
-            customUser.nome = userData?.nome || session.user.email?.split('@')[0]
-            customUser.loja_id = userData?.loja_id || null
-            
-            setIsAdmin(role === 'admin')
-            setIsGestor(role === 'gestor')
-            setIsGerente(role === 'gerente')
-            setIsRegional(role === 'regional' || role === 'gerente_regional')
-            setIsSupervisor(role === 'supervisor')
-            setIsPromotor(role === 'promotor')
-            
-            // 🔥 CORRIGIDO: LÓGICA PARA CADA PERFIL
-            if (role === 'regional' || role === 'gerente_regional') {
-              // Para regional, usar o ID do usuário (para buscar na tabela gerentes_regionais_lojas)
-              setUserLojaId(internalUserId)
-              console.log('🔑 Regional - userLojaId (ID do usuário):', internalUserId)
-            } else if (role === 'gerente') {
-              // 🔥 Para gerente, usar a loja_id
-              setUserLojaId(userData?.loja_id || null)
-              console.log('🔑 Gerente - userLojaId (loja_id):', userData?.loja_id)
-            } else {
-              // Para outros perfis, usar a loja_id
-              setUserLojaId(userData?.loja_id || null)
-              console.log('🔑 userLojaId (loja_id):', userData?.loja_id)
-            }
-            
-            console.log('✅ Usuário carregado:', customUser.email, 'Role:', role, 'Internal ID:', internalUserId)
-            setUser(customUser)
-            setLoading(false)
-            return
+          const { data: userData } = await supabase
+            .from('usuarios_internos')
+            .select('id, role, nome, loja_id')
+            .eq('email', session.user.email)
+            .maybeSingle()
+          
+          const customUser = session.user as CustomUser
+          const role = userData?.role || 'promotor'
+          const internalUserId = userData?.id
+          
+          customUser.id = internalUserId || session.user.id
+          customUser.app_role = role
+          customUser.nome = userData?.nome || session.user.email?.split('@')[0]
+          customUser.loja_id = userData?.loja_id || null
+          
+          setIsAdmin(role === 'admin')
+          setIsGestor(role === 'gestor')
+          setIsGerente(role === 'gerente')
+          setIsRegional(role === 'regional' || role === 'gerente_regional')
+          setIsSupervisor(role === 'supervisor')
+          setIsPromotor(role === 'promotor')
+          
+          if (role === 'regional' || role === 'gerente_regional') {
+            setUserLojaId(internalUserId)
+          } else {
+            setUserLojaId(userData?.loja_id || null)
           }
-        } catch (e) {
-          console.error('Erro ao parsear sessão:', e)
+          
+          setUser(customUser)
+        } else {
+          console.log('⚠️ Nenhuma sessão ativa encontrada.')
+          setUser(null)
         }
+      } catch (err) {
+        console.error('❌ Erro ao carregar usuário:', err)
+      } finally {
+        // 🔥 ISSO GARANTE QUE A TELA NUNCA FIQUE TRAVADA
+        setLoading(false)
       }
-      
-      setUser(null)
-      setIsAdmin(false)
-      setIsGestor(false)
-      setIsGerente(false)
-      setIsRegional(false)
-      setIsSupervisor(false)
-      setIsPromotor(false)
-      setUserLojaId(null)
-      setLoading(false)
     }
 
     loadUser()
@@ -129,7 +111,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const role = userData?.role || 'promotor'
         const internalUserId = userData?.id
         
-        customUser.id = internalUserId
+        customUser.id = internalUserId || session.user.id
         customUser.app_role = role
         customUser.nome = userData?.nome || session.user.email?.split('@')[0]
         customUser.loja_id = userData?.loja_id || null
@@ -143,13 +125,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         
         if (role === 'regional' || role === 'gerente_regional') {
           setUserLojaId(internalUserId)
-          console.log('🔑 Regional - userLojaId (ID do usuário):', internalUserId)
-        } else if (role === 'gerente') {
-          setUserLojaId(userData?.loja_id || null)
-          console.log('🔑 Gerente - userLojaId (loja_id):', userData?.loja_id)
         } else {
           setUserLojaId(userData?.loja_id || null)
-          console.log('🔑 userLojaId (loja_id):', userData?.loja_id)
         }
         
         setUser(customUser)
@@ -172,16 +149,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signOut = async () => {
     try {
       console.log('🔓 Iniciando logout...')
-      
-      const supabaseUrl = 'https://yfyxpgksrpnzndjtlobe.supabase.co'
-      const storageKey = `sb-${supabaseUrl.split('//')[1].split('.')[0]}-auth-token`
-      
-      localStorage.removeItem(storageKey)
-      localStorage.removeItem('sb-auth-token')
-      localStorage.removeItem('supabase.auth.token')
-      
-      sessionStorage.clear()
-      
       await supabase.auth.signOut()
       
       setUser(null)
@@ -192,8 +159,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setIsSupervisor(false)
       setIsPromotor(false)
       setUserLojaId(null)
-      
-      console.log('✅ Logout realizado com sucesso')
       
       window.location.href = '/login'
     } catch (error) {
