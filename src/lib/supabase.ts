@@ -2,7 +2,7 @@
 import { createClient } from '@supabase/supabase-js'
 
 // 🔥 EXPORTANDO A URL PARA O ACÕES.TSX USAR
-export const supabaseUrl = 'https://yfyxpgksrpnzdjtlobe.supabase.co'
+export const supabaseUrl = 'https://yfyxpgksrpnzndjtlobe.supabase.co'
 export const supabaseAnonKey = 'sb_publishable_zc64H0edWIVvHxmdZG8Myg_aw-3tP78'
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
