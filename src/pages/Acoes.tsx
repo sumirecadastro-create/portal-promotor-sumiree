@@ -72,11 +72,9 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-// 🔥 Importando a URL para não ter erro de digitação
 import { supabase, supabaseUrl } from '@/lib/supabase'
 import { useAuth } from '@/hooks/use-auth'
 
-// Interfaces
 interface Loja {
   id: string
   nome_loja: string
@@ -97,7 +95,6 @@ interface Acao {
 
 const PRIMARY_COLOR = '#FF1686'
 
-// Função auxiliar para formatar data local para YYYY-MM-DD
 function formatLocalDate(date: Date): string {
   const year = date.getFullYear()
   const month = String(date.getMonth() + 1).padStart(2, '0')
@@ -105,20 +102,15 @@ function formatLocalDate(date: Date): string {
   return `${year}-${month}-${day}`
 }
 
-// Função para obter o primeiro dia do mês no formato YYYY-MM-DD
 function getFirstDayOfMonth(year: number, month: number): string {
   return `${year}-${String(month + 1).padStart(2, '0')}-01`
 }
 
-// Função para obter o último dia do mês no formato YYYY-MM-DD
 function getLastDayOfMonth(year: number, month: number): string {
   const lastDay = new Date(year, month + 1, 0).getDate()
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
 }
 
-// ============================================
-// CONFIGURAÇÃO DE STATUS
-// ============================================
 const getStatusConfig = (status: string) => {
   switch (status) {
     case 'concluida':
@@ -134,9 +126,6 @@ const getStatusConfig = (status: string) => {
   }
 }
 
-// ============================================
-// CONFIGURAÇÃO DE TIPO (COM RASPADINHA)
-// ============================================
 const getTipoConfig = (tipo: string) => {
   switch (tipo) {
     case 'compre_ganhe':
@@ -160,9 +149,6 @@ const getTipoConfig = (tipo: string) => {
   }
 }
 
-// ============================================
-// COMPONENTE CHECKBOX
-// ============================================
 function Checkbox({ checked, onCheckedChange }: { checked: boolean; onCheckedChange: (checked: boolean) => void }) {
   return (
     <div
@@ -177,13 +163,9 @@ function Checkbox({ checked, onCheckedChange }: { checked: boolean; onCheckedCha
   )
 }
 
-// ============================================
-// ATUALIZAR STATUS AUTOMATICAMENTE
-// ============================================
 async function atualizarStatusAcoes() {
   try {
     const hoje = new Date().toISOString().split('T')[0]
-    console.log('📅 Atualizando status das ações... Data atual:', hoje)
     
     const { data: acoes, error } = await supabase
       .from('acoes')
@@ -210,13 +192,11 @@ async function atualizarStatusAcoes() {
         updates.push(
           supabase.from('acoes').update({ status: novoStatus }).eq('id', acao.id)
         )
-        console.log(`🔄 Ação ${acao.id}: ${acao.status} → ${novoStatus}`)
       }
     }
     
     if (updates.length > 0) {
       await Promise.all(updates)
-      console.log(`✅ ${updates.length} ações tiveram status atualizado`)
     }
     
   } catch (error) {
@@ -224,9 +204,6 @@ async function atualizarStatusAcoes() {
   }
 }
 
-// ============================================
-// COMPONENTE DE DETALHES DA AÇÃO
-// ============================================
 function DetalhesAcao({ 
   acao, 
   open, 
@@ -388,9 +365,6 @@ function DetalhesAcao({
   )
 }
 
-// ============================================
-// COMPONENTE DE TOOLTIP DA AÇÃO
-// ============================================
 function AcaoTooltip({ acao, children }: { acao: Acao; children: React.ReactNode }) {
   const statusConfig = getStatusConfig(acao.status)
   const tipoConfig = getTipoConfig(acao.tipo)
@@ -422,9 +396,6 @@ function AcaoTooltip({ acao, children }: { acao: Acao; children: React.ReactNode
   )
 }
 
-// ============================================
-// COMPONENTE PRINCIPAL
-// ============================================
 export default function Acoes() {
   const { isAdmin, isGerente, isRegional, userLojaId, loading: authLoading } = useAuth()
   
@@ -499,7 +470,6 @@ export default function Acoes() {
     setLojasPopoverOpen(false)
   }
 
-  // 🔥 Buscar lojas com filtro por permissão
   async function carregarLojas() {
     try {
       let query = supabase
@@ -546,7 +516,6 @@ export default function Acoes() {
     }
   }
 
-  // 🔥 Buscar ações com filtro por permissão
   async function carregarAcoes() {
     try {
       const startDate = getFirstDayOfMonth(ano, mes)
@@ -636,8 +605,15 @@ export default function Acoes() {
   useEffect(() => {
     const init = async () => {
       if (!authLoading) {
-        await atualizarStatusAcoes()
-        await carregarDados()
+        try {
+          await atualizarStatusAcoes()
+          await carregarDados()
+        } catch (err) {
+          console.error("Erro ao carregar dados:", err)
+          setLoading(false)
+        }
+      } else {
+        setLoading(false)
       }
     }
     init()
@@ -725,40 +701,23 @@ export default function Acoes() {
 
       if (relacoesError) throw relacoesError
 
-      // 🔥 ============================================
-      // 🔥 DISPARAR NOTIFICAÇÃO POR E-MAIL PELO FRONTEND
-      // 🔥 ============================================
       try {
         const payload = {
           type: 'INSERT',
           table: 'acoes',
           schema: 'public',
-          record: {
-            ...acao,
-            id: acao.id 
-          }
+          record: { ...acao, id: acao.id }
         };
-
-        // 🔥 Usando a URL correta importada do supabase.ts
         const functionUrl = `${supabaseUrl}/functions/v1/notificar-nova-acao`;
-
-        console.log('📧 Disparando notificação para nova ação em:', functionUrl);
-
+        
         await fetch(functionUrl, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
-        
-        console.log('✅ Notificação disparada com sucesso!');
       } catch (err) {
-        console.error('⚠️ Erro ao disparar e-mail, mas a ação foi salva:', err);
+        console.error('Erro ao disparar e-mail:', err);
       }
-      // 🔥 ============================================
-      // 🔥 FIM DO BLOCO DE NOTIFICAÇÃO
-      // 🔥 ============================================
 
       setShowNovaAcaoModal(false)
       setNovaAcao({
@@ -874,7 +833,6 @@ export default function Acoes() {
                         (filtroTipo !== 'todos' ? 1 : 0) + 
                         (lojasSelecionadas.length > 0 ? 1 : 0)
 
-  // 🔥 TIPOS DE AÇÃO (COM RASPADINHA)
   const tiposAcao = [
     { value: 'compre_ganhe', label: '🎁 Compre e Ganhe', description: 'Promoção onde o cliente compra e ganha brindes' },
     { value: 'compre_aplique', label: '🛍️ Compre e Aplique', description: 'Promoção onde o cliente compra e aplica o produto' },
@@ -883,7 +841,6 @@ export default function Acoes() {
     { value: 'roleta_premiada', label: '✨ Roleta Premiada', description: 'Dinâmica de roleta para clientes' },
     { value: 'analise_capilar', label: '🔬 Análise Capilar', description: 'Análise e diagnóstico capilar personalizado' },
     { value: 'abordagem', label: '📢 Abordagem', description: 'Abordagem ativa de clientes' },
-    // 🔥 NOVA CATEGORIA
     { value: 'raspadinha', label: '🎲 Raspadinha', description: 'Dinâmica de raspadinha com prêmios' }
   ]
 
@@ -913,7 +870,6 @@ export default function Acoes() {
   return (
     <TooltipProvider>
       <div className="space-y-6">
-        {/* Cabeçalho */}
         <div className="rounded-lg p-6 text-white" style={{ 
           background: `linear-gradient(135deg, ${PRIMARY_COLOR} 0%, #cc1168 100%)` 
         }}>
@@ -968,7 +924,6 @@ export default function Acoes() {
           </div>
         </div>
 
-        {/* Controles do mês */}
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => mudarMes(-1)}>
@@ -993,7 +948,6 @@ export default function Acoes() {
           </div>
         </div>
 
-        {/* Legenda */}
         <div className="flex flex-wrap gap-4 text-sm bg-gray-50 p-3 rounded-lg">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full" style={{ background: PRIMARY_COLOR }}></div>
@@ -1033,7 +987,6 @@ export default function Acoes() {
           </div>
         </div>
 
-        {/* Calendário */}
         <Card className="overflow-hidden shadow-lg border-0">
           <CardContent className="p-0 overflow-x-auto">
             <div className="min-w-[1200px]">
@@ -1147,7 +1100,6 @@ export default function Acoes() {
           </CardContent>
         </Card>
 
-        {/* Modal de Detalhes */}
         <DetalhesAcao 
           acao={acaoSelecionada}
           open={showDetalhesModal}
@@ -1156,7 +1108,6 @@ export default function Acoes() {
           isAdmin={isAdmin}
         />
 
-        {/* Modal de Edição - apenas ADMIN */}
         {isAdmin && (
           <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
             <DialogContent className="sm:max-w-[550px]">
@@ -1308,7 +1259,6 @@ export default function Acoes() {
           </Dialog>
         )}
 
-        {/* Modal de Filtro */}
         <Dialog open={showFilterModal} onOpenChange={setShowFilterModal}>
           <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
             <DialogHeader>
@@ -1428,7 +1378,6 @@ export default function Acoes() {
           </DialogContent>
         </Dialog>
 
-        {/* Modal de Nova Ação - apenas ADMIN */}
         {isAdmin && (
           <Dialog open={showNovaAcaoModal} onOpenChange={setShowNovaAcaoModal}>
             <DialogContent className="sm:max-w-[500px]">
