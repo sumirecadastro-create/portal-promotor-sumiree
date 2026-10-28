@@ -1,8 +1,10 @@
+// src/lib/supabase.ts
 import { createClient } from '@supabase/supabase-js'
 
-// 🔥 VALORES FIXOS (funcionaram no teste)
-const supabaseUrl = 'https://yfyxpgksrpnzndjtlobe.supabase.co'
-const supabaseAnonKey = 'sb_publishable_zc64H0edWIVvHxmdZG8Myg_aw-3tP78'
+// 🔥 VALORES FIXOS
+// Exportando a URL para que outros arquivos (como Acoes.tsx) possam usá-la
+export const supabaseUrl = 'https://yfyxpgksrpnzndjtlobe.supabase.co'
+export const supabaseAnonKey = 'sb_publishable_zc64H0edWIVvHxmdZG8Myg_aw-3tP78'
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
