@@ -1,168 +1,225 @@
-import { useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase'; // Ajuste para o caminho do seu cliente Supabase
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { toast } from 'sonner'; // Se usar sonner para notificações
-
-type BrindeEstoque = {
-  brinde_id: number;
-  loja_id: string;
-  quantidade: number;
-  brindes: {
-    cod_boni: string;
-    descricao: string;
-    validade: string;
-  };
-};
+import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase' // ⚠️ CONFIRME O CAMINHO DO SEU SUPABASE AQUI
+import { useAuth } from '@/hooks/use-auth'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from '@/components/ui/table'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog'
+import { toast } from 'sonner' // Se não usar sonner, pode usar o useToast do shadcn
 
 export default function Brindes() {
-  const [estoques, setEstoques] = useState<BrindeEstoque[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedBrinde, setSelectedBrinde] = useState<BrindeEstoque | null>(null);
-  const [qtdBaixa, setQtdBaixa] = useState(1);
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const { user, isAdmin, isGerente, userLojaId } = useAuth()
+  const [estoques, setEstoques] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [selectedBrinde, setSelectedBrinde] = useState<any>(null)
+  const [qtdBaixa, setQtdBaixa] = useState(1)
+  const [submitting, setSubmitting] = useState(false)
+
+  // Função para carregar os dados (adaptada para Admin ou Gerente)
+  const loadBrindes = async () => {
+    setLoading(true)
+    try {
+      let query = supabase
+        .from('brindes_estoque_lojas')
+        .select(`
+          id,
+          brinde_id,
+          loja_id,
+          quantidade,
+          brindes ( cod_boni, marca, descricao, validade ),
+          lojas ( nome_loja )
+        `)
+        .gt('quantidade', 0) // Só mostra o que tem saldo
+
+      // Se NÃO for Admin, filtra apenas pela loja do usuário logado
+      if (!isAdmin && userLojaId) {
+        query = query.eq('loja_id', userLojaId)
+      }
+
+      const { data, error } = await query
+
+      if (error) throw error
+      setEstoques(data || [])
+    } catch (error: any) {
+      console.error('Erro ao carregar brindes:', error)
+      toast.error('Erro ao carregar lista de brindes.')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    carregarBrindes();
-  }, []);
-
-  async function carregarBrindes() {
-    setLoading(true);
-    // Busca os brindes que estão no estoque da loja do usuário logado
-    const { data, error } = await supabase
-      .from('brindes_estoque_lojas')
-      .select(`
-        brinde_id,
-        loja_id,
-        quantidade,
-        brindes (cod_boni, descricao, validade)
-      `);
-
-    if (error) {
-      console.error(error);
-      toast.error('Erro ao carregar brindes.');
-    } else {
-      setEstoques(data as any);
+    if (userLojaId || isAdmin) {
+      loadBrindes()
     }
-    setLoading(false);
-  }
+  }, [userLojaId, isAdmin])
 
-  async function handleRegistrarBaixa() {
-    if (!selectedBrinde) return;
-
+  // Função que chama a RPC de baixa que criamos no banco
+  const handleRegistrarBaixa = async () => {
+    if (!selectedBrinde) return
     if (qtdBaixa <= 0 || qtdBaixa > selectedBrinde.quantidade) {
-      toast.error('Quantidade inválida.');
-      return;
+      toast.error('Quantidade inválida para baixa.')
+      return
     }
 
-    // Chama a função RPC que criamos no banco
-    const { error } = await supabase.rpc('registrar_baixa_brinde', {
-      p_brinde_id: selectedBrinde.brinde_id,
-      p_loja_id: selectedBrinde.loja_id,
-      p_quantidade: qtdBaixa,
-      p_observacao: 'Baixa manual pelo portal'
-    });
+    setSubmitting(true)
+    try {
+      const { error } = await supabase.rpc('registrar_baixa_brinde', {
+        p_brinde_id: selectedBrinde.brinde_id,
+        p_loja_id: selectedBrinde.loja_id,
+        p_quantidade: qtdBaixa,
+        p_observacao: 'Baixa manual via portal',
+      })
 
-    if (error) {
-      toast.error(error.message);
-    } else {
-      toast.success('Baixa registrada com sucesso!');
-      setIsModalOpen(false);
-      setQtdBaixa(1);
-      carregarBrindes(); // Recarrega a lista para atualizar o saldo
+      if (error) throw error
+
+      toast.success('Baixa registrada com sucesso!')
+      setModalOpen(false)
+      setQtdBaixa(1)
+      loadBrindes() // Recarrega a lista
+    } catch (error: any) {
+      console.error(error)
+      toast.error(error.message || 'Erro ao registrar baixa.')
+    } finally {
+      setSubmitting(false)
     }
   }
 
-  // Função para verificar se está próximo do vencimento (6 meses)
+  // Verifica se o brinde vence em menos de 6 meses
   const isProximoVencimento = (validade: string) => {
-    if (!validade) return false;
-    const dataValidade = new Date(validade);
-    const seisMeses = new Date();
-    seisMeses.setMonth(seisMeses.getMonth() + 6);
-    return dataValidade <= seisMeses;
-  };
+    if (!validade) return false
+    const dataValidade = new Date(validade)
+    const seisMeses = new Date()
+    seisMeses.setMonth(seisMeses.getMonth() + 6)
+    return dataValidade <= seisMeses
+  }
 
-  if (loading) return <div className="p-6">Carregando...</div>;
+  const formatarData = (dataStr: string) => {
+    if (!dataStr) return '-'
+    // Adiciona T00:00 para evitar problemas de fuso horário
+    return new Date(`${dataStr}T00:00:00`).toLocaleDateString('pt-BR')
+  }
 
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Meus Brindes</h1>
+    <div className="space-y-6 animate-fade-in">
+      <div className="flex flex-col gap-2 md:flex-row md:items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Controle de Brindes</h1>
+          <p className="text-muted-foreground text-sm">
+            {isAdmin ? 'Visão geral de todos os estoques.' : 'Saldo de brindes da sua loja.'}
+          </p>
+        </div>
       </div>
-      
-      <div className="border rounded-md">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Cód. Boni</TableHead>
-              <TableHead>Descrição</TableHead>
-              <TableHead>Validade</TableHead>
-              <TableHead>Saldo Atual</TableHead>
-              <TableHead>Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {estoques.map((item) => (
-              <TableRow key={`${item.brinde_id}-${item.loja_id}`}>
-                <TableCell>{item.brindes.cod_boni}</TableCell>
-                <TableCell>{item.brindes.descricao}</TableCell>
-                <TableCell>
-                  {item.brindes.validade ? new Date(item.brindes.validade).toLocaleDateString('pt-BR') : '-'}
-                  {isProximoVencimento(item.brindes.validade) && (
-                    <Badge variant="destructive" className="ml-2">Vencendo!</Badge>
-                  )}
-                </TableCell>
-                <TableCell className="font-bold">{item.quantidade}</TableCell>
-                <TableCell>
-                  <Dialog open={isModalOpen && selectedBrinde?.brinde_id === item.brinde_id} onOpenChange={(open) => {
-                    setIsModalOpen(open);
-                    if(open) setSelectedBrinde(item);
-                  }}>
-                    <DialogTrigger asChild>
-                      <Button variant="outline" size="sm" disabled={item.quantidade <= 0}>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Saldo Atual</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="flex justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Cód. Boni</TableHead>
+                  <TableHead>Descrição</TableHead>
+                  {isAdmin && <TableHead>Loja</TableHead>}
+                  <TableHead>Validade</TableHead>
+                  <TableHead className="text-center">Saldo</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {estoques.map((item) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="font-medium">{item.brindes?.cod_boni}</TableCell>
+                    <TableCell>
+                      <span className="font-semibold">{item.brindes?.marca}</span> - {item.brindes?.descricao}
+                    </TableCell>
+                    {isAdmin && <TableCell>{item.lojas?.nome_loja}</TableCell>}
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {formatarData(item.brindes?.validade)}
+                        {isProximoVencimento(item.brindes?.validade) && (
+                          <Badge variant="destructive" className="text-[10px] uppercase">Vencendo</Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-center font-bold text-lg">
+                      {item.quantidade} <span className="text-xs font-normal text-muted-foreground">{item.brindes?.unidade || 'UN'}</span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => {
+                          setSelectedBrinde(item)
+                          setModalOpen(true)
+                        }}
+                      >
                         Registrar Baixa
                       </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Registrar Baixa - {item.brindes.descricao}</DialogTitle>
-                      </DialogHeader>
-                      <div className="grid gap-4 py-4">
-                        <div className="grid grid-cols-4 items-center gap-4">
-                          <Label htmlFor="qtd" className="text-right">Quantidade</Label>
-                          <Input 
-                            id="qtd" 
-                            type="number" 
-                            min="1" 
-                            max={item.quantidade}
-                            value={qtdBaixa}
-                            onChange={(e) => setQtdBaixa(Number(e.target.value))}
-                            className="col-span-3" 
-                          />
-                        </div>
-                      </div>
-                      <DialogFooter>
-                        <Button onClick={handleRegistrarBaixa}>Confirmar Baixa</Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-                </TableCell>
-              </TableRow>
-            ))}
-            {estoques.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={5} className="text-center py-4 text-muted-foreground">
-                  Nenhum brinde encontrado no seu estoque.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {estoques.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={isAdmin ? 6 : 5} className="text-center py-6 text-muted-foreground">
+                      Nenhum brinde com saldo encontrado.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Modal de Baixa */}
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Registrar Baixa</DialogTitle>
+          </DialogHeader>
+          {selectedBrinde && (
+            <div className="grid gap-4 py-4">
+              <div className="space-y-1">
+                <p className="text-sm font-medium">{selectedBrinde.brindes?.descricao}</p>
+                <p className="text-sm text-muted-foreground">Saldo disponível: {selectedBrinde.quantidade} un.</p>
+              </div>
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="qtd" className="text-right">Qtd. Utilizada</Label>
+                <Input
+                  id="qtd"
+                  type="number"
+                  min="1"
+                  max={selectedBrinde.quantidade}
+                  value={qtdBaixa}
+                  onChange={(e) => setQtdBaixa(Number(e.target.value))}
+                  className="col-span-3"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setModalOpen(false)}>Cancelar</Button>
+            <Button onClick={handleRegistrarBaixa} disabled={submitting}>
+              {submitting ? 'Salvando...' : 'Confirmar Baixa'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
-  );
+  )
 }
