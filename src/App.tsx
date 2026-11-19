@@ -41,6 +41,7 @@ const App = () => (
             <Route path="/acoes" element={<Acoes />} />
             <Route path="/relatorios" element={<Relatorios />} />
             <Route path="/campanhas" element={<Campanhas />} />
+            <Route path="/brindes" element={<Brindes />} />
             <Route path="/configuracoes" element={<Configuracoes />} />
             <Route path="/solicitacoes-promotores" element={<SolicitacoesPromotores />} />  {/* 🔥 ADICIONE ESTA LINHA */}
           </Route>
