@@ -14,6 +14,7 @@ import Marcas from './pages/Marcas'
 import Acoes from './pages/Acoes'
 import Relatorios from './pages/Relatorios'
 import Campanhas from './pages/Campanhas'
+import Brindes from './pages/Brindes'
 import Configuracoes from './pages/Configuracoes'
 import { SolicitacoesPromotores } from './pages/SolicitacoesPromotores'  // 🔥 ADICIONE ESTA LINHA
 import NotFound from './pages/NotFound'
