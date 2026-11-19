@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase' // ⚠️ CONFIRME O CAMINHO DO SEU SUPABASE AQUI
+import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/use-auth'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -12,34 +12,25 @@ import { Badge } from '@/components/ui/badge'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
-import { toast } from 'sonner' // Se não usar sonner, pode usar o useToast do shadcn
+import { toast } from 'sonner'
+import { Gift, Plus, CalendarDays } from 'lucide-react'
 
 export default function Brindes() {
-  const { user, isAdmin, isGerente, userLojaId } = useAuth()
+  const { isAdmin, userLojaId } = useAuth()
   const [estoques, setEstoques] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [modalOpen, setModalOpen] = useState(false)
+  const [modalBaixaOpen, setModalBaixaOpen] = useState(false)
+  const [modalNovoOpen, setModalNovoOpen] = useState(false)
   const [selectedBrinde, setSelectedBrinde] = useState<any>(null)
   const [qtdBaixa, setQtdBaixa] = useState(1)
   const [submitting, setSubmitting] = useState(false)
 
-  // Função para carregar os dados (adaptada para Admin ou Gerente)
   const loadBrindes = async () => {
     setLoading(true)
     try {
-      let query = supabase
-        .from('brindes_estoque_lojas')
-        .select(`
-          id,
-          brinde_id,
-          loja_id,
-          quantidade,
-          brindes ( cod_boni, marca, descricao, validade ),
-          lojas ( nome_loja )
-        `)
-        .gt('quantidade', 0) // Só mostra o que tem saldo
+      // Agora consultamos a View que criamos no banco. Muito mais rápido e limpo!
+      let query = supabase.from('vw_estoque_brindes_detalhado').select('*').gt('quantidade', 0)
 
-      // Se NÃO for Admin, filtra apenas pela loja do usuário logado
       if (!isAdmin && userLojaId) {
         query = query.eq('loja_id', userLojaId)
       }
@@ -62,7 +53,6 @@ export default function Brindes() {
     }
   }, [userLojaId, isAdmin])
 
-  // Função que chama a RPC de baixa que criamos no banco
   const handleRegistrarBaixa = async () => {
     if (!selectedBrinde) return
     if (qtdBaixa <= 0 || qtdBaixa > selectedBrinde.quantidade) {
@@ -82,9 +72,9 @@ export default function Brindes() {
       if (error) throw error
 
       toast.success('Baixa registrada com sucesso!')
-      setModalOpen(false)
+      setModalBaixaOpen(false)
       setQtdBaixa(1)
-      loadBrindes() // Recarrega a lista
+      loadBrindes()
     } catch (error: any) {
       console.error(error)
       toast.error(error.message || 'Erro ao registrar baixa.')
@@ -93,7 +83,6 @@ export default function Brindes() {
     }
   }
 
-  // Verifica se o brinde vence em menos de 6 meses
   const isProximoVencimento = (validade: string) => {
     if (!validade) return false
     const dataValidade = new Date(validade)
@@ -104,7 +93,6 @@ export default function Brindes() {
 
   const formatarData = (dataStr: string) => {
     if (!dataStr) return '-'
-    // Adiciona T00:00 para evitar problemas de fuso horário
     return new Date(`${dataStr}T00:00:00`).toLocaleDateString('pt-BR')
   }
 
@@ -117,6 +105,11 @@ export default function Brindes() {
             {isAdmin ? 'Visão geral de todos os estoques.' : 'Saldo de brindes da sua loja.'}
           </p>
         </div>
+        {isAdmin && (
+          <Button onClick={() => setModalNovoOpen(true)} className="bg-pink-600 hover:bg-pink-700">
+            <Plus className="mr-2 h-4 w-4" /> Novo Brinde
+          </Button>
+        )}
       </div>
 
       <Card>
@@ -135,6 +128,8 @@ export default function Brindes() {
                   <TableHead>Cód. Boni</TableHead>
                   <TableHead>Descrição</TableHead>
                   {isAdmin && <TableHead>Loja</TableHead>}
+                  <TableHead>Ação / Campanha</TableHead>
+                  <TableHead>Período</TableHead>
                   <TableHead>Validade</TableHead>
                   <TableHead className="text-center">Saldo</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
@@ -142,22 +137,45 @@ export default function Brindes() {
               </TableHeader>
               <TableBody>
                 {estoques.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell className="font-medium">{item.brindes?.cod_boni}</TableCell>
+                  <TableRow key={item.estoque_id}>
+                    <TableCell className="font-medium">{item.cod_boni}</TableCell>
                     <TableCell>
-                      <span className="font-semibold">{item.brindes?.marca}</span> - {item.brindes?.descricao}
+                      <span className="font-semibold">{item.marca}</span> - {item.descricao}
                     </TableCell>
-                    {isAdmin && <TableCell>{item.lojas?.nome_loja}</TableCell>}
+                    {isAdmin && <TableCell>{item.nome_loja}</TableCell>}
+                    
+                    {/* Coluna de Ação / Campanha */}
+                    <TableCell className="text-sm">
+                      {item.acao_nome ? (
+                        <Badge variant="outline" className="bg-pink-50 text-pink-700 border-pink-200">
+                          Ação: {item.acao_nome}
+                        </Badge>
+                      ) : item.campanha_nome ? (
+                        <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                          Campanha: {item.campanha_nome}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">Avulso</span>
+                      )}
+                    </TableCell>
+
+                    {/* Coluna de Período */}
+                    <TableCell className="text-sm text-muted-foreground flex items-center gap-1">
+                      <CalendarDays className="h-3 w-3" />
+                      {item.acao_inicio ? `${formatarData(item.acao_inicio)} a ${formatarData(item.acao_fim)}` : 
+                       item.campanha_inicio ? `${formatarData(item.campanha_inicio)} a ${formatarData(item.campanha_fim)}` : '-'}
+                    </TableCell>
+
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        {formatarData(item.brindes?.validade)}
-                        {isProximoVencimento(item.brindes?.validade) && (
+                        {formatarData(item.validade)}
+                        {isProximoVencimento(item.validade) && (
                           <Badge variant="destructive" className="text-[10px] uppercase">Vencendo</Badge>
                         )}
                       </div>
                     </TableCell>
                     <TableCell className="text-center font-bold text-lg">
-                      {item.quantidade} <span className="text-xs font-normal text-muted-foreground">{item.brindes?.unidade || 'UN'}</span>
+                      {item.quantidade} <span className="text-xs font-normal text-muted-foreground">{item.unidade || 'UN'}</span>
                     </TableCell>
                     <TableCell className="text-right">
                       <Button 
@@ -165,7 +183,7 @@ export default function Brindes() {
                         size="sm"
                         onClick={() => {
                           setSelectedBrinde(item)
-                          setModalOpen(true)
+                          setModalBaixaOpen(true)
                         }}
                       >
                         Registrar Baixa
@@ -175,7 +193,7 @@ export default function Brindes() {
                 ))}
                 {estoques.length === 0 && (
                   <TableRow>
-                    <TableCell colSpan={isAdmin ? 6 : 5} className="text-center py-6 text-muted-foreground">
+                    <TableCell colSpan={isAdmin ? 8 : 7} className="text-center py-6 text-muted-foreground">
                       Nenhum brinde com saldo encontrado.
                     </TableCell>
                   </TableRow>
@@ -187,7 +205,7 @@ export default function Brindes() {
       </Card>
 
       {/* Modal de Baixa */}
-      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+      <Dialog open={modalBaixaOpen} onOpenChange={setModalBaixaOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Registrar Baixa</DialogTitle>
@@ -195,7 +213,7 @@ export default function Brindes() {
           {selectedBrinde && (
             <div className="grid gap-4 py-4">
               <div className="space-y-1">
-                <p className="text-sm font-medium">{selectedBrinde.brindes?.descricao}</p>
+                <p className="text-sm font-medium">{selectedBrinde.descricao}</p>
                 <p className="text-sm text-muted-foreground">Saldo disponível: {selectedBrinde.quantidade} un.</p>
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
@@ -213,11 +231,24 @@ export default function Brindes() {
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setModalOpen(false)}>Cancelar</Button>
+            <Button variant="outline" onClick={() => setModalBaixaOpen(false)}>Cancelar</Button>
             <Button onClick={handleRegistrarBaixa} disabled={submitting}>
               {submitting ? 'Salvando...' : 'Confirmar Baixa'}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Novo Brinde */}
+      <Dialog open={modalNovoOpen} onOpenChange={setModalNovoOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Cadastrar Novo Brinde</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 text-center text-muted-foreground">
+            <Gift className="h-12 w-12 mx-auto mb-2 opacity-50" />
+            Formulário de cadastro será implementado aqui.
+          </div>
         </DialogContent>
       </Dialog>
     </div>
