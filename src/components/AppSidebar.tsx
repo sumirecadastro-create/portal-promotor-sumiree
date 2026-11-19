@@ -13,6 +13,7 @@ import {
   Calendar,
   Target,
   UserPlus,
+  Gift, // 🔥 Ícone adicionado
 } from 'lucide-react'
 import {
   Sidebar,
@@ -38,6 +39,7 @@ const allItems = [
   { title: 'Marcas', url: '/marcas', icon: Bookmark },
   { title: 'Ações', url: '/acoes', icon: Target },
   { title: 'Campanhas', url: '/campanhas', icon: Calendar },
+  { title: 'Brindes', url: '/brindes', icon: Gift }, // 🔥 Item adicionado
   { title: 'Relatórios', url: '/relatorios', icon: BarChart3 },
   { title: 'Solicitações de Promotores', url: '/solicitacoes-promotores', icon: UserPlus },
 ]
@@ -53,6 +55,7 @@ const rolePermissions: Record<string, string[]> = {
     'Marcas',
     'Ações',
     'Campanhas',
+    'Brindes', // 🔥 Adicionado
     'Relatórios',
     'Solicitações de Promotores'
   ],
@@ -70,6 +73,7 @@ const rolePermissions: Record<string, string[]> = {
     'Check-in (Operação)',
     'Ações',
     'Campanhas',
+    'Brindes', // 🔥 Adicionado
     'Solicitações de Promotores',
     'Relatórios'
   ],
@@ -102,7 +106,6 @@ export function AppSidebar() {
   const navigate = useNavigate()
   const { user, signOut, loading } = useAuth()
 
-  // Pega o role do usuário da tabela usuarios_internos
   const role = user?.app_role || 'promotor'
 
   if (loading) {
@@ -120,10 +123,7 @@ export function AppSidebar() {
 
   // ✅ FILTRO DE MENU BASEADO NO PERFIL (USANDO rolePermissions)
   const items = allItems.filter((item) => {
-    // ADMIN: vê tudo
     if (role === 'admin') return true
-    
-    // Pega as permissões do rolePermissions para o role atual
     const allowed = rolePermissions[role] || []
     return allowed.includes(item.title)
   })
@@ -137,7 +137,6 @@ export function AppSidebar() {
     navigate('/configuracoes')
   }
 
-  // ✅ MAPEAMENTO DE ROLES PARA EXIBIÇÃO
   const getRoleLabel = (role: string) => {
     const labels: Record<string, string> = {
       admin: 'Administrador',
