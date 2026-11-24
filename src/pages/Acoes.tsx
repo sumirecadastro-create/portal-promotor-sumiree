@@ -217,29 +217,6 @@ function DetalhesAcao({
   onEditar: (acao: Acao) => void;
   isAdmin: boolean;
 }) {
-  // 🔥 ESTADO PARA OS BRINDES
-  const [brindesVinculados, setBrindesVinculados] = useState<any[]>([]);
-  const [loadingBrindes, setLoadingBrindes] = useState(false);
-
-  // 🔥 BUSCA OS BRINDES QUANDO O MODAL ABRE
-  useEffect(() => {
-    if (open && acao?.id) {
-      const fetchBrindes = async () => {
-        setLoadingBrindes(true);
-        const { data, error } = await supabase
-          .from('brindes')
-          .select('id, descricao, cod_boni, marca, unidade')
-          .eq('acao_id', acao.id);
-        
-        if (!error && data) {
-          setBrindesVinculados(data);
-        }
-        setLoadingBrindes(false);
-      };
-      fetchBrindes();
-    }
-  }, [open, acao?.id]);
-
   if (!acao) return null
 
   const statusConfig = getStatusConfig(acao.status)
@@ -356,39 +333,6 @@ function DetalhesAcao({
               </div>
             ) : (
               <p className="text-sm text-gray-400">Nenhuma loja vinculada</p>
-            )}
-          </div>
-
-          {/* 🔥 NOVA SEÇÃO: BRINDES VINCULADOS */}
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <Gift className="h-4 w-4 text-gray-500" />
-              <span className="text-sm font-medium text-gray-500">Brindes Vinculados</span>
-              <Badge variant="secondary" className="text-xs">
-                {brindesVinculados.length} item(ns)
-              </Badge>
-            </div>
-            
-            {loadingBrindes ? (
-              <div className="flex items-center gap-2 text-sm text-gray-400 p-2">
-                <Loader2 className="h-4 w-4 animate-spin" /> Carregando brindes...
-              </div>
-            ) : brindesVinculados.length > 0 ? (
-              <div className="border rounded-md p-2 space-y-2 bg-gray-50">
-                {brindesVinculados.map(brinde => (
-                  <div key={brinde.id} className="flex flex-col bg-white p-2 rounded border shadow-sm text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="font-semibold">{brinde.marca} - {brinde.descricao}</span>
-                      <Badge variant="outline" className="text-[10px]">{brinde.unidade || 'UN'}</Badge>
-                    </div>
-                    <span className="text-xs text-gray-500 font-mono mt-1">Cód: {brinde.cod_boni}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-gray-400 p-2 border rounded-md bg-gray-50">
-                Nenhum brinde cadastrado para esta ação.
-              </p>
             )}
           </div>
 
