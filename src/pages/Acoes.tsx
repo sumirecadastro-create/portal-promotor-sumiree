@@ -663,10 +663,11 @@ export default function Acoes() {
           <div className="flex items-center gap-2 ml-auto text-gray-500 text-xs"><span>Exibindo: {lojasFiltradas.length} de {lojas.length} lojas</span></div>
         </div>
 
-        <Card className="overflow-hidden shadow-lg border-0">
-          <CardContent className="p-0 overflow-x-auto">
+        <Card className="shadow-lg border-0 flex flex-col h-[70vh]"> {/* 🔥 Altura fixa para a área de rolagem */}
+          <CardContent className="p-0 overflow-auto flex-1 relative"> {/* 🔥 overflow-auto para rolar os dois eixos */}
             <div className="min-w-[1200px]">
-              <div className="grid border-b sticky top-0 z-20" style={{ gridTemplateColumns: `250px repeat(${dias.length}, 80px)` }}>
+              {/* 🔥 CABEÇALHO CONGELADO: sticky top-0 z-30 com fundo sólido */}
+              <div className="grid border-b sticky top-0 z-30 bg-gray-50 shadow-sm" style={{ gridTemplateColumns: `250px repeat(${dias.length}, 80px)` }}>
                 <div className="p-3 font-bold text-gray-700 sticky left-0 z-10 border-r" style={{ background: '#f9fafb' }}>
                   <div className="flex items-center gap-2"><Store className="h-4 w-4" style={{ color: PRIMARY_COLOR }} /> Loja / Dia</div>
                 </div>
