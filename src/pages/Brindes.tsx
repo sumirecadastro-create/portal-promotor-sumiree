@@ -15,9 +15,8 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { toast } from 'sonner'
-import { Gift, Plus, CalendarDays, MapPin, Search, History, Settings2 } from 'lucide-react'
+import { Plus, CalendarDays, Search, Settings2 } from 'lucide-react'
 
 export default function Brindes() {
   const { isAdmin, userLojaId } = useAuth()
@@ -43,31 +42,27 @@ export default function Brindes() {
   // Form de Novo Brinde
   const [formBrinde, setFormBrinde] = useState({
     cod_boni: '', marca: '', descricao: '', validade: '', unidade: 'UN', 
-    acao_id: '', campanha_id: '', quantidade_central: 0
+    acao_id: '', campanha_id: '', loja_id: '', quantidade: 0
   })
 
-  // Form de Movimentação (Admin)
-  const [formMov, setFormMov] = useState({
-    tipo: 'transferencia', // transferencia ou baixa
-    loja_id: '',
-    quantidade: 1
+  // Form de Ajuste (Admin)
+  const [formAjuste, setFormAjuste] = useState({
+    tipo: 'entrada',
+    quantidade: 1,
+    observacao: ''
   })
 
   const loadBrindes = async () => {
     setLoading(true)
     try {
-      // 🔥 CONSULTA NA VIEW OTIMIZADA
       let query = supabase.from('vw_brindes_gestao').select('*')
-      
       if (!isAdmin && userLojaId) {
         query = query.eq('loja_id', userLojaId)
       }
-
       const { data, error } = await query
       if (error) throw error
       setEstoques(data || [])
     } catch (error: any) {
-      console.error(error)
       toast.error('Erro ao carregar lista de brindes.')
     } finally {
       setLoading(false)
@@ -92,7 +87,7 @@ export default function Brindes() {
     }
   }, [userLojaId, isAdmin])
 
-  // --- AÇÕES DO GERENTE ---
+  // --- GERENTE: BAIXA ---
   const handleRegistrarBaixa = async () => {
     if (!selectedBrinde || qtdMovimentacao <= 0) return
     if (qtdMovimentacao > selectedBrinde.saldo_loja) {
@@ -106,11 +101,10 @@ export default function Brindes() {
         p_brinde_id: selectedBrinde.brinde_id,
         p_loja_id: selectedBrinde.loja_id,
         p_quantidade: qtdMovimentacao,
-        p_observacao: 'Baixa manual via portal (Gerente)',
+        p_observacao: 'Baixa via portal (Gerente)',
       })
       if (error) throw error
-
-      toast.success('Baixa registrada com sucesso!')
+      toast.success('Baixa registrada!')
       setModalBaixaOpen(false)
       setQtdMovimentacao(1)
       loadBrindes()
@@ -121,77 +115,82 @@ export default function Brindes() {
     }
   }
 
-  // --- AÇÕES DO ADMIN (Gerenciamento) ---
-  const handleSalvarMovimentacao = async () => {
-    if (!selectedBrinde || formMov.quantidade <= 0 || !formMov.loja_id) {
-      toast.error('Preencha todos os campos corretamente.')
+  // --- ADMIN: NOVO BRINDE ---
+  const handleSalvarNovoBrinde = async () => {
+    if (!formBrinde.cod_boni || !formBrinde.descricao || !formBrinde.loja_id) {
+      toast.error('Preencha Cód. Boni, Descrição e Loja de Destino.')
       return
     }
 
     setSubmitting(true)
     try {
-      if (formMov.tipo === 'transferencia') {
-        // 1. Verifica saldo central
-        if (formMov.quantidade > selectedBrinde.saldo_central) {
-          toast.error(`Saldo central insuficiente (Disponível: ${selectedBrinde.saldo_central}).`)
-          setSubmitting(false)
-          return
-        }
-
-        // 2. Subtrai do central
-        await supabase.from('brindes_estoque_central')
-          .update({ quantidade: selectedBrinde.saldo_central - formMov.quantidade })
-          .eq('brinde_id', selectedBrinde.brinde_id)
-
-        // 3. Soma na loja (usando Upsert para garantir que a linha existe)
-        const { error: erroLoja } = await supabase.rpc('adicionar_estoque_loja', {
-          p_brinde_id: selectedBrinde.brinde_id,
-          p_loja_id: formMov.loja_id,
-          p_quantidade: formMov.quantidade
-        })
-        if (erroLoja) throw erroLoja
-
-        // 4. Registra histórico
-        await supabase.from('brindes_movimentacoes').insert([{
-          brinde_id: selectedBrinde.brinde_id,
-          tipo: 'transferencia_loja',
-          quantidade: formMov.quantidade,
-          loja_destino_id: formMov.loja_id,
-          usuario_id: null // Admin
+      // 1. Cria o Brinde
+      const { data: novoBrinde, error: brindeError } = await supabase
+        .from('brindes')
+        .insert([{
+          cod_boni: formBrinde.cod_boni,
+          marca: formBrinde.marca,
+          descricao: formBrinde.descricao,
+          validade: formBrinde.validade || null,
+          unidade: formBrinde.unidade,
+          acao_id: formBrinde.acao_id === 'none' ? null : formBrinde.acao_id || null,
+          campanha_id: formBrinde.campanha_id === 'none' ? null : formBrinde.campanha_id || null,
         }])
+        .select().single()
 
-        toast.success('Transferência realizada!')
-      } else {
-        // Baixa manual do Admin (ex: perda, vencimento)
-        if (formMov.quantidade > selectedBrinde.saldo_loja) {
-          toast.error('Quantidade maior que o saldo da loja.')
-          setSubmitting(false)
-          return
-        }
-        
-        await supabase.rpc('registrar_baixa_brinde', {
-          p_brinde_id: selectedBrinde.brinde_id,
-          p_loja_id: formMov.loja_id,
-          p_quantidade: formMov.quantidade,
-          p_observacao: 'Ajuste/Baixa manual (Admin)',
+      if (brindeError) throw brindeError
+
+      // 2. Adiciona saldo direto na loja (se informou quantidade)
+      if (formBrinde.quantidade > 0) {
+        await supabase.rpc('ajustar_estoque_loja', {
+          p_brinde_id: novoBrinde.id,
+          p_loja_id: formBrinde.loja_id,
+          p_quantidade: formBrinde.quantidade,
+          p_tipo: 'entrada',
+          p_observacao: 'Carga inicial de cadastro'
         })
-        toast.success('Baixa manual registrada!')
       }
 
-      setModalGerenciarOpen(false)
+      toast.success('Brinde cadastrado com sucesso!')
+      setModalNovoOpen(false)
+      setFormBrinde({ cod_boni: '', marca: '', descricao: '', validade: '', unidade: 'UN', acao_id: '', campanha_id: '', loja_id: '', quantidade: 0 })
       loadBrindes()
     } catch (error: any) {
-      toast.error(error.message || 'Erro na operação.')
+      toast.error(error.message || 'Erro ao cadastrar brinde.')
     } finally {
       setSubmitting(false)
     }
   }
 
-  // --- FILTROS ---
+  // --- ADMIN: AJUSTE MANUAL ---
+  const handleAjustarEstoque = async () => {
+    if (!selectedBrinde || formAjuste.quantidade <= 0) return
+
+    setSubmitting(true)
+    try {
+      const { error } = await supabase.rpc('ajustar_estoque_loja', {
+        p_brinde_id: selectedBrinde.brinde_id,
+        p_loja_id: selectedBrinde.loja_id,
+        p_quantidade: formAjuste.quantidade,
+        p_tipo: formAjuste.tipo,
+        p_observacao: formAjuste.observacao || 'Ajuste manual'
+      })
+
+      if (error) throw error
+      toast.success('Estoque ajustado com sucesso!')
+      setModalGerenciarOpen(false)
+      loadBrindes()
+    } catch (error: any) {
+      toast.error(error.message || 'Erro ao ajustar estoque.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const dadosFiltrados = estoques.filter(item => {
     const matchBusca = 
-      item.descricao.toLowerCase().includes(busca.toLowerCase()) ||
-      item.cod_boni.toLowerCase().includes(busca.toLowerCase()) ||
+      item.descricao?.toLowerCase().includes(busca.toLowerCase()) ||
+      item.cod_boni?.toLowerCase().includes(busca.toLowerCase()) ||
       item.marca?.toLowerCase().includes(busca.toLowerCase())
     
     const setorItem = item.setor || item.campanha_setor || 'trade'
@@ -219,7 +218,7 @@ export default function Brindes() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Gestão de Brindes</h1>
           <p className="text-muted-foreground text-sm">
-            {isAdmin ? 'Visão geral (Trade e Marketing).' : 'Saldo de brindes da sua loja.'}
+            {isAdmin ? 'Visão geral por loja.' : 'Saldo de brindes da sua loja.'}
           </p>
         </div>
         
@@ -246,7 +245,7 @@ export default function Brindes() {
                 </SelectContent>
               </Select>
               <Button onClick={() => setModalNovoOpen(true)} className="bg-pink-600 hover:bg-pink-700">
-                <Plus className="mr-2 h-4 w-4" /> Novo
+                <Plus className="mr-2 h-4 w-4" /> Novo Brinde
               </Button>
             </>
           )}
@@ -276,7 +275,6 @@ export default function Brindes() {
                     <TableHead>Período</TableHead>
                     <TableHead>Validade</TableHead>
                     <TableHead className="text-center">Saldo Loja</TableHead>
-                    {isAdmin && <TableHead className="text-center">Central</TableHead>}
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -326,11 +324,6 @@ export default function Brindes() {
                       <TableCell className="text-center font-bold text-lg">
                         {item.saldo_loja}
                       </TableCell>
-                      {isAdmin && (
-                        <TableCell className="text-center font-bold text-blue-600">
-                          {item.saldo_central}
-                        </TableCell>
-                      )}
                       <TableCell className="text-right">
                         {isAdmin ? (
                           <Button 
@@ -338,7 +331,7 @@ export default function Brindes() {
                             size="sm"
                             onClick={() => {
                               setSelectedBrinde(item)
-                              setFormMov({ tipo: 'transferencia', loja_id: item.loja_id, quantidade: 1 })
+                              setFormAjuste({ tipo: 'entrada', quantidade: 1, observacao: '' })
                               setModalGerenciarOpen(true)
                             }}
                           >
@@ -362,7 +355,7 @@ export default function Brindes() {
                   ))}
                   {dadosFiltrados.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={isAdmin ? 11 : 9} className="text-center py-6 text-muted-foreground">
+                      <TableCell colSpan={10} className="text-center py-6 text-muted-foreground">
                         Nenhum brinde encontrado.
                       </TableCell>
                     </TableRow>
@@ -384,7 +377,7 @@ export default function Brindes() {
             <div className="grid gap-4 py-4">
               <div className="space-y-1">
                 <p className="text-sm font-medium">{selectedBrinde.descricao}</p>
-                <p className="text-sm text-muted-foreground">Saldo atual na loja: {selectedBrinde.saldo_loja} un.</p>
+                <p className="text-sm text-muted-foreground">Saldo atual: {selectedBrinde.saldo_loja} un.</p>
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label htmlFor="qtd" className="text-right">Qtd. Utilizada</Label>
@@ -411,80 +404,56 @@ export default function Brindes() {
 
       {/* MODAL: GERENCIAR (Admin) */}
       <Dialog open={modalGerenciarOpen} onOpenChange={setModalGerenciarOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>Gerenciar Estoque: {selectedBrinde?.descricao}</DialogTitle>
+            <DialogTitle>Ajustar Estoque: {selectedBrinde?.descricao}</DialogTitle>
             <DialogDescription>
-              Ações de controle para a equipe de Trade e Marketing.
+              Adicione ou remova unidades do estoque desta loja.
             </DialogDescription>
           </DialogHeader>
 
-          <Tabs defaultValue="transferir" className="w-full">
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="transferir">Transferir / Baixa</TabsTrigger>
-              <TabsTrigger value="historico">Histórico</TabsTrigger>
-            </TabsList>
-            
-            <TabsContent value="transferir" className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded-md">
-                <div>
-                  <p className="text-xs text-muted-foreground">Estoque Central</p>
-                  <p className="text-xl font-bold text-blue-600">{selectedBrinde?.saldo_central} un.</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Estoque Loja ({selectedBrinde?.cod_loja})</p>
-                  <p className="text-xl font-bold text-pink-600">{selectedBrinde?.saldo_loja} un.</p>
-                </div>
-              </div>
+          <div className="space-y-4 py-4">
+            <div className="bg-gray-50 p-3 rounded-md text-center">
+              <p className="text-xs text-muted-foreground">Saldo Atual na Loja</p>
+              <p className="text-2xl font-bold text-pink-600">{selectedBrinde?.saldo_loja} un.</p>
+            </div>
 
+            <div className="space-y-2">
+              <Label>Tipo de Ajuste</Label>
+              <Select value={formAjuste.tipo} onValueChange={(v) => setFormAjuste({...formAjuste, tipo: v})}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="entrada">Adicionar (Entrada de Brinde)</SelectItem>
+                  <SelectItem value="baixa">Remover (Perda / Vencimento)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Tipo de Operação</Label>
-                <Select value={formMov.tipo} onValueChange={(v) => setFormMov({...formMov, tipo: v})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="transferencia">Transferir do Central para Loja</SelectItem>
-                    <SelectItem value="baixa">Dar Baixa (Perda/Vencimento)</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label>Quantidade</Label>
+                <Input 
+                  type="number" 
+                  min="1" 
+                  value={formAjuste.quantidade} 
+                  onChange={(e) => setFormAjuste({...formAjuste, quantidade: Number(e.target.value)})} 
+                />
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Loja de Destino</Label>
-                  <Select value={formMov.loja_id} onValueChange={(v) => setFormMov({...formMov, loja_id: v})}>
-                    <SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                    <SelectContent>
-                      {lojas.map(l => (
-                        <SelectItem key={l.id} value={l.id}>{l.cod_loja} - {l.nome_loja}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Quantidade</Label>
-                  <Input 
-                    type="number" 
-                    min="1" 
-                    value={formMov.quantidade} 
-                    onChange={(e) => setFormMov({...formMov, quantidade: Number(e.target.value)})} 
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label>Motivo (Opcional)</Label>
+                <Input 
+                  placeholder="Ex: Reposição, Avaria..." 
+                  value={formAjuste.observacao}
+                  onChange={(e) => setFormAjuste({...formAjuste, observacao: e.target.value})}
+                />
               </div>
-            </TabsContent>
-
-            <TabsContent value="historico" className="py-4">
-              <div className="text-center text-muted-foreground py-8">
-                <History className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                <p>O histórico detalhado de movimentações será exibido aqui.</p>
-                <p className="text-xs mt-2">(Funcionalidade em desenvolvimento)</p>
-              </div>
-            </TabsContent>
-          </Tabs>
+            </div>
+          </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setModalGerenciarOpen(false)}>Fechar</Button>
-            <Button onClick={handleSalvarMovimentacao} disabled={submitting} className="bg-pink-600 hover:bg-pink-700">
-              {submitting ? 'Processando...' : 'Confirmar Operação'}
+            <Button variant="outline" onClick={() => setModalGerenciarOpen(false)}>Cancelar</Button>
+            <Button onClick={handleAjustarEstoque} disabled={submitting} className="bg-pink-600">
+              {submitting ? 'Processando...' : 'Confirmar Ajuste'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -509,6 +478,21 @@ export default function Brindes() {
               <Label>Descrição *</Label>
               <Input value={formBrinde.descricao} onChange={e => setFormBrinde({...formBrinde, descricao: e.target.value})} />
             </div>
+            
+            <div className="space-y-2">
+              <Label>Loja de Destino *</Label>
+              <Select value={formBrinde.loja_id} onValueChange={v => setFormBrinde({...formBrinde, loja_id: v})}>
+                <SelectTrigger><SelectValue placeholder="Selecione a loja..." /></SelectTrigger>
+                <SelectContent>
+                  {lojas.map(l => <SelectItem key={l.id} value={l.id}>{l.cod_loja} - {l.nome_loja}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Qtd. Inicial na Loja</Label>
+              <Input type="number" min="0" value={formBrinde.quantidade} onChange={e => setFormBrinde({...formBrinde, quantidade: Number(e.target.value)})} />
+            </div>
+
             <div className="space-y-2">
               <Label>Vincular a Ação (Trade)</Label>
               <Select value={formBrinde.acao_id} onValueChange={v => setFormBrinde({...formBrinde, acao_id: v, campanha_id: ''})}>
@@ -529,18 +513,17 @@ export default function Brindes() {
                 </SelectContent>
               </Select>
             </div>
+
             <div className="space-y-2">
               <Label>Validade</Label>
               <Input type="date" value={formBrinde.validade} onChange={e => setFormBrinde({...formBrinde, validade: e.target.value})} />
             </div>
-            <div className="space-y-2">
-              <Label>Qtd. Entrada Central</Label>
-              <Input type="number" min="0" value={formBrinde.quantidade_central} onChange={e => setFormBrinde({...formBrinde, quantidade_central: Number(e.target.value)})} />
-            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setModalNovoOpen(false)}>Cancelar</Button>
-            <Button onClick={() => toast.info("Em breve!")} className="bg-pink-600">Salvar</Button>
+            <Button onClick={handleSalvarNovoBrinde} disabled={submitting} className="bg-pink-600">
+              {submitting ? 'Salvando...' : 'Salvar Brinde'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
