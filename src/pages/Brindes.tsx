@@ -63,6 +63,7 @@ export default function Brindes() {
       if (error) throw error
       setEstoques(data || [])
     } catch (error: any) {
+      console.error(error)
       toast.error('Erro ao carregar lista de brindes.')
     } finally {
       setLoading(false)
@@ -142,13 +143,14 @@ export default function Brindes() {
 
       // 2. Adiciona saldo direto na loja (se informou quantidade)
       if (formBrinde.quantidade > 0) {
-        await supabase.rpc('ajustar_estoque_loja', {
+        const { error: erroEstoque } = await supabase.rpc('ajustar_estoque_loja', {
           p_brinde_id: novoBrinde.id,
           p_loja_id: formBrinde.loja_id,
           p_quantidade: formBrinde.quantidade,
           p_tipo: 'entrada',
           p_observacao: 'Carga inicial de cadastro'
         })
+        if (erroEstoque) throw erroEstoque
       }
 
       toast.success('Brinde cadastrado com sucesso!')
@@ -187,11 +189,17 @@ export default function Brindes() {
     }
   }
 
+  // --- FILTROS DE BUSCA ---
   const dadosFiltrados = estoques.filter(item => {
+    const termoBusca = busca.toLowerCase()
+    
+    // Busca por descrição, marca, código do brinde, nome da loja e código da loja
     const matchBusca = 
-      item.descricao?.toLowerCase().includes(busca.toLowerCase()) ||
-      item.cod_boni?.toLowerCase().includes(busca.toLowerCase()) ||
-      item.marca?.toLowerCase().includes(busca.toLowerCase())
+      item.descricao?.toLowerCase().includes(termoBusca) ||
+      item.cod_boni?.toLowerCase().includes(termoBusca) ||
+      item.marca?.toLowerCase().includes(termoBusca) ||
+      item.nome_loja?.toLowerCase().includes(termoBusca) ||
+      item.cod_loja?.toLowerCase().includes(termoBusca)
     
     const setorItem = item.setor || item.campanha_setor || 'trade'
     const matchSetor = filtroSetor === 'todos' || setorItem === filtroSetor
@@ -222,11 +230,11 @@ export default function Brindes() {
           </p>
         </div>
         
-        <div className="flex gap-2 items-center">
-          <div className="relative w-64">
+        <div className="flex flex-col sm:flex-row gap-2 items-center w-full md:w-auto">
+          <div className="relative w-full sm:w-72">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input 
-              placeholder="Buscar brinde..." 
+              placeholder="Buscar por brinde, marca ou loja..." 
               className="pl-8" 
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
@@ -235,7 +243,7 @@ export default function Brindes() {
           {isAdmin && (
             <>
               <Select value={filtroSetor} onValueChange={setFiltroSetor}>
-                <SelectTrigger className="w-[140px]">
+                <SelectTrigger className="w-full sm:w-[140px]">
                   <SelectValue placeholder="Setor" />
                 </SelectTrigger>
                 <SelectContent>
@@ -244,7 +252,7 @@ export default function Brindes() {
                   <SelectItem value="marketing">Marketing</SelectItem>
                 </SelectContent>
               </Select>
-              <Button onClick={() => setModalNovoOpen(true)} className="bg-pink-600 hover:bg-pink-700">
+              <Button onClick={() => setModalNovoOpen(true)} className="w-full sm:w-auto bg-pink-600 hover:bg-pink-700">
                 <Plus className="mr-2 h-4 w-4" /> Novo Brinde
               </Button>
             </>
@@ -414,7 +422,7 @@ export default function Brindes() {
 
           <div className="space-y-4 py-4">
             <div className="bg-gray-50 p-3 rounded-md text-center">
-              <p className="text-xs text-muted-foreground">Saldo Atual na Loja</p>
+              <p className="text-xs text-muted-foreground">Saldo Atual na Loja ({selectedBrinde?.cod_loja})</p>
               <p className="text-2xl font-bold text-pink-600">{selectedBrinde?.saldo_loja} un.</p>
             </div>
 
