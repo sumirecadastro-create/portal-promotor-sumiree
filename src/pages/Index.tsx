@@ -13,7 +13,7 @@ import {
 import { DashboardCards } from '@/components/DashboardCards'
 import { DashboardChart } from '@/components/DashboardChart'
 import { CalendarioCampanhas } from '@/components/CalendarioCampanhas'
-import { DashboardBrindesCards } from '@/components/DashboardBrindesCards'
+import { DashboardBrindesCards } from '@/components/DashboardBrindesCards' // 🔥 Novo import
 import { getDashboardData, getCoberturaPorMarcaComLojas, DashboardStats } from '@/services/dashboard'
 import { RecentVisit } from '@/services/dashboard'
 import { useAuth } from '@/hooks/use-auth'
@@ -119,6 +119,9 @@ export default function Index() {
         onCheckInClick={goToCheckIn}
         onPromotoresClick={goToPromotores}
       />
+
+      {/* 🔥 NOVOS CARDS DE BRINDES */}
+      <DashboardBrindesCards />
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
         <div className="lg:col-span-4">
