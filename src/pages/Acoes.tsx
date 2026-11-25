@@ -668,7 +668,7 @@ export default function Acoes() {
             <div className="min-w-[1200px]">
               {/* 🔥 CABEÇALHO CONGELADO: sticky top-0 z-30 com fundo sólido */}
               <div className="grid border-b sticky top-0 z-30 bg-gray-50 shadow-sm" style={{ gridTemplateColumns: `250px repeat(${dias.length}, 80px)` }}>
-                <div className="p-3 font-bold text-gray-700 sticky left-0 z-10 border-r" style={{ background: '#f9fafb' }}>
+                <div className="p-3 font-bold text-gray-700 sticky top-0 left-0 z-40 border-r" style={{ background: '#f9fafb' }}>
                   <div className="flex items-center gap-2"><Store className="h-4 w-4" style={{ color: PRIMARY_COLOR }} /> Loja / Dia</div>
                 </div>
                 {dias.map((dia) => {
