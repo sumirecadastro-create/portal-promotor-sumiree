@@ -59,6 +59,8 @@ import {
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { supabase, supabaseUrl } from '@/lib/supabase'
+import { ImportarAcoesModal } from '@/components/ImportarAcoesModal'
+import { Upload } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 
 interface Loja {
