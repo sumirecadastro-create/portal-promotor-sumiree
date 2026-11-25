@@ -38,7 +38,8 @@ import {
   Sparkles,
   Microscope,
   Megaphone,
-  Dices
+  Dices,
+  Upload // 🔥 ADICIONADO
 } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -59,8 +60,7 @@ import {
 } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { supabase, supabaseUrl } from '@/lib/supabase'
-import { ImportarAcoesModal } from '@/components/ImportarAcoesModal'
-import { Upload } from 'lucide-react'
+import { ImportarAcoesModal } from '@/components/ImportarAcoesModal' // 🔥 ADICIONADO
 import { useAuth } from '@/hooks/use-auth'
 
 interface Loja {
@@ -339,6 +339,9 @@ export default function Acoes() {
   const [showNovaAcaoModal, setShowNovaAcaoModal] = useState(false)
   const [showDetalhesModal, setShowDetalhesModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
+  // 🔥 ESTADO DO MODAL DE IMPORTAÇÃO
+  const [showImportarModal, setShowImportarModal] = useState(false)
+  
   const [acaoSelecionada, setAcaoSelecionada] = useState<Acao | null>(null)
   const [editandoAcao, setEditandoAcao] = useState<Acao | null>(null)
   
@@ -424,11 +427,9 @@ export default function Acoes() {
       const { data, error } = await query
       if (error) throw error
       
-      // 🔥 A MÁGICA DA PERFORMANCE: O banco já traz as lojas, não precisamos mais do loop!
       const acoesFormatadas = (data || []).map(acao => {
         let acaoLojas = acao.lojas || []
         
-        // Filtra as lojas se for gerente ou regional
         if ((isRegional || isGerente) && !isAdmin && lojasPermitidasIds.length > 0) {
           acaoLojas = acaoLojas.filter((l: any) => lojasPermitidasIds.includes(l.id))
         }
@@ -439,7 +440,6 @@ export default function Acoes() {
           lojas: acaoLojas
         }
       }).filter(acao => {
-        // Se for gerente/regional e a ação não tem lojas permitidas, remove da lista
         if ((isRegional || isGerente) && !isAdmin) {
           return acao.lojas.length > 0
         }
@@ -635,9 +635,15 @@ export default function Acoes() {
                 {filtrosAtivos > 0 && <Badge className="ml-2 bg-white text-pink-600" variant="secondary">{filtrosAtivos}</Badge>}
               </Button>
               {isAdmin && (
-                <Button variant="default" size="sm" style={{ background: 'white', color: PRIMARY_COLOR }} className="hover:bg-gray-100" onClick={() => setShowNovaAcaoModal(true)}>
-                  <Plus className="h-4 w-4 mr-2" /> Nova Ação
-                </Button>
+                <>
+                  {/* 🔥 NOVO BOTÃO DE IMPORTAR */}
+                  <Button variant="default" size="sm" style={{ background: 'white', color: PRIMARY_COLOR }} className="hover:bg-gray-100" onClick={() => setShowImportarModal(true)}>
+                    <Upload className="h-4 w-4 mr-2" /> Importar
+                  </Button>
+                  <Button variant="default" size="sm" style={{ background: 'white', color: PRIMARY_COLOR }} className="hover:bg-gray-100" onClick={() => setShowNovaAcaoModal(true)}>
+                    <Plus className="h-4 w-4 mr-2" /> Nova Ação
+                  </Button>
+                </>
               )}
             </div>
           </div>
@@ -1045,6 +1051,14 @@ export default function Acoes() {
             </DialogContent>
           </Dialog>
         )}
+
+        {/* 🔥 COMPONENTE DO MODAL DE IMPORTAÇÃO RENDERIZADO AQUI */}
+        <ImportarAcoesModal 
+          isOpen={showImportarModal}
+          onClose={() => setShowImportarModal(false)}
+          lojas={lojas}
+          onSuccess={() => carregarAcoes()}
+        />
       </div>
     </TooltipProvider>
   )
