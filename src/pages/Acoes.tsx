@@ -686,7 +686,8 @@ export default function Acoes() {
 
               {lojasFiltradas.map((loja) => (
                 <div key={loja.id} className="grid border-b hover:bg-gray-50 transition-colors" style={{ gridTemplateColumns: `250px repeat(${dias.length}, 80px)` }}>
-                  <div className="p-3 font-medium sticky left-0 bg-white z-10 border-r">
+                  {/* 🔥 COLUNA CONGELADA: sticky left-0 z-20 (menor que o cabeçalho) e sombra */}
+                  <div className="p-3 font-medium sticky left-0 bg-white z-20 border-r shadow-[2px_0_5px_rgba(0,0,0,0.05)]">
                     <div className="font-bold text-gray-800">{loja.codigo || loja.id.substring(0, 6)}</div>
                     <div className="text-xs text-gray-500 truncate" title={loja.nome_loja}>{loja.nome_loja}</div>
                   </div>
