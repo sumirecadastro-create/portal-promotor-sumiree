@@ -13,6 +13,7 @@ import {
 import { DashboardCards } from '@/components/DashboardCards'
 import { DashboardChart } from '@/components/DashboardChart'
 import { CalendarioCampanhas } from '@/components/CalendarioCampanhas'
+import { DashboardBrindesCards } from '@/components/DashboardBrindesCards'
 import { getDashboardData, getCoberturaPorMarcaComLojas, DashboardStats } from '@/services/dashboard'
 import { RecentVisit } from '@/services/dashboard'
 import { useAuth } from '@/hooks/use-auth'
