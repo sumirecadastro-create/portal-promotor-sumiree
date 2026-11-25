@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/hooks/use-auth'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -16,7 +16,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select'
 import { toast } from 'sonner'
-import { Plus, CalendarDays, Search, Settings2 } from 'lucide-react'
+import { Plus, CalendarDays, Search, Settings2, Download, Upload, FileSpreadsheet } from 'lucide-react'
+import * as XLSX from 'xlsx'
 
 export default function Brindes() {
   const { isAdmin, userLojaId } = useAuth()
@@ -29,6 +30,7 @@ export default function Brindes() {
   const [modalBaixaOpen, setModalBaixaOpen] = useState(false)
   const [modalNovoOpen, setModalNovoOpen] = useState(false)
   const [modalGerenciarOpen, setModalGerenciarOpen] = useState(false)
+  const [modalImportarOpen, setModalImportarOpen] = useState(false)
   
   const [selectedBrinde, setSelectedBrinde] = useState<any>(null)
   const [qtdMovimentacao, setQtdMovimentacao] = useState(1)
@@ -51,6 +53,10 @@ export default function Brindes() {
     quantidade: 1,
     observacao: ''
   })
+
+  // Dados da Importação
+  const [dadosImportacao, setDadosImportacao] = useState<any[]>([])
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const loadBrindes = async () => {
     setLoading(true)
@@ -125,7 +131,6 @@ export default function Brindes() {
 
     setSubmitting(true)
     try {
-      // 1. Cria o Brinde
       const { data: novoBrinde, error: brindeError } = await supabase
         .from('brindes')
         .insert([{
@@ -141,7 +146,6 @@ export default function Brindes() {
 
       if (brindeError) throw brindeError
 
-      // 2. Adiciona saldo direto na loja (se informou quantidade)
       if (formBrinde.quantidade > 0) {
         const { error: erroEstoque } = await supabase.rpc('ajustar_estoque_loja', {
           p_brinde_id: novoBrinde.id,
@@ -189,11 +193,117 @@ export default function Brindes() {
     }
   }
 
-  // --- FILTROS DE BUSCA ---
+  // --- IMPORTAR E EXPORTAR ---
+  const handleExportar = () => {
+    const dadosExportar = dadosFiltrados.map(item => ({
+      'Cód. Boni': item.cod_boni,
+      'Descrição': item.descricao,
+      'Marca': item.marca,
+      'Cód. Loja': item.cod_loja,
+      'Loja': item.nome_loja,
+      'Ação/Campanha': item.acao_nome || item.campanha_nome || 'Avulso',
+      'Setor': item.setor || item.campanha_setor || 'Trade',
+      'Validade': item.validade ? new Date(item.validade).toLocaleDateString('pt-BR') : '',
+      'Saldo Loja': item.saldo_loja
+    }))
+
+    const ws = XLSX.utils.json_to_sheet(dadosExportar)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, "Brindes")
+    XLSX.writeFile(wb, `brindes_${new Date().toISOString().split('T')[0]}.xlsx`)
+    toast.success('Planilha exportada com sucesso!')
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = (evt) => {
+      const bstr = evt.target?.result
+      const wb = XLSX.read(bstr, { type: 'binary' })
+      const wsname = wb.SheetNames[0]
+      const ws = wb.Sheets[wsname]
+      const data = XLSX.utils.sheet_to_json(ws)
+      
+      setDadosImportacao(data)
+      setModalImportarOpen(true)
+    }
+    reader.readAsBinaryString(file)
+    e.target.value = ''
+  }
+
+  const confirmarImportacao = async () => {
+    setSubmitting(true)
+    try {
+      // 1. Filtra os dados válidos da planilha
+      const brindesValidos = dadosImportacao.map((row: any) => {
+        const loja = lojas.find(l => l.cod_loja === String(row['Cód. Loja']) || l.nome_loja === row['Loja'])
+        return {
+          cod_boni: String(row['Cód. Boni'] || ''),
+          marca: row['Marca'] || '',
+          descricao: row['Descrição'] || '',
+          validade: row['Validade'] ? new Date(row['Validade']).toISOString() : null,
+          unidade: 'UN',
+          loja_id: loja?.id,
+          quantidade: Number(row['Saldo Loja']) || 0
+        }
+      }).filter(b => b.cod_boni && b.descricao && b.loja_id) // Só pega quem tem os dados mínimos
+
+      if (brindesValidos.length === 0) {
+        toast.error('Nenhum dado válido encontrado. Verifique as colunas.')
+        setSubmitting(false)
+        return
+      }
+
+      // 2. Loop para inserir/atualizar cada brinde
+      let sucessos = 0
+      for (const item of brindesValidos) {
+        // Verifica se o brinde já existe (pelo cod_boni)
+        const { data: existente } = await supabase.from('brindes').select('id').eq('cod_boni', item.cod_boni).maybeSingle()
+        
+        let brindeId = existente?.id
+
+        if (existente) {
+          // Se existe, atualiza a marca/desc/validade
+          await supabase.from('brindes').update({
+            marca: item.marca, descricao: item.descricao, validade: item.validade
+          }).eq('id', brindeId)
+        } else {
+          // Se não existe, cria
+          const { data: novo } = await supabase.from('brindes').insert([{
+            cod_boni: item.cod_boni, marca: item.marca, descricao: item.descricao, validade: item.validade, unidade: 'UN'
+          }]).select().single()
+          brindeId = novo?.id
+        }
+
+        // 3. Atualiza o estoque da loja
+        if (brindeId && item.quantidade > 0) {
+          await supabase.rpc('ajustar_estoque_loja', {
+            p_brinde_id: brindeId,
+            p_loja_id: item.loja_id,
+            p_quantidade: item.quantidade,
+            p_tipo: 'entrada',
+            p_observacao: 'Importação via planilha'
+          })
+        }
+        sucessos++
+      }
+
+      toast.success(`${sucessos} brindes importados/atualizados com sucesso!`)
+      setModalImportarOpen(false)
+      loadBrindes()
+    } catch (error: any) {
+      console.error(error)
+      toast.error('Erro ao processar importação em lote.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  // --- FILTROS ---
   const dadosFiltrados = estoques.filter(item => {
     const termoBusca = busca.toLowerCase()
-    
-    // Busca por descrição, marca, código do brinde, nome da loja e código da loja
     const matchBusca = 
       item.descricao?.toLowerCase().includes(termoBusca) ||
       item.cod_boni?.toLowerCase().includes(termoBusca) ||
@@ -229,36 +339,67 @@ export default function Brindes() {
             {isAdmin ? 'Visão geral por loja.' : 'Saldo de brindes da sua loja.'}
           </p>
         </div>
-        
-        <div className="flex flex-col sm:flex-row gap-2 items-center w-full md:w-auto">
-          <div className="relative w-full sm:w-72">
+      </div>
+
+      {/* 🔥 BARRA DE FERRAMENTAS DO ADMIN (Agora com espaço garantido) */}
+      {isAdmin && (
+        <div className="flex flex-col sm:flex-row gap-2 items-center bg-white p-2 rounded-lg border shadow-sm">
+          <div className="relative flex-1 w-full">
             <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input 
-              placeholder="Buscar por brinde, marca ou loja..." 
+              placeholder="Buscar brinde, marca ou loja..." 
               className="pl-8" 
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
             />
           </div>
-          {isAdmin && (
-            <>
-              <Select value={filtroSetor} onValueChange={setFiltroSetor}>
-                <SelectTrigger className="w-full sm:w-[140px]">
-                  <SelectValue placeholder="Setor" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos Setores</SelectItem>
-                  <SelectItem value="trade">Trade</SelectItem>
-                  <SelectItem value="marketing">Marketing</SelectItem>
-                </SelectContent>
-              </Select>
-              <Button onClick={() => setModalNovoOpen(true)} className="w-full sm:w-auto bg-pink-600 hover:bg-pink-700">
-                <Plus className="mr-2 h-4 w-4" /> Novo Brinde
-              </Button>
-            </>
-          )}
+          
+          <Select value={filtroSetor} onValueChange={setFiltroSetor}>
+            <SelectTrigger className="w-full sm:w-[140px]">
+              <SelectValue placeholder="Setor" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos Setores</SelectItem>
+              <SelectItem value="trade">Trade</SelectItem>
+              <SelectItem value="marketing">Marketing</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <div className="flex gap-2 w-full sm:w-auto">
+            <Button variant="outline" onClick={handleExportar} className="flex-1 sm:flex-none">
+              <Download className="h-4 w-4 mr-2" /> Exportar
+            </Button>
+            <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="flex-1 sm:flex-none">
+              <Upload className="h-4 w-4 mr-2" /> Importar
+            </Button>
+            <input 
+              type="file" 
+              accept=".xlsx, .xls, .csv" 
+              ref={fileInputRef} 
+              style={{ display: 'none' }} 
+              onChange={handleFileChange} 
+            />
+            <Button onClick={() => setModalNovoOpen(true)} className="flex-1 sm:flex-none bg-pink-600 hover:bg-pink-700">
+              <Plus className="mr-2 h-4 w-4" /> Novo Brinde
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* Para Gerente, apenas a busca */}
+      {!isAdmin && (
+        <div className="flex gap-2 items-center w-full sm:w-72">
+          <div className="relative w-full">
+            <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input 
+              placeholder="Buscar brinde..." 
+              className="pl-8" 
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+            />
+          </div>
+        </div>
+      )}
 
       <Card>
         <CardHeader className="py-4">
@@ -535,6 +676,54 @@ export default function Brindes() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* MODAL DE IMPORTAÇÃO */}
+      <Dialog open={modalImportarOpen} onOpenChange={setModalImportarOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="h-5 w-5 text-green-600" /> 
+              Pré-visualização da Importação
+            </DialogTitle>
+            <DialogDescription>
+              Confira os dados lidos da planilha antes de salvar no sistema.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="max-h-[60vh] overflow-auto border rounded-md">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Cód. Boni</TableHead>
+                  <TableHead>Descrição</TableHead>
+                  <TableHead>Marca</TableHead>
+                  <TableHead>Loja</TableHead>
+                  <TableHead>Saldo</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {dadosImportacao.map((row: any, idx) => (
+                  <TableRow key={idx}>
+                    <TableCell>{row['Cód. Boni']}</TableCell>
+                    <TableCell>{row['Descrição']}</TableCell>
+                    <TableCell>{row['Marca']}</TableCell>
+                    <TableCell>{row['Loja']}</TableCell>
+                    <TableCell>{row['Saldo Loja']}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setModalImportarOpen(false)}>Cancelar</Button>
+            <Button onClick={confirmarImportacao} disabled={submitting} className="bg-green-600 hover:bg-green-700">
+              {submitting ? 'Processando...' : 'Confirmar e Salvar no Banco'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   )
 }
